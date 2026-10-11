@@ -1,11 +1,11 @@
-;;; Milestone 6 Slice ①: the counted consume in BOTH lanes (design §6; decision
-;;; 0030). Every case asserts the EXPECTED tuple, state and field value per lane
-;;; -- labelled by lane, so a pin can name which lane went wrong -- and only then
-;;; the lanes against each other. §22.3:1254's four cases, §22.5:1278-1281's
-;;; schedules, §25:1602's truncation, §25:1609's two-message feed, the u64 count,
-;;; the two ordering witnesses decision 0030 item 1 leaves observable, the
-;;; only-consumer machine the reached-declaration walk owes, the structural
-;;; witness for §25:1607, and Slice ②'s placement oracle validated as one case.
+;;; The counted consume in BOTH lanes. Every case asserts the EXPECTED tuple,
+;;; state and field value per lane -- labelled by lane, so a pin can name which
+;;; lane went wrong -- and only then the lanes against each other. Zero,
+;;; partial, exact and surplus input; every schedule of one message; EOF
+;;; truncation; a two-message feed; the u64 count; the two observable ordering
+;;; witnesses; the only-consumer machine the reached-declaration walk must
+;;; credit; the structural one-count-step-per-feed witness; and the span
+;;; completion placement oracle.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness)
         (byte-machine test error-projection)
@@ -32,10 +32,10 @@
 (define (str->bv s) (u8-list->bytevector (map char->integer (string->list s))))
 (define (bytes . bs) (u8-list->bytevector bs))
 
-;; The result tuple through §22.4:1271's projection, plus what the tuple cannot
-;; carry: where the parser is parked and what the count reads (F13 of the plan --
-;; a need-input result's `next` is always #f, so the parked node is observed
-;; through parser-state-name).
+;; The result tuple through the error projection, plus what the tuple cannot
+;; carry: where the parser is parked and what the count reads (a need-input
+;; result's `next` is always #f, so the parked node is observed through
+;; parser-state-name).
 (define (snapshot r p field)
   (list (and r (parser-result-status r))
         (and r (parser-result-consumed r))
@@ -83,7 +83,7 @@
               (list (ok 'need-input 4 4 'body 1) (ok 'need-input 2 6 'idle 0)))))
     (harness-case "exact: 3:abc completes the count and continues to the delimiter in the same feed"
       (lambda ()
-        ;; Count completion wins by construction (decision 0030 item 2): the
+        ;; Count completion wins by construction: the
         ;; parser is parked on `comma`, not on `body` with a zero count.
         (both "exact body" '((feed "3:abc")) (list (ok 'need-input 5 5 'comma 0)))))
     (harness-case "surplus: 3:abc,0:, in one feed reports both messages in one result (§25:1609)"
@@ -122,7 +122,7 @@
         (both "trailing empty feed" '((feed "3:abc,") (feed ""))
               (list (ok 'need-input 6 6 'idle 0) (ok 'need-input 0 6 'idle 0)))
         ;; An empty feed at a body with a positive count is need-input with nothing
-        ;; consumed and the count untouched (§11.1:638).
+        ;; consumed and the count untouched.
         (both "empty feed mid-body" '((feed "3:") (feed "") (feed "abc,"))
               (list (ok 'need-input 2 2 'body 3) (ok 'need-input 0 2 'body 3) (ok 'need-input 4 6 'idle 0)))))
     (harness-case "sub-slices of a larger bytevector with unrelated prefix and suffix bytes (§22.5:1280-1281)"
@@ -229,7 +229,7 @@
     (harness-case "a body of one thousand bytes is one op message per feed, whether partial or complete"
       (lambda ()
         ;; The op closure sits in slot 2 of the compiled machine's tagged vector
-        ;; -- the shipped practice for a test that needs an internal. A body
+        ;; -- the practice for a test that needs an internal. A body
         ;; consumed one byte per message would pass every behavioural lane, and
         ;; so would an arm that re-asks the op after a partial commit; the
         ;; PARTIAL feed is where that second shape shows.
@@ -254,16 +254,16 @@
           (check-equal "the body was consumed" (parser-field-ref p 'len) 0)
           (check-equal "parked on the delimiter" (parser-state-name p) 'comma))))))
 
-;; --- Slice ②'s placement oracle, validated here as one case (design §7 oracle 3;
-;; the plan's F10) ------------------------------------------------------------------
+;; --- the span completion placement oracle ---------------------------------
 ;;
 ;; The same loop with `body` wrapped in a span that has BOTH callbacks (the
 ;; recorder records `complete` only through the completion closure). Under the
 ;; byte-at-a-time schedule of `3:abc,` the completion event must land in the feed
 ;; that delivered `c` -- count completion wins, execution continues into the span
 ;; end in the same feed -- and the `,` feed records nothing. Asserted per feed as
-;; a value in each lane, then across lanes; a symmetric wrong reading of 0030
-;; item 2 puts the completion in the `,` feed in BOTH lanes and agrees with itself.
+;; a value in each lane, then across lanes; a symmetric wrong reading of "count
+;; completion wins" puts the completion in the `,` feed in BOTH lanes and agrees
+;; with itself.
 (define (make-span-loop)
   (make-machine 'spanloop 'idle
                 (list (make-uint-field 'len 32 0 #f))

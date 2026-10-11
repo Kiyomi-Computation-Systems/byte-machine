@@ -1,5 +1,4 @@
-;;; The runner's self-tests, as a program. Merged from its .chez.sps wrapper
-;;; by the include collapse (decision 0006).
+;;; The runner's self-tests, as a program.
 
 (import (rnrs) (byte-machine test harness))
 
@@ -13,16 +12,10 @@
 ;;; the log would teach readers to ignore FAIL lines.
 ;;;
 ;;; Every exported adapter name is referenced here, so a name missing from the
-;;; adapter's export list is a load failure, not a silent gap (spec section
-;;; 9.1).
+;;; adapter's export list is a load failure, not a silent gap.
 
-;; Construct a bytevector from a length and a list of byte values, by hand
-;; rather than through u8-list->bytevector. The hand-rolled form is a holdover
-;; from the retired portability era, which avoided spellings not every dialect
-;; it targeted defined; under R6RS alone, which is all that remains,
-;; u8-list->bytevector would do the same job just as well. Kept as written
-;; because nothing depends on changing it, not because anything still forbids
-;; the alternative.
+;; Construct a bytevector from a length and a list of byte values, by hand.
+;; u8-list->bytevector would do the same job; nothing depends on the choice.
 (define (harness-bytes length bytes)
   (let ((bv (make-bytevector length 0)))
     (let loop ((i 0) (rest bytes))
@@ -375,8 +368,8 @@
                            (adapter-architecture) expect-arch)
               (check-not-equal "the architecture is identified"
                                (adapter-architecture) "unknown")))
-        ;; The vocabulary, not a fixed mode. Slice 5b gives this program more
-        ;; than one lane to run under, so an equality against any single mode
+        ;; The vocabulary, not a fixed mode. This program runs under more
+        ;; than one lane, so an equality against any single mode
         ;; would be false on some lane that is behaving correctly. The narrower
         ;; claim -- that this lane really is the mode it declares -- is not
         ;; made here: this same program is also staged and run under the Scheme
@@ -386,8 +379,9 @@
         ;; what it stages (its registration in test/CMakeLists.txt). A
         ;; name-versus-mode check here would be red on every baseline, not only
         ;; a broken one. The claim is carried instead by the lane's structure
-        ;; (an aot lane cannot expand source) and proved by mutation C4 against
-        ;; the registration's own mapping.
+        ;; (an aot lane cannot expand source) and by a mutation in
+        ;; test/support/cmake/MutationSuite.cmake against the registration's own
+        ;; mapping.
         (check "the mode is one the lane vocabulary defines"
                (harness-member? (adapter-execution-mode)
                                 (list "source" "aot")))))
@@ -406,12 +400,11 @@
         (check-equal "unmapped os"    (adapter-machine-type->os "zz99xx") "unknown")))
 
     ;; adapter-exit ends the process, so no assertion may call it. Naming it is
-    ;; still load-bearing: the parity argument in spec section 9.1 rests on this
-    ;; program referencing every adapter name, and until this case existed
-    ;; adapter-exit was the one name it missed -- its only other uses are inside
-    ;; the runner section of harness.sls, so they resolve whatever the export
-    ;; list says. Dropping it from the export list left this program loading
-    ;; and passing regardless.
+    ;; still load-bearing: this program references every adapter name, and
+    ;; adapter-exit's only other uses are inside the runner section of
+    ;; harness.sls, which resolve whatever the export list says. Without this
+    ;; case, dropping it from the export list would leave this program loading
+    ;; and passing.
     (harness-case "the adapter can end the process"
       (lambda ()
         (check "adapter-exit is reachable" (procedure? adapter-exit))))
@@ -440,8 +433,8 @@
         (check-equal "remainder" (remainder 7 2) 1)
         (check-equal "modulo" (modulo -7 2) 1)))
 
-    ;; A literal #t can never fail, so the old case only "passed" because a
-    ;; raise would have unwound past the check entirely, not because the
+    ;; A literal #t can never fail, so a case asserting one would pass only
+    ;; because a raise unwound past the check entirely, not because the
     ;; check evaluated anything. Wrapping the flush in a probe makes the
     ;; assertion depend on what adapter-flush-output actually does.
     (harness-case "output can be flushed"
@@ -511,7 +504,7 @@
 
 ;; --- the content fingerprint ------------------------------------------------
 ;;
-;; Every value below was measured on Chez 10.4.1 on 2026-08-17. They are
+;; Every value below was measured on Chez 10.4.1. They are
 ;; literals rather than recomputations because a test that recomputes the
 ;; thing under test with the thing under test asserts only that it is
 ;; deterministic.
@@ -559,8 +552,8 @@
                      "3cabbf7df0b874f")))
 
     ;; Chez renders FF, not ff, for (number->string 255 16), so the rendering
-    ;; cannot go through a radix conversion. This case is what notices if
-    ;; someone ever changes it back.
+    ;; cannot go through a radix conversion. This case notices a rendering
+    ;; that does.
     (harness-case "hex digits render lowercase"
       (lambda ()
         (check-equal "255" (harness-fingerprint->string 255) "ff")

@@ -1,9 +1,8 @@
-;;; interpreter ≡ generated over the four-byte accept-sequence machine (parent
-;;; §22.4, §22.7). Whole-input accept/reject, all 256 byte values at each of the
-;;; four sequence positions, fragmentation schedules, and nonzero-offset slices.
-;;; The generated library is emitted at run time, loaded, and compared
-;;; field-for-field. This slice never re-feeds a terminal parser (the §12.2
-;;; sticky-repeat path is Milestone 2 Slice ②).
+;;; interpreter ≡ generated over the four-byte accept-sequence machine.
+;;; Whole-input accept/reject, all 256 byte values at each of the four sequence
+;;; positions, fragmentation schedules, and nonzero-offset slices. The generated
+;;; library is emitted at run time, loaded, and compared field-for-field. No
+;;; schedule here re-feeds a terminal parser (the sticky-repeat path).
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
@@ -16,13 +15,13 @@
         (byte-machine runtime)
         (byte-machine compile))
 
-;; Slice ①a task 5: the error slot now holds a parser-error, and the tuple
-;; carries its §22.4:1271 projection. A rejected byte at offset k reports the
+;; The error slot holds a parser-error, and the tuple carries its
+;; projection. A rejected byte at offset k reports the
 ;; machine domain, the resolved code and reason, the public source-node name of
 ;; the error node, that same absolute offset, and `byte` -- the reexecute edge's
 ;; kind, since a mismatch does not consume the offending byte.
 ;; The last two members are the span the error abandoned and where its withheld
-;; bytes begin (decision 0056) -- #f here, where no span is ever open.
+;; bytes begin -- #f here, where no span is ever open.
 (define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte #f #f))
 
 (harness-begin "differential.sequence")
@@ -72,7 +71,7 @@
   (run-slices cm (append (map (lambda (x) (list (u8 x) 0 1)) prefix)
                          (list (list (u8 b) 0 1)))))
 
-;; --- Task 1: whole-input + all-256-per-position ---
+;; --- whole-input + all-256-per-position ---
 (harness-group "whole-input accept and per-position reject agree in both lanes"
   (lambda ()
     (harness-case "the full sequence 1 2 3 4 stops after four bytes in both"
@@ -109,7 +108,7 @@
            '(0 1 2 3))
           (check-equal "no (position . byte) disagreed" bad 'none))))))
 
-;; --- Task 2: fragmentation ---
+;; --- fragmentation ---
 (define seq-input (u8v 1 2 3 4))
 (define (slices-for cuts)
   (let ((bounds (append '(0) cuts '(4))))
@@ -182,7 +181,7 @@
                                (car (run-slices cm-gen (slices-for cuts))) 'stopped)
                   (loop (+ i 1) s3 (+ multi (if (>= (length cuts) 2) 1 0)))))))))))
 
-;; --- Task 3: nonzero-offset slices ---
+;; --- nonzero-offset slices ---
 (harness-group "nonzero-offset slices report exact next / consumed / stream-offset"
   (lambda ()
     (define padded (u8v 9 1 2 3 4 9))

@@ -1,8 +1,8 @@
 ;;; Exhaustive interpreter EOF lane over the shared idle-vs-truncation proving
-;;; machine (Milestone 2 Slice ②b-1, `(byte-machine test eof-machine)`). Proves
-;;; parser-finish! and eof-target execution hold not just for the one byte that
-;;; advances each state but for every other byte value fed there, and that the
-;;; §12.2 finish-after-terminal stickiness holds for both terminal statuses.
+;;; machine (`(byte-machine test eof-machine)`). Proves parser-finish! and
+;;; eof-target execution hold not just for the one byte that advances each
+;;; state but for every other byte value fed there, and that
+;;; finish-after-terminal stickiness holds for both terminal statuses.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test eof-machine)
@@ -13,19 +13,19 @@
 
 (harness-begin "unit.eof-interpret")
 
-;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
-;; every non-error result. These are single-executor lanes, so they compare the
-;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; The error slot holds a parser-error record, and is #f on every non-error
+;; result. These are single-executor lanes, so they compare the CODE rather
+;; than the cross-lane error projection the differential lanes use --
 ;; but they must stay #f-tolerant, because the same accessor is read on results
 ;; that carry no error at all.
 (define (error-code-of r)
   (let ((e (parser-result-error r)))
     (and (parser-error? e) (parser-error-code e))))
 
-;; A fresh parser over a freshly-verified eof-machine. Task 1's §16.2 checks
-;; (entry eof-target -> finish is legal; s1 eof-target -> error is legal) must
-;; hold for this exact machine, or verify-machine below raises and every case
-;; in this file fails to even construct its fixture.
+;; A fresh parser over a freshly-verified eof-machine. The verifier's
+;; eof-target checks (entry eof-target -> finish is legal; s1 eof-target ->
+;; error is legal) must hold for this exact machine, or verify-machine below
+;; raises and every case in this file fails to even construct its fixture.
 (define (fresh)
   (make-parser (make-interpreted-machine (verify-machine (make-eof-machine))) '() #f))
 

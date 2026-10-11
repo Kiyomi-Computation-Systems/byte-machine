@@ -1,12 +1,11 @@
 ;;; interpreter ≡ generated over all 256 byte values, for every class matcher
-;;; kind (parent §18, §22.4, §22.7:1301). Each machine's library is emitted at
+;;; kind. Each machine's library is emitted at
 ;;; run time, loaded, and its compiled-machine obtained by environment/eval; both
 ;;; executors run through the shared make-parser/parser-feed! API and every
 ;;; parser-result field is compared.
 ;;;
-;;; The complement fixture is the one that proves the emitter needed no change:
-;;; it renders 254 sibling arms inside the single `(case b ...)`, which is
-;;; §19.2:1009's "canonical membership code selected for simplicity".
+;;; The complement fixture is the widest class: every byte but 10 and 13, 254
+;;; members, all rendered as canonical membership code.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
@@ -28,7 +27,7 @@
 ;; <machine-name>-parser, is derived from this function's own `name` argument.
 ;; The library name, (generated <machine-name>), is NOT: emit-machine draws it
 ;; from the compiled machine's own `machine-name` field, set inside
-;; class-machine.sls at construction time. The two agree today only because
+;; class-machine.sls at construction time. The two agree only because
 ;; every class-machines entry reuses the identical symbol for both its list
 ;; label and the name passed to class-machine -- an invariant held by
 ;; convention, asserted nowhere, and enforced only by `environment` (below)

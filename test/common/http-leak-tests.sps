@@ -1,8 +1,8 @@
-;;; Milestone 8 Slice ⑤: the fixture stays private and no HTTP API leaks into a
-;;; public library (§25:1649, §21.7:1209, §4.8 item 5). Read from the tree as
-;;; data (the diagnostic-census technique), not asserted in prose: it fails if a
-;;; future slice imports the fixture into `src/`, re-exports an HTTP name from a
-;;; public library, or names a fixture library outside `(byte-machine test …)`.
+;;; The HTTP fixture stays private and no HTTP API leaks into a public library.
+;;; Read from the tree as data (the diagnostic-census technique), not asserted
+;;; in prose: it fails if a change imports the fixture into `src/`, re-exports
+;;; an HTTP name from a public library, or names a fixture library outside
+;;; `(byte-machine test …)`.
 (import (rnrs)
         (byte-machine test harness))
 

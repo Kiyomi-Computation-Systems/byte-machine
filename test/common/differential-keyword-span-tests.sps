@@ -1,10 +1,8 @@
-;;; Milestone 11 Slice ③: span composition over a keyword table (brief §7
-;;; criterion 5). A method span opened before the keyword table closes at the
-;;; MATCHED keyword's length -- span[method]="MKCOL" from the six-byte input
-;;; MKCOLA, and the whole "GET-PARAMETER" when the input reaches it. interpreter ≡
-;;; generated, with the delivered span DATA asserted ABSOLUTELY on the generated
-;;; side (agreement alone cannot carry it). This is Slice ①'s "offset == keyword
-;;; length" promoted to a registered span-data test.
+;;; Span composition over a keyword table. A method span opened before the
+;;; keyword table closes at the MATCHED keyword's length -- span[method]="MKCOL"
+;;; from the six-byte input MKCOLA, and the whole "GET-PARAMETER" when the input
+;;; reaches it. interpreter ≡ generated, with the delivered span DATA asserted
+;;; ABSOLUTELY on the generated side (agreement alone cannot carry it).
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
@@ -52,7 +50,7 @@
 (define ref (make-interpreted-machine (verify-machine (make-keyword-span-machine))))
 (define gen (generated-machine 'kwspan (make-keyword-span-machine)))
 
-;; --- criterion 5: the span closes at the matched keyword's length ------------
+;; --- the span closes at the matched keyword's length -------------------------
 (harness-group "a span opened before a keyword table closes at the matched keyword length"
   (lambda ()
     (define cases
@@ -75,7 +73,7 @@
           (check-equal "all three span cases ran" ran 3))))
     (harness-case "MKCOLA closes the method span at MKCOL (five bytes from six of input)"
       (lambda ()
-        ;; the criterion's headline case, asserted on the generated side directly
+        ;; the headline case, asserted on the generated side directly
         (check-equal "generated span is MKCOL" (caddr (run gen "MKCOLA")) '("MKCOL"))
         (check-equal "and the interpreter agrees" (caddr (run ref "MKCOLA")) '("MKCOL"))))))
 

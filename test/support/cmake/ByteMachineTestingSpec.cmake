@@ -92,8 +92,8 @@ byte_machine_test_require_timeout("120" "byte-machine.unit.graph.chez.source")
 
 # --- The run directory ------------------------------------------------------
 #
-# Which directory a lane launches from is a decision, and slice 3 is the first
-# code to depend on being able to change it. Specified against the pure function
+# Which directory a lane launches from is a decision callers depend on being
+# able to override. Specified against the pure function
 # rather than through byte_machine_add_test: the registrar calls add_test, which
 # script mode does not have, and creates directories, which a specification must
 # not do to whatever tree it happens to be run from.

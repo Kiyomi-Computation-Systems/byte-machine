@@ -1,52 +1,23 @@
-;;; All three §12.7 position kinds, in both executors, asserted by value.
+;;; Every position kind, in both executors, asserted by value.
 ;;;
-;;; This is what makes the parser-error family front-loadable: every kind the
-;;; table can produce today is reachable with byte-dispatch and error nodes
-;;; alone, both shipped in Milestone 1, so the whole family is proved in a slice
-;;; that adds no field and no node kind.
+;;;   `byte`      a reexecute mismatch, AT the offending byte
+;;;   `boundary`  an error edge after an advance, AFTER the byte
+;;;   `eof`       truncated input during finish!
 ;;;
-;;;   §12.7:768  `byte`      a reexecute mismatch, AT the offending byte
-;;;   §12.7:769  `boundary`  an error edge after an advance, AFTER the byte
+;;; Position kind is a value the two lanes are differential-compared on, so a row
+;;; added here must be added for BOTH lanes. A lane-to-lane projection alone is
+;;; satisfied by two lanes reporting the same wrong kind, so every row asserts the
+;;; VALUE: the kind, the offset and the domain in each lane, then the whole
+;;; projection across lanes. field-access-tests.sps asserts the KIND for the
+;;; accumulate-overflow shape; what it cannot assert is the offset and the
+;;; cross-lane projection, which is what this table is for.
 ;;;
-;;; Milestone 4 splits the remaining rows between slices, and each is a ROW in
-;;; this shipped table rather than a new mechanism: Slice ② owns `boundary`
-;;; after a zero-width hop, and Slice ③ owns `byte` for the input-reading
-;;; accumulate kind. §12.7:777 makes position kind differential-compared, so a
-;;; slice adding its row must add it for BOTH lanes.
-;;;
-;;; *** CORRECTED 2026-09-03. This paragraph said Slice ②'s row was "(added, and
-;;; pinned in both lanes)". IT WAS NOT. *** Slice ② changed only this comment --
-;;; `git diff f3b5558..14c4f30 -- test/common/position-kind-tests.sps` is six
-;;; lines and none of them is code. The `cases` table below still holds its
-;;; original three rows and the sentinels still read 3 and 6. ②'s only
-;;; position-kind assertion anywhere is in field-access-tests.sps, and it asserts
-;;; `eof` rather than `boundary` and drives the INTERPRETER ONLY.
-;;;
-;;; So Slice ③ is the first Milestone 4 slice to touch this table, and it has no
-;;; precedent here to copy -- it inherits a task, not a pattern. Left as a
-;;; correction rather than silently rewritten, because the false claim would
-;;; otherwise have been read as evidence that the work was done.
-;;;   §12.7:771  `eof`       truncated input during finish!
-;;;
-;;; *** Slice ③, 2026-09-03: :768's rejected-digit half IS now producible and is
-;;; row four below. *** The paragraph under it said it "needs Slice ③'s
-;;; accumulate node"; the node exists, so the row was owed and is added -- for
-;;; both lanes, and with the offset and the whole six-member projection, not the
-;;; kind alone. field-access-tests.sps asserts the KIND for the same shape; what
-;;; it cannot assert is the offset and the cross-lane projection, which is what
-;;; this table is for and why the row belongs here rather than being called
-;;; covered elsewhere.
-;;;
-;;; *** AND THAT PARAGRAPH WENT STALE TWICE BEFORE ANYTHING NOTICED. *** It said
-;;; ":770's zero-width action is Slice ②, and its callback half is Milestone 5
-;;; and never producible in Milestone 4 at all" -- true when written, falsified by
-;;; Slice ②'s callback node and compounded by Slice ③'s two span arms, which are
-;;; two more producers of the same half. Slice ③'s census reconciliation found it
-;;; and the rows are added below: a callback node's failure and a SPAN data
-;;; callback's, in both lanes. §12.7:777 makes position kind a value the two
-;;; lanes must agree on, and until now the only thing comparing it for a callback
-;;; failure was a lane-to-lane projection -- which two lanes reporting the same
-;;; wrong kind satisfy. This table asserts the VALUE.
+;;; The table indexes PRODUCERS, not kinds: besides the three rows above it holds
+;;; an accumulate overflow (a second producer of `byte`), the three emitted arms
+;;; that call application code (a callback node, a span's data callback, a span's
+;;; completion callback -- each a producer of the zero-width rule's `boundary`),
+;;; and three counted-consume rows.
+
 (import (rnrs)
         (rnrs eval)
         (only (chezscheme) load)
@@ -79,11 +50,10 @@
 (define ad (make-http-version-advance-machine))
 ;; feed one byte then finish! over exhausted input -> `eof`.
 (define eofm (make-eof-machine))
-;; Slice ③'s row: an accumulate node whose next digit would overflow the field.
-;; §12.7:773 says the offending byte is NOT consumed, which is exactly what makes
-;; the kind `byte` rather than `boundary` -- so this fixture is the table's own
-;; proof of that sentence, and the offset it asserts is the discriminator: a
-;; consuming overflow would report 3.
+;; An accumulate node whose next digit would overflow the field. The offending
+;; byte is NOT consumed, which is exactly what makes the kind `byte` rather than
+;; `boundary` -- and the offset it asserts is the discriminator: a consuming
+;; overflow would report 3.
 ;;
 ;; Built here rather than pulled from a fixture library because the three
 ;; machines further down this file are built here too; a library would exist for
@@ -104,9 +74,10 @@
                         (make-error-node 'over 'too-big #f))
                   'default-eof #f)))
 
-;; §12.7:770's CALLBACK half, and the two producers of it that exist. Both
-;; machines are the smallest that reach one: a byte to commit, so the offset
-;; under test is not zero, and then the invocation.
+;; The zero-width rule's CALLBACK half: a failing callback reports `boundary` at
+;; the current stream offset. Each machine is the smallest that reaches one: a
+;; byte to commit, so the offset under test is not zero, and then the
+;; invocation.
 (define cb-errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
                       (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f)))
 (define cbfail
@@ -116,8 +87,8 @@
     ;; *** THE CALLBACK IS REACHED BY A REEXECUTE EDGE, and that is the whole
     ;; point of the row. *** Reached by an ADVANCE the loop's `pk` is already
     ;; `boundary`, so the literal and the variable agree and the fixture proves
-    ;; nothing. Over a reexecute edge `pk` is `byte`, which is what the shipped
-    ;; arms reported and §12.7:770 forbids.
+    ;; nothing. Over a reexecute edge `pk` is `byte`, which a callback failure
+    ;; must not report.
     (list (make-byte-dispatch-node 'start
             (list (make-byte-case (make-exact-byte-matcher 65)
                                   (make-edge 'mid 'advance) #f))
@@ -135,7 +106,7 @@
           (make-finish-node 'fin #f)
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
-;; Slice ③'s producer. The span's DATA callback fails at the span end, which is
+;; The span's DATA callback fails at the span end, which is
 ;; a different emitted arm and a different runtime entry point from the callback
 ;; node above -- so a lane getting one right and the other wrong is invisible to
 ;; the row above it.
@@ -197,9 +168,9 @@
           (make-error-node 'trunc 'rejected #f))
     'default-eof #f))
 
-;; Milestone 6 Slice ①'s three rows. Design §4.10 named two; the third separates
-;; the counted arm's ORDER (zero count before exhaustion, decision 0030 item 1)
-;; from its carried position kind (item 3), which one row cannot do: a reexecute
+;; The counted-consume rows. There are three because the third separates the
+;; counted arm's ORDER (a zero count transitions before exhaustion is tested)
+;; from its carried position kind, which one row cannot do: a reexecute
 ;; edge leaves a byte unconsumed, so the node is never reached at the end of a
 ;; slice, and an advance edge at the end of a slice carries `boundary` whatever
 ;; the arm does. Each machine is the smallest that reaches the counted consume
@@ -208,7 +179,7 @@
                       (make-error-declaration 'truncated 'eof "truncated body" #f)
                       (make-error-declaration 'bad-body 'unexpected-byte "bad body" #f)))
 ;; Row 1: a body of three, one byte fed, then finish -- truncation at a PARKED
-;; counted consume is `eof` at the final offset (§12.7:771). The offset catches
+;; counted consume is `eof` at the final offset. The offset catches
 ;; an arm that does not advance it; the error's node catches an arm that parks
 ;; `current` on the successor (which would finish through the stop instead).
 (define cc-trunc
@@ -222,8 +193,8 @@
           (make-error-node 'reject 'bad-body #f))
     'default-eof #f))
 ;; Row 2: a zero count reached over a REEXECUTE edge transitions into an error
-;; node with the position kind CARRIED (0030 item 3): `byte` at the unconsumed
-;; byte, exactly as through a field branch today.
+;; node with the position kind CARRIED: `byte` at the unconsumed byte, exactly
+;; as through a field branch.
 (define cc-zero-reexec
   (make-machine 'cczero 'start (list (make-uint-field 'len 8 0 #f)) '() '() cc-errs
     (list (make-byte-dispatch-node 'start
@@ -286,13 +257,13 @@
          (lambda () (interpreted eofm))
          (lambda () (generated eofm 'eofm-parser 'eofm "pk-eof.sls")))
    ;; 57 is `9`. The third one overflows a u8 already holding 99, and because
-   ;; §12.7:773 does not consume it the offset is 2 -- the offending byte itself,
+   ;; an overflowing digit is not consumed the offset is 2 -- the offending byte itself,
    ;; not the position after it.
    (list "an accumulate overflow reports byte at the unconsumed digit"
          (lambda (cm) (feed-then-error cm '(57 57 57))) 'byte 2
          (lambda () (interpreted overflow))
          (lambda () (generated overflow 'overflow-parser 'overflow "pk-over.sls")))
-   ;; §12.7:770's callback half. `boundary at the current stream offset`: the
+   ;; The zero-width rule's callback half, `boundary` at the current stream offset: the
    ;; invocation is zero-width, so the offset is the one byte already committed
    ;; and the position is a byte boundary -- which is why the offset assertion
    ;; is 1 and not 0. Domain `callback`, which is what makes these two rows the
@@ -313,7 +284,7 @@
          'callback)
    ;; The completion substep's own failure. The data callback continues, so the
    ;; fragment is delivered and the span is already inactive when this runs --
-   ;; and the offset is still 2, because §14:841's substeps consume nothing.
+   ;; and the offset is still 2, because span substeps consume nothing.
    ;; This is the third emitted arm that calls out, and the only row that
    ;; reaches it.
    (list "a span completion callback failure reports boundary too"
@@ -325,7 +296,7 @@
          (lambda () (interpreted spdone))
          (lambda () (generated spdone 'spdone-parser 'spdone "pk-spd.sls"))
          'callback)
-   ;; --- Milestone 6 Slice ① ---
+   ;; --- counted consume ---
    (list "truncation at a parked counted consume reports eof at the final offset"
          (lambda (cm) (finish-error cm '(0 65))) 'eof 2
          (lambda () (interpreted cc-trunc))
@@ -345,15 +316,9 @@
       (lambda ()
         ;; Sentinels read OBSERVED drives, never the driving list's own length:
         ;; the outer count proves every case ran, the inner one that each ran in
-        ;; both executors. TWENTY per process -- ten rows x two executors -- and
-        ;; the paragraph said four and eight until Milestone 5's final review,
-        ;; then fourteen until Milestone 6 Slice ① added three rows, having been
-        ;; left behind each time the rows were added. Ten rows for four KINDS,
-        ;; because this table indexes PRODUCERS and not kinds: the accumulate row
-        ;; is a second producer of `byte` (an unconsumed digit rather than a
-        ;; reexecute mismatch), and the three callback-domain rows are three
-        ;; producers of §12.7:770's `boundary`, one per emitted arm that calls
-        ;; application code. The
+        ;; both executors. TWENTY per process -- ten rows x two executors; both
+        ;; literals move when a row is added. Ten rows for three kinds, because
+        ;; this table indexes PRODUCERS and not kinds (see the file header). The
         ;; x2 for source/AOT is discharged by the lane PAIR both passing, which
         ;; CTest reports; no in-process counter can see it, because the two are
         ;; two registrations of this same program under different launchers.
@@ -383,12 +348,12 @@
           (check-equal "twenty drives observed" drives 20))))))
 
 ;; A pause whose CONTINUATION is an error node. Feed to the pause, resume, then
-;; finish!: the finish loop reaches that error state on its first dispatch, by no
-;; jump at all, so what it reports is the loop's INITIALIZATION -- the only case
-;; that can observe it. Decision 0022 item 5 spends three paragraphs on this
-;; shape, and without it the initialization is unwitnessable: every other route
-;; into a finish-time error either hops (setting `eof`) or lands on the
-;; default-EOF terminal, which takes its own constant.
+;; finish!: the finish loop reaches that error state on its first dispatch, by
+;; no jump at all, so what it reports is the loop's INITIALIZATION -- the only
+;; case that can observe it. Without this shape the initialization is
+;; unwitnessable: every other route into a finish-time error either hops
+;; (setting `eof`) or lands on the default-EOF terminal, which takes its own
+;; constant.
 ;;
 ;; Verifier-legal: for a byte-reachable pause the verifier rejects only a
 ;; `finish` continuation and eof-reachable-stop/cycle, and eof-terminal
@@ -427,17 +392,15 @@
           (check-equal "generated" (parser-error-position-kind ge) 'boundary)
           (check-equal "the lanes agree" (project-error ie) (project-error ge)))))))
 
-;; Whole-branch review, 2026-09-02: two declarations may share a CODE. Nothing
-;; rejects that -- pass-names checks duplicate declaration NAMES only, and
-;; §16.2's required-check list does not ask for code uniqueness -- and the two
-;; executors resolved the declaration by DIFFERENT keys: the interpreter by
-;; name, the emitter by resolved code, first match. So the generated lane
-;; reported a different declaration's REASON, which is one of the six members
-;; the projection compares. Reachable through the public (byte-machine graph)
-;; builder on a machine the verifier accepts with zero diagnostics; invisible to
-;; every existing lane because each fixture uses distinct codes, and to the
-;; property lane because machine-gen.sls fixes two declarations with distinct
-;; codes.
+;; Two declarations may share a CODE. Nothing rejects that -- pass-names checks
+;; duplicate declaration NAMES only, and the verifier does not require code
+;; uniqueness. An executor that resolved the declaration by code (first match)
+;; rather than by the declaration the node names would report a different
+;; declaration's REASON, which is one of the members the projection compares.
+;; The shape is reachable through the public (byte-machine graph) builder on a
+;; machine the verifier accepts with zero diagnostics, and invisible to every
+;; other lane: each other fixture uses distinct codes, and machine-gen.sls fixes
+;; two declarations with distinct codes for the property lane.
 (define dup-code
   (let ((errs (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
                     (make-error-declaration 'first-decl 'unexpected-byte "REASON-A" #f)
@@ -462,15 +425,12 @@
                         (make-error-node 'other 'first-decl #f))
                   'default-eof #f)))
 
-;; Whole-branch review, 2026-09-02: the writer half of Task 1 shipped with NO
-;; witness. valid-reason? got three verify cases and two mutations; escape-string
-;; got neither, and every reason in the whole test tree is plain lowercase ASCII
-;; plus space, so nothing distinguished it from the identity function. Task 1's
-;; own amendment deferred this fixture to Task 5, and Task 5 recorded no
-;; amendment and never created it -- a deferral that closed nothing.
+;; escape-string's witness. Every other reason in the test tree is plain
+;; lowercase ASCII plus space, so nothing else distinguishes escape-string from
+;; the identity function.
 ;;
 ;; valid-reason? deliberately ADMITS the three characters that need escaping
-;; (they are inside §10.1:480's printable-ASCII-plus-LF repertoire), so
+;; (they are inside the printable-ASCII-plus-LF reason repertoire), so
 ;; escape-string is the only thing between an author-supplied reason and a
 ;; generated library that does not parse.
 (define quoted-reason
@@ -494,7 +454,7 @@
   (lambda ()
     (harness-case "the verifier accepts it"
       (lambda ()
-        ;; §10.1:480 admits all three, so a rejection here would be the
+        ;; The reason repertoire admits all three, so a rejection here would be the
         ;; verifier's defect, not the writer's.
         (let ((v (verify-machine escaping)))
           (check "accepted" (verification-ok? v))
@@ -538,8 +498,8 @@
     (harness-case "the verifier accepts two declarations sharing a code"
       (lambda ()
         ;; Stated as its own check so the test does not silently start passing
-        ;; because the machine became unbuildable. If a later slice decides codes
-        ;; must be unique, THIS is the case that should fail first and say so.
+        ;; because the machine became unbuildable. If codes are ever required to
+        ;; be unique, THIS is the case that should fail first and say so.
         (let ((v (verify-machine dup-code)))
           (check "accepted" (verification-ok? v))
           (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))
@@ -556,9 +516,9 @@
   (lambda ()
     (harness-case "both report one, and the projection omits it"
       (lambda ()
-        ;; Asserted POSITIVELY, per §12.7:777: generated ids "are deterministic
-        ;; for a given normalized graph, but an independently interpreted machine
-        ;; need not report the same ID." The exclusion is invisible by
+        ;; Asserted POSITIVELY: generated ids are deterministic for a given
+        ;; normalized graph, but an independently interpreted machine need not
+        ;; report the same id, so the projection omits it. The exclusion is invisible by
         ;; construction, so what is checked is that both lanes REPORT one and
         ;; that the projection's width is the agreed one -- a check that fails if
         ;; the exclusion is ever widened to drop a comparable member.
@@ -571,11 +531,11 @@
           ;; Against a LITERAL, not against projected-members: comparing the
           ;; library's output to the library's own constant five lines away is a
           ;; self-consistency check that one edit satisfies in both places. Eight
-          ;; is §22.4:1271's five plus `reason` plus decision 0056's two (the
+          ;; is the five required members (domain, code, node name, offset,
+          ;; position kind) plus `reason` plus the two abandoned-span members (the
           ;; span an error abandoned and where its withheld bytes begin); a
-          ;; ninth member appearing here means the exclusion was widened or
-          ;; narrowed and this must be re-derived from the spec, not from the
-          ;; code.
+          ;; different count means the exclusion was widened or narrowed and this
+          ;; must be re-derived from the comparison rules, not from the code.
           (check-equal "the projection is §22.4:1271's five plus reason plus the abandoned span"
                        (length (project-error ie)) 8)
           (check-equal "and the library agrees with the spec" projected-members 8)
@@ -583,12 +543,11 @@
                        (project-error ie) (project-error ge)))))
     (harness-case "reason and detail are compared rather than left as orphans"
       (lambda ()
-        ;; The parser-error family has ten accessors -- §9.3's eight and the two
-        ;; decision 0056 added. §22.4:1271 names five, §12.7:777 excludes one,
-        ;; and 0056 compares its own two -- leaving `reason` and `detail` neither
-        ;; required to match nor licensed to differ. Both lanes build them from the same declaration,
-        ;; so the agreement is real and is asserted here rather than left for a
-        ;; later slice to re-derive.
+        ;; The parser-error family has ten accessors. Five are required to
+        ;; match, the state id is excluded, and the two abandoned-span members
+        ;; are compared -- leaving `reason` and `detail` neither required to
+        ;; match nor licensed to differ. Both lanes build them from the same
+        ;; declaration, so the agreement is real and is asserted here.
         (let ((ie (feed-then-error (interpreted rx) bad-version))
               (ge (feed-then-error (generated rx 'http-version-parser 'http-version
                                               "pk-rd.sls")

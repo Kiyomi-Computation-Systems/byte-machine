@@ -1,8 +1,8 @@
-;;; The idle-vs-truncation proving machine for Milestone 2 Slice ②b, built only
-;;; through (byte-machine graph). Accepts the two-byte sequence 1 2 (feed ->
+;;; The idle-vs-truncation proving machine, built only through
+;;; (byte-machine graph). Accepts the two-byte sequence 1 2 (feed ->
 ;;; stopped). At entry s0, EOF is idle completion (eof-target -> finish 'done ->
 ;;; finished); after one byte at s1, EOF is truncation (eof-target -> error
-;;; 'trunc -> error). Shared by the ②b-1 interpreter tests and ②b-2's
+;;; 'trunc -> error). Shared by the interpreter tests and the
 ;;; interpreter≡generated differential so the graph is written once.
 (library (byte-machine test eof-machine)
   (export make-eof-machine)

@@ -1,103 +1,84 @@
-;;; A bounded generator of machines over EVERY §10.6 construct, for the property
-;;; differential lane (parent §22.6; Milestone 7 design §4.4; decision 0033).
+;;; A bounded generator of machines over EVERY graph construct, for the property
+;;; differential lane.
 ;;;
-;;; This is the Slice ② rewrite. The Milestone-2/3/4 generator drew a single
-;;; byte-dispatch entry over distinct-byte cases into a tiny fixed target
-;;; vocabulary; it produced ONE construct and its acceptance was 100% by
-;;; construction, which is exactly what decision 0033 item 1 removes. The draw
-;;; below is a worklist over open slots that draws from all thirteen node kinds,
-;;; all four matcher kinds, all seven field operations and all seven field
-;;; predicates, and it is `verify-machine` -- not this file -- that decides which
-;;; draws are valid. Acceptance is MEASURED (Task 2 / Task 7), not asserted.
+;;; The draw is a worklist over open slots that draws from every node kind in
+;;; `node-kind-draw-table`, all four matcher kinds, all seven field operations
+;;; and all seven field predicates, and it is `verify-machine` -- not this file
+;;; -- that decides which draws are valid. Acceptance is MEASURED by the lane,
+;;; not asserted.
 ;;;
-;;; STEERING IS A PARAMETER, not baked in (design §4.6, F18). `gen-machine` takes
-;;; a `steering` record. The property lane runs `property-steering`; Slice ④'s
-;;; independent-oracle drive is "§4.4's generator with its structural steering
-;;; off" (design §4.6), which it selects by handing a different record. Whatever
-;;; the property lane steers around, the free mode still produces.
+;;; STEERING IS A PARAMETER, not baked in. `gen-machine` takes a `steering`
+;;; record. The property lane runs `property-steering`; the independent-oracle
+;;; drive in property-rejections-tests.sps runs `free-steering`, this generator
+;;; with its structural steering off. Whatever the property lane steers around,
+;;; the free mode still produces.
 ;;;
-;;; THE STEERING SET, decided in Task 2 (measured through this generator's
-;;; prototype, committed seed 20260823, and re-measured through this lane in
-;;; Task 7), each member classified against decision 0033 item 1 by the measured
-;;; discriminator "does the code it targets stay NONZERO in the rejection
-;;; histogram" (a rule is validity steering when it takes its target code to
-;;; zero, structural when the verifier still decides):
+;;; THE STEERING SET. Each member is classified by the discriminator "does the
+;;; code it targets stay NONZERO in the rejection histogram" (a rule is
+;;; validity steering when it takes its target code to zero, structural when
+;;; the verifier still decides). Prices are measured acceptance-point deltas:
 ;;;
 ;;;   placed?      STRUCTURAL. A finish node is drawn only at an eof-target slot,
 ;;;                a stop node only at a byte-and-not-eof slot that is not a
-;;;                span-end successor. §16.2:908/:909 make a uniform kind draw
-;;;                unconstructible-in-context for those two kinds. Discriminator:
-;;;                eof-reachable-stop survives (~85/2000 with placed on), so the
-;;;                verifier still decides. Price -44.5/+22.0 pts.
+;;;                span-end successor. The verifier's rules that a finish is
+;;;                reached only by EOF and a stop never by EOF make a uniform
+;;;                kind draw unconstructible-in-context for those two kinds.
+;;;                Discriminator: eof-reachable-stop survives (~85/2000 with
+;;;                placed on), so the verifier still decides. Price -44.5/+22.0 pts.
 ;;;   back-prog?   STRUCTURAL. A back-edge is drawn only over a slot reached by
 ;;;                consuming a byte; a back-edge over a zero-width slot closes a
 ;;;                zero-progress cycle by construction. Both cycle codes stay
 ;;;                nonzero. Price -20.2/+2.3.
-;;;   few-cases?   A BOUND, not a steering (§4.10's list): a dispatch draws 1-2
-;;;                cases, not 1-4. Keeps all four matcher kinds alive. -25.6/+1.2.
-;;;   entry-bd?    COVERAGE, which §4.4 presupposes: the entry is a byte dispatch,
-;;;                so the 256 single-byte trials give §22.7's all-byte coverage of
-;;;                the entry dispatch. Costs points in both directions (+17.1/-8.4)
-;;;                and buys the entire §22.7 trial.
-;;;   span-pair? + span-body?  COVERAGE, and §4.4 declares the span steering so.
+;;;   few-cases?   A BOUND, not a steering: a dispatch draws 1-2 cases, not 1-4.
+;;;                Keeps all four matcher kinds alive. -25.6/+1.2.
+;;;   entry-bd?    COVERAGE: the entry is a byte dispatch, so the 256
+;;;                single-byte trials give all-byte coverage of the entry
+;;;                dispatch. Costs points in both directions (+17.1/-8.4) and
+;;;                buys the entire all-byte trial.
+;;;   span-pair? + span-body?  COVERAGE.
 ;;;                A span is drawn as start -> one advancing one-case byte dispatch
 ;;;                carrying its OWN private EOF error node -> end. Without the body
-;;;                the span covers [mark,mark); since decision 0042 amends §14:834
-;;;                that empty span now DELIVERS one empty fragment (witnessing
-;;;                `empty-fragment`), but its bytes-carrying boundary/end fragments
-;;;                would still never run -- so decision 0033 item 2's nonempty
+;;;                the span covers [mark,mark); that empty span DELIVERS one empty
+;;;                fragment (witnessing `empty-fragment`), but its bytes-carrying
+;;;                boundary/end fragments would never run -- so the nonempty
 ;;;                span-event counters need the body. span-body is +1.6 pts, i.e. free.
-;;;   cbdefault    VALIDITY -- DECLINED (F4). Forcing an optional decision
+;;;   cbdefault    VALIDITY -- DECLINED. Forcing an optional decision
 ;;;                callback's default-branch to a declared key takes
-;;;                §16.2:891's invalid-callback-declaration to zero, reproducing
-;;;                one layer out the very check make-callback-declaration's header
-;;;                defers to the verifier. Instead `default-branch` is DRAWN from
+;;;                invalid-callback-declaration to zero, reproducing one layer
+;;;                out the very check make-callback-declaration's header defers
+;;;                to the verifier. Instead `default-branch` is DRAWN from
 ;;;                (cons #f declared-keys) -- a draw over one slot among the values
 ;;;                the slot already admits (the same class as the EOF-route draw),
-;;;                which leaves :891 firing whenever it lands #f on an optional
-;;;                decision callback. Measured: invalid-callback-declaration stays
-;;;                ~297/2000 (nonzero), and acceptance 46.1% (bare refusal) ->
-;;;                51.2% (this draw) at 2000.
+;;;                which leaves invalid-callback-declaration firing whenever it
+;;;                lands #f on an optional decision callback. Measured:
+;;;                invalid-callback-declaration stays ~297/2000 (nonzero), and
+;;;                acceptance 46.1% (bare refusal) -> 51.2% (this draw) at 2000.
 ;;;
-;;; The FLOOR is 32 (decision 0033 item 2: no lower than half of 64) -- a bound,
-;;; not the measured acceptance. Measured acceptance at 64 draws under the
-;;; committed seed is 33 through gen-machine alone and 36 through the lane's trial
-;;; (its coverage segment lifts a few more over the verifier); both are >= 32. The
-;;; floor does not measure what it is for on its own: a draw steered to a single
-;;; error node per machine would clear it while every counter of item 2 read
-;;; zero. What stops that is the counters (Task 7 Step 4).
+;;; The FLOOR is 32 (no lower than half of 64) -- a bound, not the measured
+;;; acceptance. Measured acceptance at 64 draws under the committed seed is 33
+;;; through gen-machine alone and 36 through the lane's trial (its coverage
+;;; segment lifts a few more over the verifier); both are >= 32. The floor does
+;;; not measure what it is for on its own: a draw steered to a single error node
+;;; per machine would clear it while every coverage counter read zero. What
+;;; stops that is the counters.
 ;;;
-;;;   dangling-prob (p) / orphan-prob (q)  The F8 draws: with probability p a
-;;;                slot names a symbol that is never built (a dangling target);
-;;;                with probability q an allocated node is attached to nothing (an
-;;;                orphan). They WIDEN the draw (0033 item 1's permission is not
-;;;                engaged) and exist to make design §4.6's :885/:887/:905/:897
-;;;                rows FIRE. §4.6 is Slice ④'s section and its drive is this
-;;;                generator with structural steering off, so THE PROPERTY LANE'S
-;;;                VALUES ARE 0 -- they cost the acceptance gate nothing. Slice ④
-;;;                inherits the chosen pair (see property-differential-tests.sps's
-;;;                header / Task 12 Step 7).
+;;;   dangling-prob (p) / orphan-prob (q)  With probability p a slot names a
+;;;                symbol that is never built (a dangling target); with
+;;;                probability q an allocated node is attached to nothing (an
+;;;                orphan). They WIDEN the draw and exist to make the verifier's
+;;;                dangling-target and orphan-node rows FIRE in the
+;;;                independent-oracle drive, so THE PROPERTY LANE'S VALUES ARE 0
+;;;                -- they cost the acceptance gate nothing. `free-steering` sets
+;;;                each to 1/16.
 ;;;
-;;; SEED-STABILITY DISCIPLINE (X3, inherited): every conditional draw takes the
-;;; same number of values from the PRNG stream on both arms, so the state after a
-;;; draw does not depend on which way it landed.
+;;; SEED-STABILITY DISCIPLINE: every conditional draw takes the same number of
+;;; values from the PRNG stream on both arms, so the state after a draw does not
+;;; depend on which way it landed.
 ;;;
-;;; NINE by-construction validity arguments the previous generator's comments
-;;; named are GONE with the previous draw (H1 distinct case bytes; H2 a case
-;;; targeting start forced to advance; H3 the same for pausep; H4 the first case
-;;; pinned to stop; H5 reject reachable via the fixed fallback; H6 pausep added
-;;; only when a case drew it; H7 done never byte-reachable; H8 pausep's
-;;; continuation 'start; H9 accp's cycle-free shape). Decision 0033 and design §2
-;;; count THREE; the file named nine. TWO of the nine are RE-ANCHORED rather than
-;;; deleted, under `placed`, as a vocabulary per slot class: H7 (§16.2:908 holds
-;;; by construction -- a finish is drawn only at an eof-target slot) and H8
-;;; (§16.2:909 -- a stop is never drawn at an eof or span-end-successor slot).
-;;; Measured, those two are worth ~20 points of acceptance between them.
-;;;
-;;; Slice ⓪ / decision 0031 made this generator's oracle STRICTER (a pure
-;;; narrowing: occupiable ⊆ R_old, so unreachable-node fires on strictly more
-;;; nodes; nothing became accepted). The acceptance rate Slice ② measures is
-;;; measured against the stricter verifier.
+;;; Two validity arguments hold by construction, under `placed`, as a
+;;; vocabulary per slot class: a finish is drawn only at an eof-target slot,
+;;; and a stop is never drawn at an eof or span-end-successor slot. Measured,
+;;; those two are worth ~20 points of acceptance between them.
 
 (library (byte-machine test machine-gen)
   (export gen-machine
@@ -117,12 +98,12 @@
           (byte-machine test prng)
           (byte-machine graph))
 
-  ;; ---- The exported draw tables (F18) -----------------------------------
+  ;; ---- The exported draw tables -----------------------------------------
   ;; HAND-WRITTEN here and exported. The property program's totality rows derive
-  ;; ir.sls's closed set and compare it against these keys (design §4.10's
-  ;; placement, the S2 technique): if the generator drew from ir.sls's own
-  ;; runtime-read list the row would compare ir.sls against ir.sls and close
-  ;; nothing. A fourteenth kind in ir.sls reddens the row here.
+  ;; ir.sls's closed set and compare it against these keys: if the generator
+  ;; drew from ir.sls's own runtime-read list the row would compare ir.sls
+  ;; against ir.sls and close nothing. A kind added to ir.sls reddens the row
+  ;; here.
   (define node-kind-draw-table
     '(byte-dispatch sequence-dispatch keyword-table stop error finish pause
       field-action field-branch integer-accumulate callback
@@ -135,12 +116,12 @@
     '(equal zero nonzero range mask-any mask-all mask-none))      ; 7
   (define callback-kind-draw-table
     '(event decision span-data span-complete))         ; 4
-  ;; Re-derived, because ir.sls does NOT export it (Task 6 Step 4):
+  ;; Re-derived, because ir.sls does NOT export it:
   (define infallible-field-operations '(store clear set-mask clear-mask))
 
   ;; GLOBAL round-robin over the four vocabulary families. This is what makes the
   ;; coverage of node kinds, matcher kinds, operations and predicates satisfiable
-  ;; at ANY machine count (Task 6 Step 4). A per-machine draw -- uniform OR a
+  ;; at ANY machine count. A per-machine draw -- uniform OR a
   ;; per-machine round-robin phase -- leaves the committed seed's 64 machines
   ;; covering only 3-4 of 7 operations, because most machines draw at most one
   ;; field-action node, so the op it draws is a near-coin over the phase. A single
@@ -148,10 +129,9 @@
   ;; member deterministically: the union over the accepted machines' field-action
   ;; nodes is a contiguous slice of the cycle, so it covers all seven as soon as
   ;; seven such nodes are drawn. It consumes NO value off the PRNG stream, so the
-  ;; acceptance rate is a function of the steering and the seed alone (§4.4 says
-  ;; "drawn uniformly"; Task 12 Step 1 writes this rule and its measured reason
-  ;; back into it -- it changes no totality row and encodes no validity, the sets
-  ;; are still read from ir.sls by the program's own rows).
+  ;; acceptance rate is a function of the steering and the seed alone. It
+  ;; changes no totality row and encodes no validity: the sets are still read
+  ;; from ir.sls by the program's own rows.
   ;;
   ;; It is module-level mutable state, and that is a deliberate, documented
   ;; departure from a pure generator: it is deterministic and reproducible under
@@ -163,7 +143,7 @@
   (define rr-op-i 0)
   (define rr-pred-i 0)
   ;; (length ...), not a hardcoded modulus: a mutation that removes a member from
-  ;; a draw table (Task 10's per-kind / per-matcher pins) must leave the cycle over
+  ;; a draw table (the per-kind / per-matcher pins) must leave the cycle over
   ;; the SHORTER list -- never draw the removed member and never index out of range
   ;; -- so the member's counter cleanly reads zero (caught by comparison) instead
   ;; of raising (caught by the wrong reason).
@@ -177,27 +157,29 @@
   ;; fresh module state). Used only by the reproducibility case.
   (define (reset-draw-state!) (set! rr-kind-i 0) (set! rr-matcher-i 0) (set! rr-op-i 0) (set! rr-pred-i 0))
 
-  ;; ---- The steering record (F18) ----------------------------------------
+  ;; ---- The steering record ----------------------------------------------
   (define-record-type steering
     (fields placed? back-prog? few-cases? entry-bd? span-pair? span-body?
             fin-kind? stop-on? default-branch-mode dangling-prob orphan-prob coverage?))
-  ;; The property lane: structural + coverage steering on, F8 draws off, and the
-  ;; COVERAGE SEGMENT on (see build-cov-segment!): the free draw reaches spans,
-  ;; pause nodes and decision-callback branches too rarely to satisfy decision
-  ;; 0033 item 2 at the committed seed (measured 1 of 33 machines fires a span
-  ;; fragment), so a segment woven on the entry dispatch's fallback exercises them
-  ;; deterministically. It is coverage steering of the class §4.4 licenses for
-  ;; spans, and §22.7's all-byte coverage of the entry dispatch is preserved
-  ;; because the fallback REEXECUTES the byte into the segment.
+  ;; The property lane: structural + coverage steering on, dangling/orphan
+  ;; draws off, and the COVERAGE SEGMENT on (see the segment at the tail of
+  ;; gen-machine): the free draw reaches spans, pause nodes and
+  ;; decision-callback branches too rarely to satisfy the coverage counters at
+  ;; the committed seed (measured 1 of 33 machines fires a span fragment), so a
+  ;; segment woven on the entry dispatch's fallback exercises them
+  ;; deterministically. It is coverage steering of the same class as the span
+  ;; steering, and all-byte coverage of the entry dispatch is preserved because
+  ;; the fallback REEXECUTES the byte into the segment.
   (define (property-steering)
     (make-steering #t #t #t #t #t #t #f #f 'draw 0 0 #t))
-  ;; Slice ④'s independent-oracle drive: structural steering OFF; finish/stop
-  ;; drawn uniformly (so §16.2:908/:909 fire); the F8 draws on at Task 2 Step 9's
-  ;; chosen pair, 1/16 each; NO coverage segment (§4.6 measures the free draw).
+  ;; The independent-oracle drive: structural steering OFF; finish/stop drawn
+  ;; uniformly (so the finish and stop placement rules fire); the
+  ;; dangling/orphan draws on at 1/16 each; NO coverage segment (the free draw
+  ;; is what that drive measures).
   (define (free-steering)
     (make-steering #f #f #f #f #t #t #t #t 'draw 1/16 1/16 #f))
 
-  ;; ---- The draw manifest (F18) ------------------------------------------
+  ;; ---- The draw manifest ------------------------------------------------
   ;; Everything the driver/lane needs that (byte-machine graph) will not expose,
   ;; PLUS a decoder. The manifest is a DECODER, not an observation: the trial
   ;; observes that a name was reached; the decoder only says what that name was
@@ -224,8 +206,8 @@
     (define (chance! p)                         ; #t with probability p (p a rational in [0,1])
       ;; When p = 0 the draw does not exist in this configuration and consumes
       ;; NOTHING, so the property lane's PRNG stream matches a generator without
-      ;; the F8 draws at all; when p > 0 the (d! den) always takes exactly one
-      ;; value whichever way it lands (X3 seed stability).
+      ;; the dangling/orphan draws at all; when p > 0 the (d! den) always takes
+      ;; exactly one value whichever way it lands (seed stability).
       (and (rational? p) (> p 0)
            (let ((den (denominator p)) (num (numerator p)))
              (< (d! den) num))))
@@ -234,7 +216,7 @@
 
     ;; (The four vocabulary families draw from the module-level GLOBAL round-robin
     ;; cycles above -- rr-kind / rr-matcher / rr-op / rr-pred.)
-    ;; ---- fields (the base 1-2 uint fields, §4.4) ----
+    ;; ---- fields (the base 1-2 uint fields) ----
     (define nfields (+ 1 (d! 2)))
     (define base-field-specs
       (let loop ((i 0) (acc '()))
@@ -256,7 +238,7 @@
     (define markers '())            ; fb-node -> (field pred (arm . bits) ...)
     (define (add-field! nm w init) (set! extra-field-specs (cons (list nm w init) extra-field-specs)))
 
-    ;; ---- callback declarations (§4.4, F4) ----
+    ;; ---- callback declarations ----
     (define ncb (+ 1 (d! 2)))
     (define cb-specs
       (let loop ((i 0) (acc '()))
@@ -265,28 +247,28 @@
                    (kind (pickv! '#(event decision)))     ; node-invocable kinds only
                    (req (coin!))
                    (keys (if (eq? kind 'decision) (if (coin!) '(yes) '(yes no)) '()))
-                   ;; F4(a): draw default-branch from (cons #f declared-keys) for
+                   ;; Draw default-branch from (cons #f declared-keys) for
                    ;; optional decision callbacks -- one slot, values it admits.
                    (def (cond ((not (eq? kind 'decision)) #f)
                               (req #f)
                               ((eq? (steering-default-branch-mode st) 'force)
-                               (car keys))                ; cbdefault (declined; here for §4.6)
+                               (car keys))                ; cbdefault (declined; selectable by steering)
                                (else (pickl! (cons #f keys))))))
               (loop (+ i 1) (cons (list nm kind req keys def) acc))))))
     (define node-cbs (filter (lambda (c) (memq (cadr c) '(event decision))) cb-specs))
 
-    ;; ---- span declarations (§4.4): one or two; a SINGLE machine-level coin
+    ;; ---- span declarations: one or two; a SINGLE machine-level coin
     ;; decides the completion callback, named on every span or on none. A
     ;; span-complete declaration no span names is unreferenced-callback-declaration,
-    ;; and §4.4's "in half the draws" read per span would produce exactly that
-    ;; (the shipped counted-machine.sls `complete?` flag is the precedent). ----
+    ;; and a per-span coin would produce exactly that (counted-machine.sls's
+    ;; `complete?` flag is the precedent). ----
     (define complete? (coin!))
     (define nspans (+ 1 (d! 2)))
     (define span-names (if (= nspans 1) '(sa) '(sa sb)))
     (define span-decls
       (map (lambda (nm) (make-span-declaration nm 'cd (if complete? 'cc #f) #f)) span-names))
-    ;; Optional callbacks are bound in half the draws (§4.4) -- drawn per
-    ;; declaration. The F4(a) default-branch is observable ONLY through the
+    ;; Optional callbacks are bound in half the draws -- drawn per
+    ;; declaration. The drawn default-branch is observable ONLY through the
     ;; unbound-optional-decision path, so this coin is what exercises the slot.
     (define span-data-req (coin!))
     (define span-complete-req (coin!))
@@ -306,8 +288,8 @@
                   '())))
     (define err-names (if extra-err? '(edef erej eov) '(edef erej)))
 
-    ;; ---- worklist machinery (ported from Task 2's prototype) ----
-    (define budget 8)                   ; §4.10: node budget of eight fresh nodes
+    ;; ---- worklist machinery ----
+    (define budget 8)                   ; node budget of eight fresh nodes
     (define counter 0)
     (define queue '())                  ; (name . class) still to build, in order
     (define scheduled '())              ; (name . class) for every allocated node
@@ -343,7 +325,7 @@
                         (if (steering-fin-kind? st) '#(tfin terr) '#(terr)))))
              (pickv! v)))))
     ;; A back-edge only to a node of the SAME class when `placed`; joining a
-    ;; byte-only node onto an EOF path is what makes :909 fire late.
+    ;; byte-only node onto an EOF path is what makes the EOF-path rules fire late.
     (define (back-edge cls)
       (let ((pool (if (steering-placed? st)
                       (filter (lambda (p) (eq? (cdr p) cls)) scheduled)
@@ -351,7 +333,7 @@
         (if (pair? pool) (car (pickl! pool)) #f)))
     ;; `prog?` says whether reaching this slot consumed a byte. A back-edge over
     ;; a slot that did NOT consume closes a zero-progress cycle by construction.
-    ;; The F8 dangling draw (prob p) names a symbol never built.
+    ;; The dangling draw (prob p) names a symbol never built.
     (define (target* cls prog?)
       (cond ((chance! (steering-dangling-prob st)) (fresh!)) ; dangling: names nothing
             (else
@@ -390,7 +372,7 @@
         (else (make-byte-complement-matcher (simple-matcher!)))))
     (define (operand! w) (pickv! (vector 0 1 (min 7 (- (expt 2 w) 1)))))
 
-    ;; ---- the coverage steerings of F9 (Task 6 Step 7) ----
+    ;; ---- the coverage steerings ----
     ;; A witness field per drawn field-action node, its initial + operand drawn so
     ;; the operation makes a VISIBLE change (a store constant != initial, a clear
     ;; on a nonzero field, an increment below the bound, a set-mask with a bit the
@@ -469,7 +451,7 @@
         ;; (prefixes accepted, duplicates rejected), so the differential covers
         ;; both. `case-insensitive?` is #f here so the machine-drawing PRNG stream
         ;; is unperturbed; the CI fold is exercised by the dedicated keyword-table
-        ;; lane (decision 0045).
+        ;; lane.
         ((keyword-table)
          (let* ((n (+ 1 (d! 3)))
                 (entries (let loop ((i 0) (acc '()))
@@ -514,10 +496,9 @@
              ;; private EOF error node -> end. The body's EOF route is its own
              ;; truncation node: a shared sink joins `none` with (active s), and
              ;; pass 7 rejects one node carrying both states (counted-machine.sls's
-             ;; precedent). §4.4's "private error sink" names a slot
-             ;; make-span-end-node does NOT have (F6) -- the sink belongs on the
-             ;; body node, which is the only node in the construct with an
-             ;; eof-target, and §4.4's own decision-0029 warrant already implies it.
+             ;; precedent). The sink belongs on the body node: make-span-end-node
+             ;; has no eof-target slot, and the body is the only node in the
+             ;; construct with one.
              (let* ((bodynm (begin (spend!) (fresh!)))
                     (endnm (begin (spend!) (fresh!)))
                     (truncnm (begin (spend!) (fresh!))))
@@ -576,7 +557,7 @@
     ;; The matcher coverage: a PEEK dispatch (covmd) with one non-overlapping case
     ;; per matcher kind in the draw table -- exact 65, set {66,67}, range [68,70],
     ;; and complement of {65..70} (everything else). All cases REEXECUTE, so the
-    ;; byte is re-presented to the free entry (§22.7 preserved) and covmd only
+    ;; byte is re-presented to the free entry (all-byte coverage preserved) and covmd only
     ;; observes which matcher kind a byte fired. Gated per matcher: removing a
     ;; matcher from matcher-kind-draw-table drops its case, its bytes fall through
     ;; to the (reexecuting) fallback, and observe never sees that kind -- so the
@@ -594,8 +575,8 @@
           '()))
     (define cov-matcher? (and (steering-coverage? st) (pair? cov-matchers)))
     ;; The entry dispatch, whose fallback routes into the coverage segment
-    ;; (reexecute, so §22.7's all-byte coverage of the entry dispatch is preserved
-    ;; -- the byte is re-presented to the segment, not consumed here).
+    ;; (reexecute, so all-byte coverage of the entry dispatch is preserved --
+    ;; the byte is re-presented to the segment, not consumed here).
     (define (build-entry! nm cls)
       (record-kind! nm 'byte-dispatch)
       (let* ((n (if (steering-few-cases? st) (+ 1 (d! 2)) (+ 1 (d! 4))))
@@ -604,7 +585,7 @@
                      (make-edge seg-entry-name 'reexecute)
                      (let ((fm (pickv! '#(advance reexecute)))) (make-edge (target* 'byte (eq? fm 'advance)) fm)))))
         (make-byte-dispatch-node nm cases fb (eof-route!) #f)))
-    ;; §16.2's census flags machine-entry an EOF position: an empty feed reaches it.
+    ;; The verifier counts machine-entry as an EOF position: an empty feed reaches it.
     (let ((entry (schedule! 'both)))
       (let loop ((first #t))
         (if (null? queue) #t
@@ -615,14 +596,14 @@
                                     (build! nm (draw-kind! cls) cls))
                                 built))
               (loop #f))))
-      ;; The F8 orphan draw (prob q): with probability q an already-allocated node
+      ;; The orphan draw (prob q): with probability q an already-allocated node
       ;; is attached to nothing -- an extra node referenced by no slot. In the
       ;; property lane q = 0.
       (when (chance! (steering-orphan-prob st))
         (let ((onm (fresh!)))
           (record-kind! onm 'stop)
           (set! built (cons (make-stop-node onm #f) built))))
-      ;; The coverage prefix (F9 / Task 6 Step 7). Every machine BEGINS with a
+      ;; The coverage prefix. Every machine BEGINS with a
       ;; field-action node (cova) and a field-branch node (covb), so EVERY accepted
       ;; machine observes exactly one field operation and one field predicate,
       ;; globally cycled. parser-state-name never names a zero-width node, so the
@@ -630,7 +611,7 @@
       ;; witness field) and the MARKER field (an arm of covb ran). Without it a
       ;; member drawn only into rejected machines reads zero forever (measured:
       ;; clear-mask 0 of 5 accepted at 64 with a free draw alone). The prefix is a
-      ;; chain of zero-width nodes to the free entry's dispatch, so §22.7's all-byte
+      ;; chain of zero-width nodes to the free entry's dispatch, so all-byte
       ;; coverage of that dispatch is preserved and no zero-progress CYCLE forms
       ;; (it is acyclic). The operand separates a member from its siblings.
       (let* ((op (rr-op))
@@ -665,19 +646,20 @@
           (set! built (cons (make-byte-dispatch-node 'covmd
                              (map (lambda (km) (make-byte-case (cdr km) (make-edge entry 'reexecute) #f)) cov-matchers)
                              (make-edge entry 'reexecute) #f #f) built))))
-      ;; The coverage SEGMENT (Task 6 Steps 6-8). Reached from the entry dispatch's
+      ;; The coverage SEGMENT. Reached from the entry dispatch's
       ;; fallback (reexecute), so on most bytes the parser runs: covx1 opens span
       ;; covx -> covx2/covx3 consume two bytes (covx3 PARKS with the span open after
       ;; one byte -> span-open observed) -> covx4 closes covx (boundary + end
       ;; fragments) -> covx5 pauses (node kind pause) -> covx6 a decision callback
       ;; whose script the driver cycles (cb-continue / -pause / -declared-branch-key
       ;; / -explicit-failure) -> covx7/covx8 an EMPTY span covy (delivers one empty
-      ;; fragment, witnessing empty-fragment -- decision 0042) -> covx9 consumes and
+      ;; fragment, witnessing empty-fragment) -> covx9 consumes and
       ;; routes to the error terminal. The free
-      ;; draw reaches spans/pauses/branches too rarely to satisfy 0033 item 2 at the
-      ;; committed seed, so this segment exercises them deterministically. It is
-      ;; coverage steering of the class §4.4 licenses. covxt is the span body's OWN
-      ;; EOF sink (F6: a shared sink joins none with (active s)).
+      ;; draw reaches spans/pauses/branches too rarely to satisfy the coverage
+      ;; counters at the committed seed, so this segment exercises them
+      ;; deterministically. It is coverage steering of the same class as the span
+      ;; steering. covxt is the span body's OWN EOF sink (a shared sink joins none
+      ;; with (active s)).
       ;; Each stage of the segment is GATED on its kind's membership in
       ;; node-kind-draw-table, and the stages are chained tail-first so a removed
       ;; stage is rerouted around. This is what makes the "remove kind K from the

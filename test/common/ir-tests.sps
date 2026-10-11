@@ -9,7 +9,7 @@
 (harness-begin "unit.ir")
 
 ;; house convention (conditions.sls header): tests compare the code and who,
-;; never rendered text -- and, per Fix wave 1, the detail too: two distinct
+;; never rendered text -- and the detail too: two distinct
 ;; guards can share a who/code pair (or a code/detail pair) and only the third
 ;; field tells them apart, so a check-raises that stops at
 ;; byte-machine-contract-condition? alone would not notice a copy-pasted `who`
@@ -98,8 +98,8 @@
                       (matcher-contract-violation? 'exact-byte-matcher-byte)
                       (lambda () (exact-byte-matcher-byte (make-edge 'stop 'advance))))))))
 
-;; Same guard class as above, one instance per class-matcher accessor
-;; (Important 1, Fix wave 1): an unguarded (vector-ref m N) on a matcher of
+;; Same guard class as above, one instance per class-matcher accessor: an
+;; unguarded (vector-ref m N) on a matcher of
 ;; another kind reads the wrong slot and fails far away -- inside arithmetic
 ;; or a sort predicate -- rather than at the contract boundary. Each accessor
 ;; gets its own case because each is its own guard at its own source site.
@@ -305,8 +305,8 @@
                        'seq (list (make-sequence-case '(1) 'stop #f))
                        (make-edge 'reject 'reexecute) #f #f))
                      #f)))
-    ;; Fix wave 1 (Minor 2): the eof-target guard had a "legal #f" case above
-    ;; but no case proving it actually REJECTS a bad shape.
+    ;; The eof-target guard's "legal #f" case above needs a partner proving it
+    ;; actually REJECTS a bad shape.
     (harness-case "a non-symbol, non-#f eof-target is rejected"
       (lambda ()
         (check-raises "bad eof-target" (contract-violation? 'make-sequence-dispatch-node 'eof-target)
@@ -332,12 +332,12 @@
           (check "node?" (node? n))
           (check-equal "node-name" (node-name n) 'seq))))))
 
-;; Milestone 4 Slice ①b task 1: the uint field descriptor (§9.1:283, §10.2:488-491).
-;; Validation is decision 0020's CONSTRUCTOR half -- closed-set membership and
-;; the local shape of the one value being built -- so these are contract
-;; violations, never diagnostics: a machine whose field failed construction
-;; never exists, and re-checking any of them in the verifier would ship an arm
-;; no public API can reach (0020's one-rejection-site rule).
+;; The uint field descriptor. Validation is the CONSTRUCTOR half of the
+;; constructor/verifier boundary -- closed-set membership and the local shape
+;; of the one value being built -- so these are contract violations, never
+;; diagnostics: a machine whose field failed construction never exists, and
+;; re-checking any of them in the verifier would ship an arm no public API can
+;; reach (each rejection has exactly one site).
 (harness-group "callback and span declarations (Milestone 5 Slice ①b)"
   (lambda ()
     (harness-case "a callback declaration carries its six parts"
@@ -421,7 +421,7 @@
         ;; constructor must not. ir.sls's own comment says why: a check here
         ;; makes the verifier arm unreachable through the public API, and its
         ;; permissive mutation then survives while the suite reports it caught.
-        ;; Task 2 landed `pass-declarations` and it rejects all FOUR: both
+        ;; `pass-declarations` rejects all FOUR: both
         ;; decision shapes fire `invalid-callback-declaration`, the reserved key
         ;; fires `reserved-branch-key`, and the nonportable name fires
         ;; `invalid-name`. Two of the four are also the census's own fixtures for
@@ -455,10 +455,9 @@
                               'e #f)))))
     (harness-case "junk in either collection is refused, and named"
       (lambda ()
-        ;; *** THE POINT OF THIS TASK. *** Before these guards, `machine-callbacks`
-        ;; and `machine-spans` had been constructor parameters, vector slots and
-        ;; exported accessors with NO reader anywhere in the tree, so a proper
-        ;; list of junk was a valid declaration table. The detail must be
+        ;; *** THE POINT OF THESE GUARDS. *** Without them, a proper list of junk
+        ;; would be a valid `machine-callbacks` or `machine-spans` declaration
+        ;; table. The detail must be
         ;; `callbacks`/`spans`, not `collection`: the collection loop above
         ;; already accepts any proper list and answers `collection`.
         (let ((ok-nodes (list (make-stop-node 'start #f)))
@@ -479,8 +478,6 @@
                                                  '() ok-errs ok-nodes 'e #f))))))
     (harness-case "the accessors read back what was declared"
       (lambda ()
-        ;; Slice ①b is the FIRST reader of these two accessors; they have been
-        ;; exported and dead since the descriptor was written.
         (let* ((c (make-callback-declaration 'c 'event #f '() #f #f))
                (p (make-span-declaration 's 'c #f #f))
                (m (make-machine 'm 'start '() (list c) (list p)
@@ -522,7 +519,7 @@
                   '(0 1 7 9 24 63 65 128))))
     (harness-case "the initial is an exact integer inside the declared width"
       (lambda ()
-        ;; §25:1568's DECLARATION-time share, at every width: 0 and 2^w-1
+        ;; The DECLARATION-time half of the field range rule, at every width: 0 and 2^w-1
         ;; accepted, 2^w rejected. The u64 row runs at 2^64-1, which is above
         ;; (greatest-fixnum) = 2^60-1 on the only supported runtime -- a matrix
         ;; that stops at u32 says nothing about bignums.
@@ -570,9 +567,9 @@
           (check-equal "one field" (length (machine-fields m)) 1))))
     (harness-case "and refuses a list of anything else"
       (lambda ()
-        ;; This guard is what makes the descriptor load-bearing. Before it,
-        ;; make-machine checked only list? over the collections, so a machine
-        ;; could carry (junk 42 "string") as its fields and nothing noticed.
+        ;; This guard is what makes the descriptor load-bearing. Without it,
+        ;; make-machine would check only list? over the collections, so a machine
+        ;; could carry (junk 42 "string") as its fields and nothing would notice.
         (check-raises "junk fields" (contract-violation? 'make-machine 'fields)
                       (lambda ()
                         (make-machine 'm 'stop (list 'junk 42) '() '()
@@ -580,21 +577,20 @@
                                       (list (make-stop-node 'stop #f)) 'e #f)))))))
 
 
-;; Milestone 4 Slice ② task 1: the two zero-width node kinds (§9.1:301-306,
-;; §10.6:550 and :575). Decision 0020 fixes the constructor/verifier boundary and
-;; this group asserts the CONSTRUCTOR half only -- everything here is evaluable
-;; from the one node being built.
+;; The two zero-width node kinds. This group asserts the CONSTRUCTOR half of
+;; the constructor/verifier boundary only -- everything here is evaluable from
+;; the one node being built.
 ;;
-;; *** `arguments` is checked as a proper list AND NO FURTHER. *** 0020 item 2:
-;; "Everything that requires the §9.1:326-346 schema -- which position holds the
-;; field, how many positions there are, what each one means -- is the verifier's,
-;; because §9.1:348 assigns exact arity to it and nothing can be read out of
-;; `arguments` before arity is known." The consequence 0020 itself flags as
-;; looking wrong to a reader of 0017: `low <= high` for `range` is the
-;; VERIFIER's here, though 0017 rejects `low > high` in
-;; `make-byte-range-matcher` -- there they are named parameters, here they are
-;; the second and third elements of a list whose length the constructor may not
-;; assume. So there is deliberately no arity case in this group.
+;; *** `arguments` is checked as a proper list AND NO FURTHER. *** Everything
+;; that requires an operation's argument schema -- which position holds the
+;; field, how many positions there are, what each one means -- is the
+;; verifier's, because exact arity is the verifier's and nothing can be read
+;; out of `arguments` before arity is known. The consequence looks wrong at
+;; first: `low <= high` for `range` is the VERIFIER's here, though
+;; `make-byte-range-matcher` rejects `low > high` itself -- there they are
+;; named parameters, here they are the second and third elements of a list
+;; whose length the constructor may not assume. So there is deliberately no
+;; arity case in this group.
 (harness-group "field-action nodes"
   (lambda ()
     (harness-case "a field action carries its six parts"
@@ -638,23 +634,23 @@
           (check-equal "all seven were built" seen 7))))
     (harness-case "an operation outside the closed set is refused"
       (lambda ()
-        ;; §9.1:348's "it rejects arbitrary operation names" -- the one clause of
-        ;; that sentence pass 6a does NOT carry (0020 item 4), because a closed
-        ;; set is evaluable from the node alone.
+        ;; Rejecting arbitrary operation names is the one part of the operation
+        ;; rule pass 6a does NOT carry, because a closed set is evaluable from
+        ;; the node alone.
         (check-raises "not an operation" (contract-violation? 'make-field-action-node 'operation)
                       (lambda () (make-field-action-node 'a 'multiply '(count 2) 'next #f #f)))))
     (harness-case "arguments must be a proper list, and nothing more is read"
       (lambda ()
         (check-raises "improper" (contract-violation? 'make-field-action-node 'arguments)
                       (lambda () (make-field-action-node 'a 'store '(count . 1) 'next #f #f)))
-        ;; The other half of 0020 item 2, asserted so a later reader does not
+        ;; The other half of the `arguments` boundary, asserted so a reader does not
         ;; "fix" the constructor into reading the schema: a WRONG ARITY builds
         ;; fine here and is pass 6a's to reject.
         (check "wrong arity is accepted at construction"
                (field-action-node? (make-field-action-node 'a 'store '() 'next #f #f)))))
     (harness-case "the error slot is #f exactly when the operation cannot fail"
       (lambda ()
-        ;; Design §4.4's error-slot rule. Permitting a target on a safe
+        ;; The error-slot rule. Permitting a target on a safe
         ;; operation would NOT fail loudly: node-out-targets feeds `error` into
         ;; the reachability walk unconditionally, so the target is reached and no
         ;; pass checks whether the operation can fail. The constructor is the
@@ -700,25 +696,24 @@
                       (lambda () (make-field-branch-node 'a 'greater '(count 2) 'y 'n #f)))))
     (harness-case "low > high builds fine -- it is the verifier's"
       (lambda ()
-        ;; 0020 item 2 names this exact case as the one that "will look wrong to
-        ;; a reader of 0017". Asserted rather than merely absent, so the boundary
-        ;; is witnessed instead of assumed.
+        ;; The case that looks wrong beside `make-byte-range-matcher`'s own
+        ;; `low > high` check. Asserted rather than merely absent, so the
+        ;; boundary is witnessed instead of assumed.
         (check "accepted at construction"
                (field-branch-node? (make-field-branch-node 'a 'range '(count 9 2) 'y 'n #f)))))))
 
 
-;; Milestone 4 Slice ③ task 1: the integer-accumulate node (§9.1:301-306,
-;; §10.6:566-571, §11.4:652). The last node kind of the milestone, and the only
-;; INPUT-READING one -- it consumes a byte and makes progress, which is what
-;; separates it from Slice ②'s two zero-width kinds at every verifier site.
+;; The integer-accumulate node: the INPUT-READING field kind -- it consumes a
+;; byte and makes progress, which is what separates it from the two zero-width
+;; kinds at every verifier site.
 ;;
-;; *** The constructor/verifier boundary here is 0017's, NOT 0020's. *** 0020
-;; item 2 keeps the constructor out of `arguments` because that is a LIST whose
-;; length it may not assume; this kind has no `arguments` -- its operands are
-;; NAMED PARAMETERS, exactly the situation 0017 point 1 addresses when it rejects
-;; `low > high` inside `make-byte-range-matcher`. So `base` is closed here (the
-;; base half of §16.2:904), and only the FIELD REFERENCE -- which needs a second
-;; object, the declaration list -- is the verifier's.
+;; *** The constructor/verifier boundary here is the matcher's, NOT the
+;; zero-width kinds'. *** Those keep the constructor out of `arguments` because
+;; that is a LIST whose length it may not assume; this kind has no `arguments`
+;; -- its operands are NAMED PARAMETERS, exactly the situation in which
+;; `make-byte-range-matcher` rejects `low > high`. So `base` is closed here,
+;; and only the FIELD REFERENCE -- which needs a second object, the declaration
+;; list -- is the verifier's.
 (harness-group "integer-accumulate nodes"
   (lambda ()
     (harness-case "an accumulate node carries its seven parts"
@@ -744,10 +739,10 @@
           (check-equal "node-name" (node-name n) 'acc))))
     (harness-case "both bases are accepted and nothing else is"
       (lambda ()
-        ;; §16.2:904's "unsupported base", discharged HERE rather than as a
-        ;; diagnostic: a base is evaluable from the one node being built, so a
-        ;; verifier arm for it would be dead code whose permissive mutation
-        ;; survives -- 0020's one-rejection-site rule.
+        ;; An unsupported base is rejected HERE rather than as a diagnostic: a
+        ;; base is evaluable from the one node being built, so a verifier arm
+        ;; for it would be dead code whose permissive mutation survives -- each
+        ;; rejection has exactly one site.
         (let ((seen 0))
           (for-each (lambda (b)
                       (set! seen (+ seen 1))
@@ -767,8 +762,8 @@
                                                                (make-edge 'd 'reexecute) 'o #f #f)))))
     (harness-case "the nondigit edge must be an edge"
       (lambda ()
-        ;; It is an EDGE, not a bare target: §10.6:567 says the non-digit "takes
-        ;; an explicit fallback edge, normally reexecuting the delimiter", so its
+        ;; It is an EDGE, not a bare target: the non-digit takes an explicit
+        ;; fallback edge, normally reexecuting the delimiter, so its
         ;; MODE is the whole point and a bare symbol could not carry one.
         (check-raises "a bare symbol"
                       (contract-violation? 'make-integer-accumulate-node 'nondigit-edge)
@@ -776,7 +771,7 @@
     (harness-case "the eof-target is a symbol or #f"
       (lambda ()
         ;; #f means the machine default-eof error, the same convention
-        ;; byte-dispatch uses (§9.1:318).
+        ;; byte-dispatch uses.
         (check-equal "absent"
                      (integer-accumulate-node-eof-target
                       (make-integer-accumulate-node 'a 'count 10 'a (make-edge 'd 'reexecute)
@@ -788,8 +783,8 @@
                                                                (make-edge 'd 'reexecute) 'o 7 #f)))))
     (harness-case "the overflow-error is a mandatory symbol"
       (lambda ()
-        ;; Unlike a field action's `error`, this is never #f: §10.6:568 says
-        ;; overflow "takes an explicit error edge", and accumulation can ALWAYS
+        ;; Unlike a field action's `error`, this is never #f: overflow takes an
+        ;; explicit error edge, and accumulation can ALWAYS
         ;; overflow -- there is no base or width at which it cannot.
         (check-raises "absent"
                       (contract-violation? 'make-integer-accumulate-node 'overflow-error)
@@ -805,14 +800,13 @@
                 (make-integer-accumulate-node 'a 'nosuch 10 'a (make-edge 'd 'reexecute)
                                               'o #f #f)))))))
 
-;; --- the callback-invocation node (Milestone 5 Slice ②; §9.1:307-308, ---------
-;; §10.6:584-586). The TENTH kind, and the first Milestone 5 adds.
+;; --- the callback-invocation node -------------------------------------------
 ;;
-;; Every check below is decision 0020's CONSTRUCTOR half: local shape, and the
+;; Every check below is the boundary's CONSTRUCTOR half: local shape, and the
 ;; shape of the one value being built. The three judgements this constructor
 ;; deliberately does NOT make are asserted at the end of the group rather than
 ;; merely omitted -- all three need the machine's callback table, which a node
-;; constructor cannot see, and §16.2:901's node half owns them.
+;; constructor cannot see, and the verifier owns them.
 (harness-group "callback-invocation nodes"
   (lambda ()
     (harness-case "a callback node carries its six parts"
@@ -830,7 +824,7 @@
           (check-equal "label" (callback-node-source-label n) 'lbl))))
     (harness-case "it is a node and answers node-name"
       (lambda ()
-        ;; The two sites that make it a member of §10.6's closed set. `node-name`
+        ;; The two sites that make it a member of the closed node-kind set. `node-name`
         ;; has a RAISING else and nothing derives it, so a missed arm there is a
         ;; crash at first use rather than a failed assertion.
         (let ((n (make-callback-node 'inv 'cb 'onward '() 'resume #f)))
@@ -838,18 +832,18 @@
           (check-equal "node-name" (node-name n) 'inv))))
     (harness-case "an empty branch list is the ordinary event shape"
       (lambda ()
-        ;; §10.6:584 invokes "one named event or decision callback", and only a
-        ;; decision has branch keys (§10.2:504). Refusing '() would make every
-        ;; event invocation unbuildable.
+        ;; An invocation names one event or decision callback, and only a
+        ;; decision has branch keys. Refusing '() would make every event
+        ;; invocation unbuildable.
         (check-equal "no branches"
                      (callback-node-branch-targets
                       (make-callback-node 'inv 'cb 'onward '() 'resume #f))
                      '())))
     (harness-case "the name, callback, continue target and pause continuation are mandatory symbols"
       (lambda ()
-        ;; §10.6:586: "Every invocation declares a continue target and a pause
-        ;; continuation." No #f arm on either -- this is the field-branch
-        ;; precedent (§9.1:305), not the byte-dispatch eof-target one.
+        ;; Every invocation declares a continue target and a pause continuation.
+        ;; No #f arm on either -- this is the field-branch precedent, not the
+        ;; byte-dispatch eof-target one.
         (check-raises "name" (contract-violation? 'make-callback-node 'name)
                       (lambda () (make-callback-node "inv" 'cb 'onward '() 'resume #f)))
         (check-raises "callback" (contract-violation? 'make-callback-node 'callback)
@@ -862,11 +856,10 @@
                       (lambda () (make-callback-node 'inv 'cb 'onward '() #f #f)))))
     (harness-case "branch targets are two-element lists, not pairs"
       (lambda ()
-        ;; §9.1:318: "Branch maps contain two-element lists (key target), not
-        ;; implementation hash tables." The same convention §9.3:419 fixes for
-        ;; callback bindings, and the one Slice ①b's review caught being
-        ;; implemented as pairs -- so the pair form is refused HERE, where a
-        ;; caller finds out at construction.
+        ;; Branch maps contain two-element lists (key target), not
+        ;; implementation hash tables -- the same convention callback bindings
+        ;; follow -- so the pair form is refused HERE, where a caller finds out
+        ;; at construction.
         (check-raises "a pair" (contract-violation? 'make-callback-node 'branch-targets)
                       (lambda () (make-callback-node 'inv 'cb 'onward '((keep . body))
                                                      'resume #f)))
@@ -888,7 +881,7 @@
                       (lambda () (make-callback-node 'inv 'cb 'onward 'nope 'resume #f)))))
     (harness-case "the branch list is copied at construction"
       (lambda ()
-        ;; §9.1:322 makes constructors return immutable-by-API descriptors, on
+        ;; Constructors return immutable-by-API descriptors, on
         ;; the make-sequence-case precedent. Witnessed by IDENTITY rather than by
         ;; mutating the caller's list: `set-car!` lives in (rnrs mutable-pairs),
         ;; which the composite (rnrs) this file imports does not re-export, so a
@@ -912,8 +905,8 @@
                (callback-node? (make-callback-node 'inv 'cb 'onward
                                                    '((keep a) (keep b)) 'resume #f)))))))
 
-;; --- the span nodes (Milestone 5 Slice ③; §9.1:309-310, §10.6:588-594) -------
-;; The eleventh and twelfth kinds. Both are the same shape, so they are driven
+;; --- the span nodes ----------------------------------------------------------
+;; Span start and span end are the same shape, so they are driven
 ;; from one table rather than written twice: a copy-paste pair is how a
 ;; constructor ends up asserted for one kind and not the other.
 (harness-group "span nodes"
@@ -953,7 +946,7 @@
           (check "an end is not a start" (not (span-start-node? b))))))
     (harness-case "name, span and next are mandatory symbols"
       (lambda ()
-        ;; §10.6:590 and :594 give neither kind a route of its own, so there is
+        ;; Neither kind has a route of its own, so there is
         ;; no #f arm to defend -- the field-action precedent, not the
         ;; byte-dispatch eof-target one.
         (check-raises "start name" (contract-violation? 'make-span-start-node 'name)
@@ -973,20 +966,20 @@
         ;; Asserted rather than merely absent, so the boundary is witnessed.
         ;; Whether `span` names a declared span, whether that span is the one
         ;; open, and whether any reachable path opens two at once all need the
-        ;; machine's span table and its whole graph (§16.2:899, decision 0029).
+        ;; machine's span table and its whole graph.
         (check "an undeclared span name builds fine"
                (span-start-node? (make-span-start-node 's 'nosuch 'onward #f)))
         (check "and so does an end with no matching start anywhere"
                (span-end-node? (make-span-end-node 's 'nosuch 'onward #f)))))))
 
-;; --- source labels on every carrier (Milestone 6 Slice ⓪; §16.2:886) ---------
-;; Nineteen constructors take a `source-label`; ten had an accessor. These are
-;; the nine that did not, driven from one table: a copied accessor reading the
+;; --- source labels on every carrier -----------------------------------------
+;; Nineteen constructors take a `source-label`. Nine carriers' label accessors
+;; are driven from one table here: a copied accessor reading the
 ;; wrong slot is what a per-kind list of cases would let through, and a table
 ;; whose sentinel reads the observed count is what says all nine ran.
 (define (edge-to t) (make-edge t 'advance))
 (define (case-on-0 t) (make-byte-case (make-exact-byte-matcher 0) (edge-to t) #f))
-;; --- the thirteenth kind (Milestone 6 Slice ①; §9.1:311; decision 0030) -------
+;; --- the counted-consume node -----------------------------------------------
 (harness-group "counted-consume nodes (Milestone 6 Slice ①)"
   (lambda ()
     (harness-case "a counted-consume node carries its five parts"
@@ -1006,8 +999,8 @@
           (check-equal "node-source-label" (node-source-label n) 'lbl))))
     (harness-case "the next is a mandatory symbol -- the fourteenth constructor refusal"
       (lambda ()
-        ;; A count that reaches zero always has somewhere to go (§10.6:600,
-        ;; :602), so there is no #f arm, unlike the eof-target's.
+        ;; A count that reaches zero always has somewhere to go, so there is no
+        ;; #f arm, unlike the eof-target's.
         (check-raises "absent" (contract-violation? 'make-counted-consume-node 'next)
                       (lambda () (make-counted-consume-node 'body 'len #f #f #f)))
         (check-raises "a number" (contract-violation? 'make-counted-consume-node 'next)
@@ -1062,8 +1055,8 @@
              (let ((nm (car row)) (build (cadr row)) (label-of (caddr row)))
                (unless (and (eq? (label-of (build 'lbl)) 'lbl)
                             (eq? (label-of (build #f)) #f)
-                            ;; A STRING label survives too: §10.1:480 puts labels
-                            ;; under a string repertoire, and the verifier's
+                            ;; A STRING label survives too: labels may be
+                            ;; strings from a fixed repertoire, and the verifier's
                             ;; `valid-label?` accepts both shapes.
                             (equal? (label-of (build "Body: outer")) "Body: outer"))
                  (set! bad (cons nm bad)))))

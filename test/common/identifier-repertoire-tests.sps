@@ -1,13 +1,11 @@
-;;; D7 (parent §22.9, §20): the emitted identifier repertoire, proved exhaustively.
+;;; The emitted identifier repertoire, proved exhaustively.
 ;;; Machine names and output bindings go through ONE [a-z][a-z0-9-]* grammar,
-;;; (byte-machine private names)' `portable-name?` (Milestone 6 Slice ⓪; two
-;;; textually identical copies in verify.sls and compile.sls through Milestone
-;;; 5), verify adding reserved member 1 and compile all three reserved sets. Both
-;;; sites are still driven here, because a shared body proves nothing about a
-;;; site that stopped calling it. Diagnostics and
-;;; conditions are checked by category, never by prose (parent §22.10). The LF
-;;; proof reads raw emitted bytes; the real Windows CRLF trap rides to M9 (this
-;;; cell cannot exhibit it).
+;;; (byte-machine private names)' `portable-name?`, verify adding reserved
+;;; member 1 and compile all three reserved sets. Both sites are driven here,
+;;; because a shared body proves nothing about a site that stopped calling it.
+;;; Diagnostics and conditions are checked by category, never by prose. The LF
+;;; proof reads raw emitted bytes; a Windows CRLF trap cannot be exhibited on a
+;;; non-Windows host.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine graph)
@@ -44,7 +42,7 @@
 
 ;; Accepted repertoire: leading [a-z], interior [a-z0-9-], including a trailing
 ;; hyphen (a name-char) and digits after the first position. Both sites agree
-;; on this grammar-only core, and since Milestone 6 Slice ⓪ by construction.
+;; on this grammar-only core, by construction.
 (define accepted '(a z ab a1 a-b abc-123 zzz9 a- one-byte))
 ;; 'start' satisfies the grammar and is not a member-1 keyword, so it is a
 ;; valid machine/node NAME (verify-site) -- but compile.sls reserves it as a
@@ -62,7 +60,7 @@
 ;; (> (string-length s) 0) before ever indexing into s, so any mutation that
 ;; relaxes that length guard makes the very next (string-ref s 0) raise on
 ;; this candidate -- a crash, not an acceptance, i.e. "caught for the wrong
-;; reason" (close-demonstrated-gaps). No honest witnessing mutation exists.
+;; reason". No honest witnessing mutation exists.
 (define rejected-names
   (list (string->symbol "9a") (string->symbol "-a") 'Ab 'aB
         (string->symbol "a.b") (string->symbol "a_b") (string->symbol "a/b")

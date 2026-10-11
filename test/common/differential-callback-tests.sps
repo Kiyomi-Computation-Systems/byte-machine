@@ -1,29 +1,28 @@
-;;; interpreter ≡ generated over the callback-invocation node (Milestone 5
-;;; Slice ②; parent §13:803-814, §22.4:1268-1271).
+;;; interpreter ≡ generated over the callback-invocation node.
 ;;;
-;;; This is the first fixture in the tree whose machine CALLS OUT, so it is also
-;;; the first place the two lanes can disagree about something the application
-;;; supplied rather than something the IR fixed. What is compared is the whole
-;;; §22.4 tuple -- status, next, consumed, stream offset, the projected error and
-;;; the lifecycle -- for every one of §13:803-808's outcomes, in both directions
-;;; of the seam:
+;;; This fixture's machine CALLS OUT, so it is a place the two lanes can
+;;; disagree about something the application supplied rather than something
+;;; the IR fixed. What is compared is the whole differential tuple -- status,
+;;; next, consumed, stream offset, the projected error and the lifecycle -- for
+;;; every callback outcome, in both directions of the seam:
 ;;;
 ;;;   continue, a declared branch key, an explicit callback failure, a pause,
-;;;   and a return outside the declared outcomes (decision 0024's minted code).
+;;;   and a return outside the declared outcomes (the runtime's
+;;;   `callback-contract-violation` code).
 ;;;
 ;;; Plus the three properties that are not a single feed's tuple: a resumed
 ;;; callback pause continues at the DECLARED continuation and delivers nothing
-;;; twice (§13:814), an unbound OPTIONAL callback's slot short-circuits to the
-;;; declared default without the closure being called (decision 0028 item 3),
-;;; and a callback reached on the EOF chain runs there too (§12.4:729).
+;;; twice, an unbound OPTIONAL callback's slot short-circuits to the declared
+;;; default without the closure being called, and a callback reached on the EOF
+;;; chain runs there too.
 ;;;
 ;;; The interpreter is the reference. A disagreement here is a real defect in
 ;;; the callback lowering, the emitted arm, or the shared outcome vocabulary.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness)
         (byte-machine test error-projection)
-        ;; The contract-condition accessors, to assert §9.4:438's three codes
-        ;; apart. The house convention is to compare who and code, never text.
+        ;; The contract-condition accessors, to assert the three lifecycle
+        ;; contract codes apart. The house convention is to compare who and code, never text.
         (byte-machine private conditions)
         (byte-machine graph) (byte-machine verify)
         (byte-machine interpret) (byte-machine compile) (byte-machine runtime))
@@ -37,22 +36,21 @@
 (define rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
 
 ;; `decide` is REQUIRED, so its slot always holds a caller procedure; `note` is
-;; an OPTIONAL EVENT callback, so §9.3:419 defaults it to `continue` and its
-;; unbound slot holds decision 0028's sentinel.
+;; an OPTIONAL EVENT callback, so it defaults to `continue` and its unbound
+;; slot holds the unbound-optional sentinel.
 ;;
-;; The shape of the graph is forced by two verifier rules, and both were found
-;; by building it rather than by reading it:
+;; The shape of the graph is forced by two verifier rules:
 ;;
 ;;   - a callback node's PAUSE CONTINUATION may not be a stop terminal, because
-;;     a parser parked at a callback resumes on exactly that edge (§13:812) and
-;;     §16.2:909 forbids an EOF path reaching a stop. `after` is a dispatch node
+;;     a parser parked at a callback resumes on exactly that edge and the
+;;     verifier forbids an EOF path reaching a stop. `after` is a dispatch node
 ;;     whose own EOF route terminates in `fin`.
-;;   - `fin` may not be reached by a BYTE edge from a byte-reachable node
-;;     (§16.2:908), so the finish terminal sits on the EOF side only. `eofcb` is
+;;   - `fin` may not be reached by a BYTE edge from a byte-reachable node, so
+;;     the finish terminal sits on the EOF side only. `eofcb` is
 ;;     reachable ONLY as the entry's eof-target, which is what lets its continue
 ;;     target be `fin`.
-;; One field, declared and never written: §12.6:747's ordering clause names
-;; "every field" among the values a refused operation must not move, and a
+;; One field, declared and never written: every field is among the values a
+;; refused operation must not move, and a
 ;; machine with no fields cannot witness that half at all.
 (define (callback-machine)
   (make-machine 'callbackm 'start (list (make-uint-field 'n 8 7 #f))
@@ -91,10 +89,10 @@
 (load genfile)
 (define cm-gen (eval 'callback-parser (environment '(generated callbackm))))
 
-;; §22.4's comparison surface, one owner. `project-error` is the shared
-;; §22.4:1271 projection; `parser-error-detail` is deliberately NOT in it --
-;; decision 0024's Consequences record that neither §12.7:777 nor §22.4:1271
-;; compares detail -- so the explicit-failure case asserts it per lane below.
+;; The differential's comparison surface, one owner. `project-error` is the
+;; shared error projection; `parser-error-detail` is deliberately NOT in it --
+;; the cross-lane comparison does not compare detail -- so the explicit-failure
+;; case asserts it per lane below.
 ;; `bytevector` is a Chez extension, not R6RS; a one-byte slice is what every
 ;; case here feeds.
 (define (bv1 b) (make-bytevector 1 b))
@@ -138,7 +136,7 @@
                     (b (drive cm-gen outcome (bv1 65))))
                (unless (equal? (car a) (car b))
                  (set! bad (cons (list nm (car a) (car b)) bad)))
-               ;; §13:812 delivers each invocation exactly once, and a count is
+               ;; Each invocation is delivered exactly once, and a count is
                ;; the only thing that can see a lane invoking twice.
                (unless (= (cadr a) 1 (cadr b))
                  (set! bad (cons (list nm 'calls (cadr a) (cadr b)) bad)))))
@@ -184,9 +182,9 @@
                                   inv 1 boundary #f #f)))))
     (harness-case "the explicit failure's detail passes through in BOTH lanes"
       (lambda ()
-        ;; Per lane rather than through the projection: §22.4:1271 does not
-        ;; compare detail, and decision 0024 item 4 requires it to be the
-        ;; application's on this path and #f on the other.
+        ;; Per lane rather than through the projection: the projection does
+        ;; not compare detail, and detail must be the application's on this
+        ;; path and #f on the other.
         (let ((a (cadddr (drive cm-ref (make-callback-failure 'app-said-no 'the-detail)
                                 (bv1 65))))
               (b (cadddr (drive cm-gen (make-callback-failure 'app-said-no 'the-detail)
@@ -203,8 +201,8 @@
                        (parser-error-detail (parser-result-error d)) #f))))
     (harness-case "both lanes report a state id, which the projection omits"
       (lambda ()
-        ;; §12.7:777 excludes the id from the comparison and still requires both
-        ;; lanes to report one. Positive, so the omission is not invisible.
+        ;; The projection excludes the id from the comparison, and both lanes
+        ;; must still report one. Positive, so the omission is not invisible.
         (let ((a (cadddr (drive cm-ref 'not-a-declared-key (bv1 65))))
               (b (cadddr (drive cm-gen 'not-a-declared-key (bv1 65)))))
           (check "interpreted" (integer? (error-state-id (parser-result-error a))))
@@ -214,9 +212,9 @@
   (lambda ()
     (harness-case "resume then feed agrees, and the callback is not re-delivered"
       (lambda ()
-        ;; §13:814: "A callback-requested pause occurs after the callback's
-        ;; delivered event has been committed. Resume continues after that
-        ;; event; it is never delivered twice." The oracle is the recording
+        ;; A callback-requested pause occurs after the callback's delivered
+        ;; event has been committed; resume continues after that event, and
+        ;; the event is never delivered twice. The oracle is the recording
         ;; SEQUENCE across the resume, not a count taken afterwards: a count
         ;; alone cannot tell "delivered twice" from "delivered once and
         ;; something else appended".
@@ -239,7 +237,7 @@
           (let ((a (seq-of cm-ref)) (b (seq-of cm-gen)))
             (check-equal "the two lanes agree on the whole walk" a b)
             (check-equal "one delivery at the pause" (cadr a) '(decide))
-            ;; §12.1:681: resume "invokes no callback and consumes no input".
+            ;; resume invokes no callback and consumes no input.
             (check-equal "resume delivers nothing" (cadddr a) '(decide))
             (check-equal "and the resumed feed delivers nothing either"
                          (list-ref a 5) '(decide))
@@ -249,9 +247,8 @@
   (lambda ()
     (harness-case "both lanes take the default with no closure called"
       (lambda ()
-        ;; Decision 0028 item 3's other end: ①b installed the sentinel, ② reads
-        ;; it. `note` is an OPTIONAL EVENT callback, so §9.3:419 defaults it to
-        ;; `continue` -- lowered to the node's continue target, which is the stop
+        ;; The read side of the unbound-optional sentinel: `note` is an
+        ;; OPTIONAL EVENT callback, so it defaults to `continue` -- lowered to the node's continue target, which is the stop
         ;; terminal. The parser is built with no binding for it at all.
         (let ((go (lambda (cm)
                     (let* ((p (make-parser cm (list (list 'decide
@@ -264,8 +261,8 @@
                        (car (go cm-ref)) 'stopped))))
     (harness-case "a missing REQUIRED binding is still refused at construction"
       (lambda ()
-        ;; ①b's rejection, re-asserted here because this is the first slice in
-        ;; which an unbound slot is READ: an optional one short-circuits and a
+        ;; The construction-time rejection, re-asserted beside the case above
+        ;; where an unbound slot is READ: an optional one short-circuits and a
         ;; required one must never get that far.
         (let ((raises? (lambda (th)
                          (call/cc (lambda (k)
@@ -307,25 +304,24 @@
           (check-equal "and every one agrees" bad '())
           (check-equal "continue at EOF finishes"
                        (car (car (go cm-ref callback-continue))) 'finished)
-          ;; §12.4:729: "A pause during EOF produces `paused-finish`."
+          ;; A pause during EOF produces `paused-finish`.
           (check-equal "and a pause at EOF is paused-finish"
                        (list-ref (car (go cm-ref callback-pause)) 5)
                        'paused-finish))))))
 
-;; --- Milestone 5 Slice ②: §13:816-821's committed state, from inside --------
+;; --- the committed state, from inside a callback ----------------------------
 ;;
-;; "At callback entry, the interpreter and generated executor expose identical
-;; committed parser state." This is the first slice in which anything can be
-;; INSIDE a callback, so it is the first that can check it -- and the generated
-;; lane needed work to make it true: `exec` owns its own pos/off/st locals and
-;; writes the parser's slots only on RETURN, so without a commit before the
-;; invocation `parser-stream-offset` answers the offset the feed started at and
-;; `parser-state-name` answers the state it started in.
+;; At callback entry, the interpreter and generated executor expose identical
+;; committed parser state. In the generated lane this needs a commit before the
+;; invocation: `exec` owns its own pos/off/st locals and writes the parser's
+;; slots only on RETURN, so without that commit `parser-stream-offset` answers
+;; the offset the feed started at and `parser-state-name` answers the state it
+;; started in.
 (harness-group "what a callback sees is committed, and identical in both lanes"
   (lambda ()
     (harness-case "the accessors answer the same values from inside both lanes"
       (lambda ()
-        ;; The whole §13:816-821 tuple, recorded FROM INSIDE the callback rather
+        ;; The whole committed-state tuple, recorded FROM INSIDE the callback rather
         ;; than after it: only a recording closure can see the state at entry,
         ;; and only comparing the two recordings can show the lanes agree there.
         (let ((seen-in
@@ -349,8 +345,8 @@
             ;; And by VALUE, not only by agreement: two lanes agreeing on the
             ;; wrong offset would satisfy the comparison above.
             (check-equal "the state name is the callback NODE's" (car a) 'inv)
-            ;; §13:819: "stream offset and cursor include every byte committed
-            ;; before the callback." One byte was consumed reaching `inv`.
+            ;; The stream offset and cursor include every byte committed before
+            ;; the callback. One byte was consumed reaching `inv`.
             (check-equal "the offset includes the consumed byte" (cadr a) 1)
             (check-equal "no span is active" (cadddr a) #f)
             (check-equal "and the user context is the one make-parser was given"
@@ -366,7 +362,7 @@
           (check-equal "before the feed" (parser-stream-offset p) 0))))
     (harness-case "parser-state-name agrees at every position outside a callback too"
       (lambda ()
-        ;; The accessor Slice ①b deferred, at the positions a caller can reach
+        ;; The accessor at the positions a caller can reach
         ;; without a callback: fresh, stopped, errored, and parked on a callback
         ;; pause continuation.
         (let ((walk
@@ -396,22 +392,20 @@
                        (walk cm-ref 'skip (bv1 65))
                        '(start reject error)))))))
 
-;; --- Milestone 5 Slice ② tasks 6 and 7: `busy`, `poisoned`, and the -----------
-;; ordering clause.
+;; --- `busy`, `poisoned`, and the ordering clause -----------------------------
 ;;
-;; §12.2:698-699's two rows, and the first slice in which either state can be
-;; REACHED: `busy` needs something running inside the parser, and `poisoned`
-;; needs a callback to escape from one. Before this, adding either value to the
-;; lifecycle vocabulary would have been unwitnessable -- which is exactly why
-;; `parser-feed!`'s `else` meaning "ready" was dangerous rather than merely
-;; untidy.
+;; The `busy` and `poisoned` lifecycle rows. Reaching either state needs a
+;; callback: `busy` needs something running inside the parser, and `poisoned`
+;; needs a callback to escape from one. A lifecycle `case` whose `else` meant
+;; "ready" would silently execute input in either state, so these cases are
+;; what witness the explicit arms.
 (define (contract? who code)
   (lambda (e)
     (and (byte-machine-contract-condition? e)
          (eq? (byte-machine-contract-condition-who e) who)
          (eq? (byte-machine-contract-condition-code e) code))))
 
-;; The wrapper Task 7's oracle needs, and it is NOT "compare the two results":
+;; The wrapper the poisoned-parser oracle needs, and it is NOT "compare the two results":
 ;; on an escape neither lane returns one. What is compared is that the SAME
 ;; condition escaped `parser-feed!` in both lanes AND that both parsers are
 ;; poisoned afterwards.
@@ -424,16 +418,16 @@
   (lambda ()
     (harness-case "all four mutating operations raise reentrancy from inside a callback"
       (lambda ()
-        ;; §12.2:699's whole row -- feed, finish, resume AND reset, which is the
+        ;; The whole `busy` row -- feed, finish, resume AND reset, which is the
         ;; one operation whose `busy` cell differs from its `poisoned` cell.
         ;; Driven from inside the callback, which is the only place the state
         ;; exists.
         ;; *** The probe runs ONCE, and the guard is not tidiness. *** Under a
         ;; mutant that stops marking the parser busy, the inner `parser-feed!`
         ;; finds a `ready` parser, runs the executor, reaches this same callback
-        ;; and feeds again -- unbounded recursion, which the mutation runner has
-        ;; no timeout for and which would hang the whole suite rather than
-        ;; report. Measured: it did. With the guard the mutant records
+        ;; and feeds again -- unbounded recursion, which runs until the mutation
+        ;; runner's per-command timeout kills it rather than failing a
+        ;; comparison. With the guard the mutant records
         ;; `returned` where the baseline records `raised`, which is a failed
         ;; comparison and the catch this row is for.
         (let ((from-inside
@@ -462,13 +456,13 @@
                    (list (car seen) (map car (cdr seen)))))))
           (let ((a (from-inside cm-ref)) (b (from-inside cm-gen)))
             (check-equal "the lanes agree" a b)
-            ;; §13:821: "lifecycle is `busy`, so parser operations are rejected."
+            ;; Inside a callback the lifecycle is `busy`, so parser operations are rejected.
             (check-equal "the callback sees busy" (car a) 'busy)
             (check-equal "and all four raised" (cadr a) '(raised raised raised raised))))))
     (harness-case "each of the four raises the REENTRANCY code, not lifecycle-violation"
       (lambda ()
-        ;; §9.4:438 lists "lifecycle violation, reentrancy, poisoned parser" as
-        ;; three distinct codes. Asserted per operation, by who AND code: a
+        ;; Lifecycle violation, reentrancy, and poisoned parser are three
+        ;; distinct codes. Asserted per operation, by who AND code: a
         ;; single predicate over the family would pass on all three.
         ;; Probed once, for the reason the case above records: an unguarded
         ;; inner feed recurses without bound under the busy-marking mutant.
@@ -498,8 +492,8 @@
                          (parser-resume! #t) (parser-reset! #t))))))
     (harness-case "every read accessor answers during busy (decision 0028 item 1)"
       (lambda ()
-        ;; The record's item 1 in full: "parser operations are rejected" scopes
-        ;; to the four MUTATING operations, and every read accessor answers
+        ;; "Parser operations are rejected" scopes to the four MUTATING
+        ;; operations, and every read accessor answers
         ;; normally. Six of them, named individually -- a count would pass if
         ;; one were swapped for another.
         (let ((seen 'unset))
@@ -538,8 +532,8 @@
                        (go cm-ref) '((raised boom) poisoned)))))
     (harness-case "a nonlocal escape poisons too, with nothing raised"
       (lambda ()
-        ;; §12.6:749 names TWO antecedents -- "raises an unexpected condition or
-        ;; performs a nonlocal escape" -- and only the second has no condition to
+        ;; Poisoning has TWO antecedents -- the callback raises an unexpected
+        ;; condition or performs a nonlocal escape -- and only the second has no condition to
         ;; observe. `dynamic-wind`'s after thunk is what covers both.
         (let ((go (lambda (cm)
                     (let ((held #f))
@@ -558,8 +552,8 @@
                        (go cm-ref) '(escaped poisoned)))))
     (harness-case "a poisoned parser raises parser-poisoned, and only reset reuses it"
       (lambda ()
-        ;; §12.2:698's row and §12.6:749's last sentence. The code is distinct
-        ;; from both `lifecycle-violation` and `reentrancy` (§9.4:438).
+        ;; The `poisoned` lifecycle row. The code is distinct from both
+        ;; `lifecycle-violation` and `reentrancy`.
         (let ((poisoned-parser
                (lambda (cm)
                  (let ((p (make-parser cm
@@ -576,8 +570,9 @@
                           (lambda () (parser-finish! p)))
             (check-raises "resume" (contract? 'parser-resume! 'poisoned-parser)
                           (lambda () (parser-resume! p)))
-            ;; §12.2:698 RESETS a poisoned parser -- "Only full reset may reuse
-            ;; it" is a permission, not a prohibition -- and the reset one runs.
+            ;; Reset is permitted on a poisoned parser -- "only full reset may
+            ;; reuse it" is a permission, not a prohibition -- and the reset one
+            ;; runs.
             (parser-reset! p)
             (check-equal "reset returns it to ready" (parser-lifecycle p) 'ready)
             (check-equal "and it parses again"
@@ -594,8 +589,7 @@
         ;; raise API-contract conditions BEFORE further mutation." Testable and
         ;; therefore tested: the whole observable state is sampled before and
         ;; after each refusal and compared. A test that only checked the raise
-        ;; could not see a guard that mutates first -- which `parser-reset!`
-        ;; did, with five unconditional writes and no guard at all.
+        ;; could not see a guard that mutates first.
         (let* ((snapshot (lambda (p)
                            (list (parser-lifecycle p) (parser-stream-offset p)
                                  (parser-field-ref p 'n) (parser-state-name p)
@@ -612,24 +606,17 @@
             (check-equal "nothing moved" (snapshot p) before)
             (check-equal "and it is still poisoned" (car before) 'poisoned)))))))
 
-;; --- Milestone 5 Slice ② task 8: §22.4:1268's callback ORDER ----------------
+;; --- the callback ORDER ------------------------------------------------------
 ;;
-;; *** MEASURED at this branch's merge base: no test in this tree has ever
-;; compared a callback order -- `git grep callback` over `test/common/*.sps`
-;; returns one hit about span-kind declarations and nothing else. ***
-;; §22.4:1268 lists "callback order and results" among the values the two lanes
-;; must agree on, and until a callback-invocation node existed nothing could
-;; produce one. This is that comparison's first exercise, over §22.5's schedule
-;; list.
+;; Callback order and results are among the values the two lanes must agree
+;; on. Compared here over the feed-schedule list below.
 ;;
-;; *** ONE RECORDING CLOSURE PER LANE, and the plan's own instruction was
-;; unbuildable. *** It said "one recording closure passed as the binding to both
-;; parsers". One closure has one accumulator, so it produces ONE list -- and
-;; there is nothing to compare it to. Worse, the shipped both-lanes drivers
-;; alternate the two parsers inside a single expression, so a shared accumulator
-;; yields an interleaved sequence in which a lane-swap defect is invisible.
-;; Corrected here: one closure per lane, each with its own accumulator, compared
-;; per schedule.
+;; *** ONE RECORDING CLOSURE PER LANE. *** One closure passed as the binding to
+;; both parsers has one accumulator, so it produces ONE list -- and there is
+;; nothing to compare it to. Worse, the both-lanes drivers alternate the two
+;; parsers inside a single expression, so a shared accumulator yields an
+;; interleaved sequence in which a lane-swap defect is invisible. Each lane
+;; therefore gets its own closure and accumulator, compared per schedule.
 (define (order-machine)
   (make-machine 'orderm 's0 '()
     (list (make-callback-declaration 'note 'event #t '() #f #f)
@@ -661,7 +648,7 @@
 (define om-gen (eval 'order-parser (environment '(generated orderm))))
 
 ;; The recorded entry is the callback's NAME and what it could see, so the
-;; comparison is §22.4:1268's "order AND results" rather than order alone.
+;; comparison is of order AND results rather than order alone.
 (define (record-order cm slices)
   (let* ((trace '())
          (note! (lambda (nm)
@@ -681,7 +668,8 @@
 (define padded-bytes (u8-list->bytevector '(200 201 97 98 97 98 202)))
 (define empty-bytes (make-bytevector 0))
 
-;; §22.5's list, each entry a slice schedule over the SAME four logical bytes.
+;; The feed-schedule list, each entry a slice schedule over the SAME four
+;; logical bytes.
 (define (split-schedules)
   (let loop ((k 0) (acc '()))
     (if (> k 4) (reverse acc)
@@ -707,16 +695,16 @@
    (list (list order-bytes 0 2) (list empty-bytes 0 0) (list order-bytes 2 4))
    (list (list order-bytes 0 4) (list empty-bytes 0 0))
    ;; an empty slice taken from the MIDDLE of the real bytevector, which is a
-   ;; different shape from a zero-length bytevector (§11.1:638)
+   ;; different shape from a zero-length bytevector
    (list (list order-bytes 0 2) (list order-bytes 2 2) (list order-bytes 2 4))
    ;; nonzero start/end into a larger bytevector carrying unrelated prefix and
-   ;; suffix bytes -- §22.5's fourth bullet, and the one that would catch a lane
+   ;; suffix bytes -- the schedule that would catch a lane
    ;; reading from index 0 regardless of `start`
    (list (list padded-bytes 2 6))
    (list (list padded-bytes 2 4) (list padded-bytes 4 6))
    ;; deterministic multi-split schedules, written out rather than generated:
-   ;; §22.5's "deterministic random" bullet is about reproducibility, and a
-   ;; literal list is the most reproducible form there is.
+   ;; determinism here is about reproducibility, and a literal list is the most
+   ;; reproducible form there is.
    (list (list order-bytes 0 1) (list order-bytes 1 2)
          (list order-bytes 2 3) (list order-bytes 3 4))
    (list (list order-bytes 0 3) (list order-bytes 3 3) (list order-bytes 3 4))
@@ -752,9 +740,9 @@
           (check-equal "every schedule agrees across the lanes" bad '()))))
     (harness-case "and the order is the same under EVERY schedule"
       (lambda ()
-        ;; §22.5:1286: "Across different feed schedules, compare a normalized
-        ;; semantic trace." A callback invocation has no fragment to coalesce --
-        ;; that is Slice ④'s span problem -- so for this machine the normalized
+        ;; Across feed schedules, the normalized semantic trace must agree. A
+        ;; callback invocation has no fragment to coalesce -- only spans do --
+        ;; so for this machine the normalized
         ;; trace IS the raw one, and it must be schedule-independent.
         (let ((baseline (record-order om-ref (list (list order-bytes 0 4))))
               (differing '()))
@@ -773,7 +761,7 @@
           (check-equal "and EOF finishes" (cdr baseline) '(finished finished)))))
     (harness-case "a decision that halts is ordered and stops there"
       (lambda ()
-        ;; The results half of §22.4:1268: the same input with a different
+        ;; The results half of "order and results": the same input with a different
         ;; RETURN produces a different trace, so the comparison above is not
         ;; measuring a constant.
         (let ((halting

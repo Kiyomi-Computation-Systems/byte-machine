@@ -9,41 +9,38 @@
 ;;; known-flags, required-flags, single-valued-flags and the three loops under
 ;;; them are the same code chez-source.ss carries. The duplication is
 ;;; deliberate and it is not a candidate for extraction -- but not because a
-;;; --script program has nowhere to `load` a shared file from. Measured
-;;; against Chez 10.4.1 on 2026-08-17: under --script, (car (command-line))
-;;; is this script's own path, so the absolute directory to `load` a sibling
-;;; file from is derivable with no bootstrap argument. Chez's own defaults
-;;; for both library-directories and source-directories are CWD-relative --
-;;; (("." . ".")) and (".") respectively, measured 2026-08-17 -- and a
-;;; launcher must never inherit either, whatever directory a lane happens to
-;;; launch from. Sharing this block would make every launcher's
-;;; correctness depend on `load`ing another launcher file: a load-order
-;;; dependency between files that stand alone today, with its own new failure
-;;; mode -- a `load` of the wrong file rather than a named refusal. That is
-;;; not worth what sharing would save.
+;;; --script program has nowhere to `load` a shared file from. Under Chez
+;;; 10.4.1's --script, (car (command-line)) is this script's own path, so the
+;;; absolute directory to `load` a sibling file from is derivable with no
+;;; bootstrap argument. Chez's own defaults for both library-directories and
+;;; source-directories are CWD-relative -- (("." . ".")) and (".")
+;;; respectively -- and a launcher must never inherit either, whatever
+;;; directory a lane happens to launch from. Sharing this block would make
+;;; every launcher's correctness depend on `load`ing another launcher file: a
+;;; load-order dependency between files that otherwise stand alone, with its
+;;; own failure mode -- a `load` of the wrong file rather than a named
+;;; refusal. That is not worth what sharing would save.
 ;;;
 ;;; The cost of the copy is that a flag-vocabulary decision fixed in one
 ;;; launcher is not fixed in the others: the copies are independent
 ;;; decisions, not one decision spelled three times. That independence is
-;;; now partially witnessed: SchemeMutationSuite.cmake mutates this file's
+;;; partially witnessed: SchemeMutationSuite.cmake mutates this file's
 ;;; own refusals and decisions -- passes 26-28: the library-path pairing and
 ;;; source-directories (pass 26), the missing-program refusal (pass 27), and
 ;;; the dirty-source-guard refusal (pass 28). Pass 29, chez-compile.ss's
 ;;; unpaired-roots refusal, mutates that file instead. The verbatim
 ;;; flag-block loops below these decisions remain witnessed only in
 ;;; chez-source.ss's copy; a defect introduced into one copy alone would not
-;;; be caught here, and that residual is accepted, recorded here rather than
-;;; left implied.
+;;; be caught here, and that residual is accepted.
 ;;;
 ;;; WHY THE LIBRARY PATH PAIRS EVERY OBJECT DIRECTORY WITH AN EMPTY SOURCE
 ;;; GUARD
 ;;;
-;;; Measured against Chez 10.4.1 on 2026-08-17: a bare string handed to
-;;; library-directories becomes BOTH halves of the pair --
-;;; (library-directories '("/a" "/b")) reads back as
-;;; (("/a" . "/a") ("/b" . "/b")). Passed one bare string per object
-;;; directory, as this launcher used to, every object directory is therefore
-;;; also a SOURCE directory: Chez looks for a .sls/.ss/.scm/.sch there and
+;;; Under Chez 10.4.1, a bare string handed to library-directories becomes
+;;; BOTH halves of the pair -- (library-directories '("/a" "/b")) reads back
+;;; as (("/a" . "/a") ("/b" . "/b")). Passed one bare string per object
+;;; directory, every object directory would therefore also be a SOURCE
+;;; directory: Chez looks for a .sls/.ss/.scm/.sch there and
 ;;; expands what it finds -- the source if there is no object, the newer of
 ;;; the two if there is both. --source-guard pairs every object directory's
 ;;; SOURCE half with one directory the build keeps empty instead, which is
@@ -57,31 +54,28 @@
 ;;; source to resolve from no matter what an object directory alongside it
 ;;; happens to hold.
 ;;;
-;;; What kept this lane honest before this guard existed, unnamed in this
-;;; file until now: load-program of a compile-program output refuses a
-;;; library that re-expands from source, with "yielded a different
-;;; compilation instance of ... from that required by compiled program", and
-;;; exits 255 -- reproduced against a scratch library and program, compiled
-;;; and loaded the way this launcher does, on 2026-08-17. That is why a bare
-;;; object directory could not become a SILENT source lane; it is not why the
-;;; source could not be read at all, which is what the guard above actually
-;;; prevents and the backstop does not. What the guard does not settle:
-;;; whether Chez can still judge a correctly-paired, genuinely-compiled
-;;; object stale by some rule of its own and act on that -- protium records a
-;;; locatability rule for this, decision record 0004 records a timestamp
-;;; rule, the two are different, and neither has been reproduced in this
-;;; repository. Section 5.3 of the slice design tracks it as unmeasured.
+;;; A backstop independent of the guard: load-program of a compile-program
+;;; output refuses a library that re-expands from source, with "yielded a
+;;; different compilation instance of ... from that required by compiled
+;;; program", and exits 255 -- reproducible against a scratch library and
+;;; program, compiled and loaded the way this launcher does. That is why a
+;;; bare object directory could not become a SILENT source lane; it is not why
+;;; the source could not be read at all, which is what the guard above
+;;; actually prevents and the backstop does not. What the guard does not
+;;; settle: whether Chez can still judge a correctly-paired,
+;;; genuinely-compiled object stale by some rule of its own and act on that.
+;;; Both a locatability rule and a timestamp rule have been proposed for this;
+;;; neither has been reproduced in this repository, and it is unmeasured.
 ;;;
 ;;; WHY source-directories IS ALSO EMPTIED
 ;;;
-;;; Measured against Chez 10.4.1 on 2026-08-17: this launcher's own load,
-;;; run once with (source-directories '()) and once left at Chez's unset
-;;; default ((".")), produces byte-identical outcomes. Library resolution
-;;; goes through library-directories, not source-directories, and no Scheme
-;;; file in this tree includes another (decision 0006) -- so nothing this
-;;; launcher does today depends on the line above. It is kept anyway: it
-;;; still narrows what a `load` or top-level `include` added to this file
-;;; later could reach, and an empty list costs nothing to state. It is not,
+;;; Under Chez 10.4.1, this launcher's own load, run once with
+;;; (source-directories '()) and once left at Chez's unset default ((".")),
+;;; produces byte-identical outcomes. Library resolution goes through
+;;; library-directories, not source-directories, and no Scheme file in this
+;;; tree includes another -- so nothing this launcher does depends on the
+;;; line above. It is kept anyway: it narrows what a `load` or top-level
+;;; `include` added to this file could reach, and an empty list costs nothing to state. It is not,
 ;;; on its own, what makes this lane honest -- the source guard above is.
 
 ;; Status 2 is the harness's "harness, configuration, or registration error".

@@ -1,5 +1,5 @@
-;;; The Milestone 11 Slice ② case-insensitivity proving machines: the brief §2b
-;;; HTTP-header demonstration and the folded-collision rejection's witness.
+;;; The case-insensitivity proving machines: the HTTP-header demonstration and
+;;; the folded-collision rejection's witness.
 ;;; Built only through (byte-machine graph); shared by the header lane.
 ;;;
 ;;; TWO shapes, four machines:
@@ -10,16 +10,15 @@
 ;;;    a case-SENSITIVE one (make-keyword-header-machine) over the SAME names,
 ;;;    differing only in `case-insensitive?`. The CI table recognizes every
 ;;;    casing to one target; the CS table recognizes only the canonical bytes.
-;;;    This is brief §7 criterion 4. Each name routes to a DISTINCT stop node so
-;;;    `parser-state-name` witnesses WHICH name matched.
+;;;    Each name routes to a DISTINCT stop node so `parser-state-name`
+;;;    witnesses WHICH name matched.
 ;;;
 ;;; 2. The COLLISION pair -- two byte-DISTINCT case variants of one name
 ;;;    (Content-Length and content-length). As a case-insensitive table
 ;;;    (make-keyword-collision-ci-machine) they are equal after folding, so the
-;;;    verifier refuses the table with `case-insensitive-keyword-collision`
-;;;    (decision 0045 item 3). As a case-SENSITIVE table
-;;;    (make-keyword-collision-cs-machine) they are two legitimately distinct
-;;;    keywords -- byte-different (so not a `duplicate-keyword`) and case-sensitive
+;;;    verifier refuses the table with `case-insensitive-keyword-collision`.
+;;;    As a case-SENSITIVE table (make-keyword-collision-cs-machine) they are
+;;;    two legitimately distinct keywords -- byte-different (so not a `duplicate-keyword`) and case-sensitive
 ;;;    (so no fold collision) -- and the table VERIFIES CLEAN. That contrast is
 ;;;    the per-table pin: the CI machine must be rejected, the CS machine must
 ;;;    verify, and a mutant that drops the `case-insensitive?` guard flips the

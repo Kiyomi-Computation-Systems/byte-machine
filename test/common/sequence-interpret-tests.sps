@@ -1,5 +1,4 @@
-;;; All-byte sequence-dispatch coverage (parent §22.7; Milestone 3 exit §25:1538)
-;;; through the reference interpreter, with ABSOLUTE expected outcomes.
+;;; All-byte sequence-dispatch coverage through the reference interpreter, with ABSOLUTE expected outcomes.
 ;;;
 ;;; Absolute, not differential, on purpose: both executors are built from the same
 ;;; source IR, so a defect there makes them wrong IDENTICALLY and leaves a
@@ -8,7 +7,7 @@
 ;;;
 ;;; Every byte is fed as its own [0,1) slice through ONE parser, which is the
 ;;; shape that makes the between-byte stream-offset observable at every position
-;;; -- and the shape in which the two mismatch modes differ visibly (§11.5:664).
+;;; -- and the shape in which the two mismatch modes differ visibly.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test sequence-node-machine)
@@ -18,9 +17,9 @@
 
 (harness-begin "unit.sequence-node")
 
-;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
-;; every non-error result. These are single-executor lanes, so they compare the
-;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; The error slot holds a parser-error record, and is #f on every non-error
+;; result. These are single-executor lanes, so they compare the CODE rather
+;; than the error projection the differential lanes use --
 ;; but they must stay #f-tolerant, because the same accessor is read on results
 ;; that carry no error at all.
 (define (error-code-of r)
@@ -43,7 +42,7 @@
   (list (list 'seqnode (make-sequence-node-machine))
         (list 'advseq (make-advance-mismatch-machine))))
 
-;; §22.6 forbids using an invalid graph to test executor behaviour, so both
+;; An invalid graph is never used to test executor behaviour, so both
 ;; fixtures are proved clean before any behavioural case runs.
 (harness-group "both sequence fixtures verify clean"
   (lambda ()
@@ -121,11 +120,10 @@
                (check-equal "exactly one byte per position continued" accepted 4))))))
      machines)))
 
-;; §11.5:664 -- authors may deliberately choose either mismatch mode and "tests
-;; must make that choice explicit". Every shipped fixture in this tree uses
-;; reexecute, so before this slice the advance path had no coverage anywhere; an
-;; advance-mode mismatch shifts every reported position by one and no existing
-;; test would look obviously wrong.
+;; Authors may deliberately choose either mismatch mode, and tests must make
+;; that choice explicit. A reexecute-only fixture set leaves the advance path
+;; uncovered; an advance-mode mismatch shifts every reported position by one
+;; and no reexecute test would look obviously wrong.
 (harness-group "the two mismatch modes report different positions, explicitly"
   (lambda ()
     (define re (interp (make-sequence-node-machine)))

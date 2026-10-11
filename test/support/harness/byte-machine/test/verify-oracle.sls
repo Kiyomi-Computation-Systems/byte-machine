@@ -1,29 +1,27 @@
-;;; (byte-machine test verify-oracle): the independent oracle (Milestone 7 Slice ④,
-;;; design §4.6). A SECOND implementation of the verifier's graph rules, written
-;;; from the plan's sentence and the decision record each rule cites, WITH
-;;; verify.sls CLOSED. Its job is to disagree with `verify.sls` when one of them is
-;;; wrong: the rejections program compares, per rule, the oracle's `(code . node)`
-;;; set against the verifier's set for that rule's codes, and a difference is a
-;;; finding (§4.6). On the committed seed's drawn, rejected and corrupted machines
-;;; the two agree exactly (the program's zero-differences check).
+;;; (byte-machine test verify-oracle): the independent oracle. A SECOND
+;;; implementation of the verifier's graph rules, written from each rule's
+;;; definition WITH verify.sls CLOSED. Its job is to disagree with `verify.sls`
+;;; when one of them is wrong: the rejections program compares, per rule, the
+;;; oracle's `(code . node)` set against the verifier's set for that rule's codes,
+;;; and a difference is a finding. On the committed seed's drawn, rejected and
+;;; corrupted machines the two agree exactly (the program's zero-differences check).
 ;;;
-;;; A FUNCTIONAL CORE (F18): every rule returns a list of `(code . node)` and
-;;; asserts NOTHING. Reads a machine through `(byte-machine private ir)`'s
-;;; accessors and NEVER through `verify.sls`; the reachability walks, the byte-set
-;;; overlap and the EOF walk are re-derived here from the decision records.
+;;; A FUNCTIONAL CORE: every rule returns a list of `(code . node)` and asserts
+;;; NOTHING. Reads a machine through `(byte-machine private ir)`'s accessors and
+;;; NEVER through `verify.sls`; the reachability walks, the byte-set overlap and
+;;; the EOF walk are re-derived here from the rules' definitions.
 ;;;
-;;; SCOPE (design §4.6 / Task 4 Step 3). Codes OUTSIDE the rule table are not
-;;; compared, and each is left out for a stated reason: pass 7's span-state lattice
-;;; (decision 0029 is a definition, and a second implementation of a lattice is the
-;;; lattice); the EOF verdict tiers (0023 item 5 -- a ranking, not a graph fact);
-;;; the declaration cross-references `:890-:892`/`:901-:902` (table lookups the
-;;; catalogue covers exactly); and the field-operand rules `:889`/`:903`/`:904`
-;;; (arithmetic on declared widths). The catalogue covers those by edit.
+;;; SCOPE. Codes OUTSIDE the rule table are not compared, and each is left out for
+;;; a stated reason: the span-state lattice (a definition, and a second
+;;; implementation of a lattice is the lattice); the EOF verdict tiers (a ranking,
+;;; not a graph fact); the declaration cross-references (table lookups the
+;;; catalogue covers exactly); and the field-operand rules (arithmetic on declared
+;;; widths). The catalogue covers those by edit.
 ;;;
-;;; THE RULE TABLE IS HAND-WRITTEN AND EXPORTED (S2/F4): `oracle-rules`, one row per
-;;; §4.6 rule, `(name codes comparison fn)`. `matcher-bytes` is NEVER read (§4.6,
-;;; pinned Task 9 Step 3): the `:893` row computes byte sets from the four matcher
-;;; accessors alone.
+;;; THE RULE TABLE IS HAND-WRITTEN AND EXPORTED: `oracle-rules`, one row per rule,
+;;; `(name codes comparison fn)`. `matcher-bytes` is NEVER read (the rejections
+;;; program counts the symbol in this file): the `:893-overlap` row computes byte
+;;; sets from the four matcher accessors alone.
 (library (byte-machine test verify-oracle)
   (export oracle-rules oracle-rule-name oracle-rule-codes oracle-rule-comparison
           oracle-rule-fn oracle-rule-reach? oracle-eval nodes-unique?)
@@ -86,7 +84,7 @@
   (define (all-targets n) (append (non-eof-targets n) (sym (eof-target-of n))))
 
   ;; input-reading nodes CONSUME a byte to advance; a parser can be PARKED on one
-  ;; at EOF (0023). The zero-width kinds and terminals cannot be parked.
+  ;; at EOF. The zero-width kinds and terminals cannot be parked.
   (define (input-reading? n)
     (or (byte-dispatch-node? n) (sequence-dispatch-node? n) (keyword-table-node? n)
         (integer-accumulate-node? n) (counted-consume-node? n)))
@@ -94,14 +92,14 @@
   ;; ---- reachability walks ---------------------------------------------------
   ;; every target of every node bearing a name -- robust to duplicate names, which
   ;; a corrupted machine can carry: the occupiable relation follows the flow out of
-  ;; each node with that name, not an arbitrary first (§4.6, matching the verifier
-  ;; on the duplicate-name catalogue entries).
+  ;; each node with that name, not an arbitrary first (matching the verifier on
+  ;; the duplicate-name catalogue entries).
   (define (targets-of-name m x)
     (let ((n (node-of-name m x))) (if n (all-targets n) '())))
-  ;; byte-reached (0027 item 3): feed can arrive. DFS from the entry over NON-eof
-  ;; targets only -- once an execution takes an eof-target it can never feed again
-  ;; (0023's decision 1), so feed-reachable follows byte edges and zero-width
-  ;; successors but not eof routes. :908 and :898 gate on this census (0030 item 7).
+  ;; byte-reached: feed can arrive. DFS from the entry over NON-eof targets only --
+  ;; once an execution takes an eof-target it can never feed again, so
+  ;; feed-reachable follows byte edges and zero-width successors but not eof
+  ;; routes. The `:908` and `:898` rows gate on this census.
   ;; the node named x. Reachability is defined over a graph whose node names are
   ;; UNIQUE (a well-formed IR); on a duplicate-name graph -- which only the
   ;; dup-node-name catalogue entry produces -- reachability is ill-defined, and the
@@ -125,7 +123,7 @@
                   (walk (append (filter (lambda (t) (memq t nodes)) (byte-targets-of-name m x))
                                 (cdr frontier))
                         (cons x seen))))))))
-  ;; occupiable (0027 item 1): DFS from the entry over ALL targets that name a node.
+  ;; occupiable: DFS from the entry over ALL targets that name a node.
   (define (reachable m)
     (let ((nodes (node-set m)))
       (let walk ((frontier (if (declared? m (machine-entry m)) (list (machine-entry m)) '()))
@@ -231,8 +229,8 @@
            (filter (lambda (nm) (not (member nm r))) (node-set m)))))
 
   ;; :908 non-EOF control flow into a finish -- a node reached by the byte-edge walk
-  ;; from the entry (entry included, 0023 item 2) whose flow enters a finish over a
-  ;; NON-eof edge, reported at the SOURCE node (0023 item 4).
+  ;; from the entry (entry included) whose flow enters a finish over a NON-eof
+  ;; edge, reported at the SOURCE node.
   (define (finish-name? m t)
     (let ((n (find-node m t))) (and n (finish-node? n))))
   (define (rule-non-eof-into-finish m)
@@ -246,7 +244,7 @@
 
   ;; :898 zero-progress cycle -- a cycle among byte-reached nodes over NON-consuming
   ;; edges (reexecute, zero-width successors, accumulate overflow, counted next;
-  ;; digit edges excluded), decision 0030 item 7. Attributed to each node on a cycle.
+  ;; digit edges excluded). Attributed to each node on a cycle.
   (define (nonconsuming-targets n)
     (cond
      ((byte-dispatch-node? n)
@@ -268,7 +266,7 @@
      ((field-branch-node? n) (list (field-branch-node-true-target n) (field-branch-node-false-target n)))
      ((integer-accumulate-node? n)
       ;; the nondigit edge if it reexecutes, and the overflow error; the DIGIT edge
-      ;; consumes and is excluded (§10.6:566).
+      ;; consumes and is excluded.
       (append (if (eq? (edge-mode (integer-accumulate-node-nondigit-edge n)) 'reexecute)
                   (list (edge-target (integer-accumulate-node-nondigit-edge n))) '())
               (sym (integer-accumulate-node-overflow-error n))))
@@ -280,7 +278,7 @@
      ((counted-consume-node? n) (list (counted-consume-node-next n)))
      (else '())))
   (define (rule-zero-progress m)
-    (let* ((br (byte-reached m))                     ; 0030 item 7: byte-reached only
+    (let* ((br (byte-reached m))                     ; only byte-reached nodes count
            (nodes (filter (lambda (nm) (member nm br)) (node-set m)))
            (on-cycle (nodes-on-nonconsuming-cycle m nodes)))
       (map (lambda (nm) (cons 'zero-progress-cycle nm)) on-cycle)))
@@ -299,13 +297,12 @@
                                   (cons (car frontier) seen))))))
             census))
 
-  ;; :909 EOF-reachable stop / EOF zero-progress cycle -- the EOF walk (0023 item 3,
-  ;; 0030 item 6). The PARKED SET (states an execution can be parked on): the entry,
+  ;; :909 EOF-reachable stop / EOF zero-progress cycle -- the EOF walk. The PARKED SET (states an execution can be parked on): the entry,
   ;; every byte-reached pause, and every byte-reached node carrying its own EOF route
   ;; (a symbol eof-target). Each parked node is classified as ITSELF; its walk BEGINS
   ;; at `parked-eof-start`'s answer (a pause at its continuation, a non-entry counted
   ;; consume at its eof-target, else itself). The walk follows EOF successors, JOINS
-  ;; verdicts (benign < stop < cycle, item 5), and the parked node reports the join.
+  ;; verdicts (benign < stop < cycle), and the parked node reports the join.
   (define (stop-name? m t) (let ((n (find-node m t))) (and n (stop-node? n))))
   ;; EOF successors of a node the walk ARRIVES at (a list; empty = a benign EOF
   ;; terminus such as the default EOF error or a finish/error terminal).
@@ -318,7 +315,7 @@
      ((field-action-node? n) (append (list (field-action-node-next n)) (sym (field-action-node-error n))))
      ((field-branch-node? n) (list (field-branch-node-true-target n) (field-branch-node-false-target n)))
      ;; a callback the walk ARRIVES at is flowed through: parser-finish! invokes it
-     ;; and all three §13:803-808 outcomes are live -- continue, every branch, and
+     ;; and all three callback outcomes are live -- continue, every branch, and
      ;; the pause continuation (this is NOT which edge a parser PARKED here resumes
      ;; on, which parked-eof-start answers).
      ((callback-node? n)
@@ -328,7 +325,7 @@
      ((span-start-node? n) (list (span-start-node-next n)))
      ((span-end-node? n) (list (span-end-node-next n)))
      ;; a counted consume the walk ARRIVES at has an unknown count, so BOTH its
-     ;; positive-count EOF route and its zero-count `next` are live (0030 item 5).
+     ;; positive-count EOF route and its zero-count `next` are live.
      ((counted-consume-node? n)
       (append (sym (counted-consume-node-eof-target n)) (list (counted-consume-node-next n))))
      ((input-reading? n) (sym (eof-target-of n)))   ; byte/sequence dispatch, accumulate
@@ -347,7 +344,7 @@
                           (join-verdicts (map (lambda (s) (eof-verdict m s (cons cur seen))) succs))))))))))
   (define (join-verdicts vs)
     (cond ((memq 'cycle vs) 'cycle) ((memq 'stop vs) 'stop) (else 'benign)))
-  ;; where a parked node's walk begins (0023 note; 0030 item 6). A non-entry
+  ;; where a parked node's walk begins. A non-entry
   ;; callback resumes at its pause continuation and a non-entry counted consume at
   ;; its eof-target (a parser parked there by need-input holds a positive count);
   ;; everything else -- entry, pause, and every eof-route node -- starts at itself.
@@ -387,7 +384,7 @@
             ((f (car ns)) => (lambda (r) (loop (cdr ns) (cons r out))))
             (else (loop (cdr ns) out)))))
 
-  ;; ---- the hand-written rule table (design §4.6) ----------------------------
+  ;; ---- the hand-written rule table ------------------------------------------
   ;; comparison: 'exact (set-equal to the verifier's set for these codes) or
   ;; 'subset (oracle's set ⊆ the verifier's).
   ;; reach? = the rule walks the graph from the entry, so it needs a well-formed

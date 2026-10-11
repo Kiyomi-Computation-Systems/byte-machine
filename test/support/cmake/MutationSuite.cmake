@@ -6,128 +6,23 @@
 # specification at all -- an absent test is visibly absent, a vacuous one reports
 # success.
 #
-# This suite exists because the same check was once run by hand and written up
-# in a decision record as evidence. Evidence that lives in a transcript is not
-# evidence: nobody can rerun it, and it cannot fail when the code changes. The
-# hand-run version also missed the most important case, because it only mutated
-# the modules and never the assertion helper every specification depends on.
+# Evidence that lives in a transcript is not evidence: nobody can rerun it, and
+# it cannot fail when the code changes. This suite therefore lives in the tree,
+# and it mutates the assertion helper every specification depends on
+# (SpecSupport), not only the modules.
 #
 # Adding a decision to a module means adding a mutation here. The SITES check
 # will tell you when a pattern has drifted; it will not tell you when a new,
 # untested decision has been added.
 #
-# ONE PASS, SEVENTY-TWO MUTATIONS
+# ONE PASS, SEVENTY-THREE MUTATIONS
 #
-# Every mutation above is declared before the single byte_machine_mutation_run
-# call at the end of this file, so this suite is one pass by construction.
+# Every mutation is declared before the single byte_machine_mutation_run call
+# at the end of this file, so this suite is one pass by construction.
 # EXPECTED_MUTATIONS below is compared against the accumulated total from
-# byte_machine_mutation_totals once that call returns: it is what would have
-# caught a whole-branch review finding that deleting an entire pass group from
-# SchemeMutationSuite.cmake left that file's own suite at 37/37 -- the same
-# blind spot exists here for a single deleted byte_machine_mutation() call,
-# which SITES cannot see either, since a missing declaration is not a pattern
-# that failed to match.
-#
-# Ninety-seven was eighty-nine plus eight: five for MutationRunner's own
-# verdict decision and the registration guard beside it (the "MutationRunner"
-# section below), two for the other direction of the WORKING_DIRECTORY
-# forwarding conditional in ByteMachineExpectExit.cmake and
-# ByteMachineSchemeLane.cmake, which until a re-review only had the if(FALSE)
-# half of its two mutations, and one for the WRONG_FINGERPRINT branch in
-# ByteMachineSchemeLane.cmake's manifest block, which had no mutation until a
-# review found the routing decision unwitnessed.
-#
-# Ninety-four is ninety-seven minus three: the pairing rule's own mutations
-# left with the rule they tested, when the Chez-only simplification's Task 2
-# removed byte_machine_guard_missing_wrappers and its enforcement from
-# ByteMachinePortabilityGuard.cmake. "guard: only the Chez wrapper is
-# required" mutated a foreach that no longer exists, "guard: a missing
-# wrapper is reported without stopping the build" mutated a FATAL_ERROR that
-# no longer exists, and "guard: wrappers are demanded of the shared
-# directories, not the wrapped ones" mutated the WRAPPED_DIRS-only
-# accumulator branch that fed that FATAL_ERROR -- also gone. The basename-
-# uniqueness rule's own mutations were untouched by Task 2; "guard: bodies
-# are collected from the shared directories only" survived it with a new
-# anchor and a new witness, since its old witness (a WRAPPED_DIRS body
-# missing a wrapper) went with the rule that reported it. It did not survive
-# Task 5: the guard it belonged to left whole with the include collapse
-# (decision 0006), named below.
-#
-# Seventy-five is ninety-four minus twenty plus one: the Chez-only
-# simplification's Task 4 removed the second Scheme backend's toolchain layer
-# entirely. Eleven mutations left with its discovery module, deleted
-# outright. Eight more left with its execution branch and search-root
-# helper, removed from ByteMachineSchemeLane.cmake: the initialization-skip
-# flag, the undiscovered-runtime guard, the no-runtime message, the search
-# root's comma and relative-path checks, the search-root separator, the
-# up-front output clear, and the check-reordering case. The last left with
-# the removed backend's own mode-vocabulary entry in ByteMachineTesting.cmake,
-# the variable it mutated.
-#
-# Sixty-six is seventy-five minus twelve plus three: the include collapse
-# (decision 0006) deleted ByteMachinePortabilityGuard.cmake whole -- eleven
-# of its twelve mutations tested a repository-wide basename namespace that no
-# longer exists once nothing resolves includes through source-directories --
-# and added three for what survives it, narrowed to one lane:
-# byte_machine_lane_duplicate_basenames, the registrar refusal it feeds, and
-# the accumulator-initialization hazard that moved with the function's body
-# rather than dying with the module.
-#
-# What did NOT leave: the registration-time status guard narrowed from four
-# clauses to two, not to nothing. comma-in-path and relative-path died with
-# the search function that produced them, and a chez-only tree cannot
-# produce either through any call path -- the two mutations that once
-# exercised them (the removed backend's own search-root full-registration
-# cases) are gone, and rightly so. unknown-mode did not die:
-# byte_machine_add_scheme_lane never compares BACKEND against the NAME's own
-# backend segment, so a name whose backend segment is cmake -- valid, since
-# byte_machine_test_name_parse checks it against cmake's own mode vocabulary
-# -- paired with BACKEND chez still reaches the chez branch carrying a mode
-# it cannot build. A first pass at this removal deleted "a refused search
-# list does not stop registration" outright on the theory that narrowing the
-# guard to unknown-backend alone had nothing left to witness it; that theory
-# was wrong, and "scheme-lane: an unknown mode does not stop registration"
-# restores the coverage on a new witness, ByteMachineSchemeLaneSpec.cmake's
-# "lane-rejects-unknown-mode" case, built on exactly that name/backend
-# mismatch. Two more mutations were re-anchored rather than removed: "the
-# unknown-backend message is garbled" and "an unknown backend no longer
-# stops registration" now match the two-clause guard and the message text
-# chez alone leaves behind.
-#
-# The plus one: "the unknown-mode message is garbled" was missing even
-# before Task 4 -- the "diagnostic wording" comment above claimed a mutation
-# for each of three messages the functional core produces while only
-# covering two, and restoring "an unknown mode does not stop registration"
-# is what made the gap worth closing rather than footnoting, since the
-# unknown-mode message it names is already asserted exactly by
-# ByteMachineSchemeLaneSpec.cmake's "unknown mode message" case. Cheap and
-# genuinely witnessable, so it was added rather than left as a known gap.
-#
-# Seventy-two is sixty-six plus six: the slice 5b remainder plan's Task 4
-# added one mutation per decision the three aot lanes and the staleness lane
-# (Tasks 1 and 3) put into ByteMachineSchemeLane.cmake. C1 turns off
-# fingerprinting the build's own copies, so a compiled lane's measurement
-# collapses back onto the declared sources -- Protium's actual defect,
-# decision record 0004. C2 reverses the order
-# byte_machine_lane_measured_copies builds its list in, witnessed only by a
-# two-or-more-source manifest. C4 puts the literal "source" back as the
-# environment's execution mode for every lane, aot included, the mode
-# plumbing's own regression case. The builder call-site guard gets both
-# directions, per the WORKING_DIRECTORY precedent: if(FALSE) so no aot lane
-# ever reaches byte_machine_lane_chez_aot_artifacts, if(TRUE) so every source
-# lane does. The last drops STALE_LIBRARY_ROOT between parsing it and
-# forwarding it to that same builder -- exactly the forwarding bug that would
-# let the permanently-registered staleness lane compile the real text and
-# exit 0.
-#
-# Seventy-three is seventy-two plus one: byte_machine_mutation_run_spec gained a
-# per-command TIMEOUT so one non-terminating mutation can no longer hang the whole
-# lane, and byte_machine_mutation_verdict gained the `did-not-terminate` branch that
-# names the non-numeric result a killed command produces. Folding that branch back
-# into `caught` would let a mutation that made the program hang read as a silent
-# success; the added "a killed, non-terminating command is judged caught instead of
-# did-not-terminate" mutation witnesses it, caught by MutationRunnerSpec.cmake's
-# "a non-numeric result ... is neither caught nor not-caught" case.
+# byte_machine_mutation_totals once that call returns. Without it a single
+# deleted byte_machine_mutation() call would go unnoticed: SITES cannot see it,
+# since a missing declaration is not a pattern that failed to match.
 
 cmake_minimum_required(VERSION 3.26)
 
@@ -260,7 +155,7 @@ byte_machine_mutation(
 #
 # These are the reason this suite exists. Every negative case in every other
 # specification, and every positive assertion in all of them, routes through
-# these two functions. Break either and all four specifications stayed green --
+# these two functions. Break either and every specification stays green --
 # which is how a suite reports success while checking nothing.
 
 byte_machine_mutation(
@@ -347,14 +242,11 @@ byte_machine_mutation(
 
 # --- MutationRunner (byte_machine_mutation_verdict and its registration) ---
 #
-# The machinery every specification above is trusted through, and the one
-# module in this directory that had neither a specification nor a mutation
-# targeting it -- even though it is staged like everything else. A re-review
-# found that the fix narrowing "caught" to "caught for the declared reason"
-# had reproduced the same defect class one layer down: the `elseif`
-# translating a wrong-reason result into a failure could be deleted by hand
-# and the whole suite stayed 89/89, because nothing mutated the decision that
-# branch depends on. These mutations are what closes that.
+# The machinery every specification above is trusted through, staged like
+# everything else. Judging "caught for the declared reason" rather than merely
+# "caught" rests on the `elseif` translating a wrong-reason result into a
+# failure; without a mutation of the decision that branch depends on, it could
+# be deleted with the whole suite green. These mutations close that.
 
 byte_machine_mutation(
   FILE test/support/cmake/MutationRunner.cmake SPEC MutationRunnerSpec.cmake
@@ -471,13 +363,10 @@ byte_machine_mutation(
   set(${out_message} "" PARENT_SCOPE)]]
   REPLACE [[function(byte_machine_expect_exit_classify code out_status out_message)]])
 
-# A reviewer once deleted this exact block by hand from
-# ByteMachineSchemeLane.cmake's copy of the same shape (below) and ran the
-# whole suite: 37/37 passed, because nothing forwarded WORKING_DIRECTORY far
-# enough to notice it stopped arriving. This is that block's other occurrence
-# -- the registrar itself, not a caller of it -- and until the WORKING_DIRECTORY
-# assertions in ByteMachineExpectExitSpec.cmake, its path was exercised by
-# nothing at all: every case that reaches byte_machine_add_exit_code_test in
+# The WORKING_DIRECTORY forwarding block in the registrar itself, not a caller
+# of it (ByteMachineSchemeLane.cmake has a copy of the same shape, below). Only
+# the WORKING_DIRECTORY assertions in ByteMachineExpectExitSpec.cmake exercise
+# this path: every other case that reaches byte_machine_add_exit_code_test in
 # that specification is rejected before this line runs.
 byte_machine_mutation(
   FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
@@ -487,10 +376,8 @@ byte_machine_mutation(
 
 # The other direction of the same conditional: forwarding the keyword to the
 # registrar unconditionally, even when the caller gave no WORKING_DIRECTORY at
-# all. A re-review found this direction just as unwitnessed as the one above
-# was before it got a mutation: only ByteMachineExpectExitSpec.cmake's
-# "absent" assertion can see a keyword arriving that should not have, and
-# nothing mutated the condition to make it arrive.
+# all. Only ByteMachineExpectExitSpec.cmake's "absent" assertion can see a
+# keyword arriving that should not have.
 byte_machine_mutation(
   FILE cmake/ByteMachineExpectExit.cmake SPEC ByteMachineExpectExitSpec.cmake
   LABEL "expect-exit: WORKING_DIRECTORY is forwarded to the registrar even when the caller did not give one"
@@ -530,14 +417,10 @@ byte_machine_mutation(
 # mutation: a dropped interpolation and two one-word typos. Any of the three
 # would otherwise pass every existing assertion undetected.
 #
-# Re-anchored on ${mode}: M0 slice 5b Task 2 replaced the literal "source" in
-# the no-runtime message with the mode argument, so a lane can name the mode
-# it actually failed to find a runtime for (see MutationRunner.cmake's SITES
-# comment -- a pattern that stops matching after a refactor must be updated,
-# not deleted). REPLACE is unchanged: both specification cases this mutation
-# is caught by still call with mode `source`, so a REPLACE that hardcodes
-# "source" reproduces exactly the same break -- dropped program interpolation
-# -- as before this re-anchoring.
+# The no-runtime message interpolates ${mode}, so a lane names the mode it
+# failed to find a runtime for. REPLACE hardcodes "source": both
+# specification cases this mutation is caught by call with mode `source`, so
+# the only break it introduces is the dropped program interpolation.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the chez no-runtime message drops its program interpolation"
@@ -557,9 +440,9 @@ byte_machine_mutation(
   REPLACE [[      "'${mode}' is not an execution mode this land module can build a command for. Known modes: source aot."]])
 
 # byte_machine_add_scheme_lane's own decisions -- argument validation, backend
-# routing, and the environment it hands to the registrar -- had no coverage at
-# all before this: any specification failure here means the registration
-# function itself, not the functional core above it, stopped doing its job.
+# routing, and the environment it hands to the registrar: any specification
+# failure here means the registration function itself, not the functional
+# core above it, stopped doing its job.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: unexpected arguments to the registrar are accepted"
@@ -581,17 +464,15 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: an unknown backend no longer stops registration"
-  # Re-anchored on the two-clause form left once the removed backend's
-  # comma-in-path and relative-path statuses left the vocabulary with it (see
-  # MutationRunner.cmake's SITES comment -- a pattern that stops matching
-  # after a refactor must be updated, not deleted).
+  # Deletes the whole two-clause guard; the companion below narrows it to
+  # one clause.
   FIND [[  if(status STREQUAL "unknown-backend"
      OR status STREQUAL "unknown-mode")]]
   REPLACE [[  if(FALSE)]])
 
 # The companion to the mutation above: that one deletes the guard outright,
 # this one narrows it to the single unknown-backend clause, so unknown-mode
-# fails open while unknown-backend stays refused. unknown-mode is still
+# fails open while unknown-backend stays refused. unknown-mode is
 # reachable through the full registrar even with one backend, because
 # byte_machine_add_scheme_lane never compares BACKEND against the NAME's own
 # backend segment -- byte_machine_test_name_parse supplies only lane_mode,
@@ -615,8 +496,8 @@ byte_machine_mutation(
   REPLACE [[  if(FALSE)]])
 
 # This is the mutation that matters most: if EXPECT_EXIT stopped being able to
-# route to the exit-code registrar, every expected-red test in this milestone
-# would silently become a "must exit 0" test.
+# route to the exit-code registrar, every expected-red test would silently
+# become a "must exit 0" test.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: EXPECT_EXIT is ignored, so every lane registers as a plain must-exit-0 test"
@@ -625,13 +506,9 @@ byte_machine_mutation(
 
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
-  # Re-anchored on ${lane_mode}: M0 slice 5b Task 1 replaced the literal
-  # "source" with the mode byte_machine_test_name_parse reads from the lane's
-  # own name (see MutationRunner.cmake's SITES comment -- a pattern that stops
-  # matching after a refactor must be updated, not deleted). REPLACE still
-  # means only "the execution mode entry is gone"; the fingerprint-sample
-  # entry and arg_ENVIRONMENT are untouched, exactly as before this
-  # re-anchoring.
+  # Anchored on ${lane_mode}, the mode byte_machine_test_name_parse reads
+  # from the lane's own name. REPLACE means only "the execution mode entry is
+  # gone"; the fingerprint-sample entry and arg_ENVIRONMENT are untouched.
   LABEL "scheme-lane: the source execution mode is no longer declared in the environment"
   FIND [[    "BYTE_MACHINE_EXECUTION_MODE=${lane_mode}"
 ]]
@@ -652,20 +529,12 @@ byte_machine_mutation(
   FIND [[    if(arg_WRONG_FINGERPRINT)]]
   REPLACE [[    if(FALSE)]])
 
-# This is the mutation a whole-branch review found undetectable. The incident,
-# as history: with this block deleted by hand and the configure re-run, the
-# include-era working-directory matrix's three lanes all launched from their
-# derived directories instead of the three fixture directories
-# test/CMakeLists.txt had built for them -- three copies of one vacuous lane,
-# and nothing anywhere failed, because neither registrar this block feeds was
-# ever asked whether it received WORKING_DIRECTORY at all.
-#
-# That matrix retired with the include mechanism (decision 0006), and no lane
-# overrides its run directory today, so a forwarding break is now invisible to
-# every registration in the tree. What can still see it is exactly what the
-# incident proved was missing: ByteMachineSchemeLaneSpec.cmake's absent/present
-# assertions on the keyword, which this mutation and the one below hold in
-# place.
+# With this block gone, a lane given WORKING_DIRECTORY launches from its
+# derived directory instead, and nothing fails unless a registrar is asked
+# whether it received WORKING_DIRECTORY at all. No lane in the tree overrides
+# its run directory, so a forwarding break is invisible to every registration.
+# What sees it is ByteMachineSchemeLaneSpec.cmake's absent/present assertions
+# on the keyword, which this mutation and the one below hold in place.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: WORKING_DIRECTORY is parsed and then never forwarded to either registrar"
@@ -676,10 +545,8 @@ byte_machine_mutation(
 # routed to, unconditionally, even when the lane gave no WORKING_DIRECTORY at
 # all. Both registrars' "absent" assertions in ByteMachineSchemeLaneSpec.cmake
 # can see this -- the plain path and the exit-code path both splice the same
-# working_directory_args, so one mutation here is witnessed by both -- but
-# until now nothing mutated the condition to make the keyword arrive
-# unwanted, the same blind spot the if(FALSE) mutation above used to be alone
-# in closing.
+# working_directory_args, so one mutation here is witnessed by both. One
+# direction alone tests only half a conditional.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: WORKING_DIRECTORY is forwarded to either registrar even when the lane did not give one"
@@ -688,9 +555,8 @@ byte_machine_mutation(
 
 # The run directory decides where every lane launches from; the three
 # decisions inside byte_machine_test_run_directory each get their own
-# mutation. (The include-era matrix that first hung off this function is
-# gone -- decision 0006 -- but an override that silently stops arriving, or
-# arrives empty, still launches lanes from the wrong place.)
+# mutation: an override that silently stops arriving, or arrives empty,
+# launches lanes from the wrong place.
 byte_machine_mutation(
   FILE cmake/ByteMachineTesting.cmake SPEC ByteMachineTestingSpec.cmake
   LABEL "testing: WORKING_DIRECTORY names a directory that need not exist"
@@ -729,9 +595,6 @@ byte_machine_mutation(
   FIND [[  if(duplicate_basenames)]]
   REPLACE [[  if(FALSE)]])
 
-# Carried over from the deleted guard module rather than dying with it: the
-# initializer it mutates moved verbatim into the per-lane detector, and a
-# mutation is not dead while its REPLACE still changes a live line.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: the duplicate detector leaves a stale value when there are none"
@@ -739,21 +602,18 @@ byte_machine_mutation(
   set(duplicates "")]]
   REPLACE [[  set(seen "")]])
 
-# M0 slice 5b remainder, Task 4: every decision the three aot lanes and the
-# staleness lane (Tasks 1 and 3) added to ByteMachineSchemeLane.cmake, broken
-# on a staged copy. What is deliberately *not* mutated here: the builder's
-# own body (the copy-source-of-record logic, the DEPENDS list, the prefix
-# order). Those live inside `add_custom_command` arguments the spec's stub
-# never executes; their end-to-end witness is the staleness lane itself,
-# permanently registered and asserting exit 3 -- which is exactly the
-# division of labour W12 prescribes.
+# The aot lanes and the staleness lane: every decision they rely on in
+# ByteMachineSchemeLane.cmake, broken on a staged copy. What is deliberately
+# *not* mutated here: the builder's own body (the copy-source-of-record logic,
+# the DEPENDS list, the prefix order). Those live inside `add_custom_command`
+# arguments the spec's stub never executes; their end-to-end witness is the
+# staleness lane itself, permanently registered and asserting exit 3.
 
-# C1. Protium's actual behaviour for its Chez aot lane: fingerprint the
-# repository originals. Under it the staleness lane's expectation and its
-# measurement read the same files again, they agree, and the lane that
-# exists to exit 3 exits 0 -- the whole defect decision record 0004
-# demonstrated and this slice closes. Witnessed with no runtime present by
-# the spec's two-source aot case and its one-source registration case.
+# A compiled lane that fingerprints the repository originals instead of the
+# build's own copies. Under it the staleness lane's expectation and its
+# measurement read the same files, they agree, and the lane that exists to
+# exit 3 exits 0. Witnessed with no runtime present by the spec's two-source
+# aot case and its one-source registration case.
 byte_machine_mutation(
   FILE cmake/ByteMachineSchemeLane.cmake SPEC ByteMachineSchemeLaneSpec.cmake
   LABEL "scheme-lane: a compiled lane measures the repository originals"
@@ -761,7 +621,7 @@ byte_machine_mutation(
       set(${out_measured} ${measured} PARENT_SCOPE)]]
   REPLACE [[      set(${out_measured} ${ARGN} PARENT_SCOPE)]])
 
-# C2. harness-fingerprint-combine is order-sensitive by design, so a
+# harness-fingerprint-combine is order-sensitive by design, so a
 # reordered measured list computes a different digest over the same bytes.
 # Only a two-or-more-source manifest can see this, which is what the spec's
 # example-two case exists for.
@@ -771,11 +631,11 @@ byte_machine_mutation(
   FIND [[    list(APPEND copies "${dir}/${name}")]]
   REPLACE [[    list(PREPEND copies "${dir}/${name}")]])
 
-# C4. The literal the mode plumbing replaced. Distinct from the deletion
-# mutation above ("the source execution mode is no longer declared"): this
-# one keeps the entry and makes it wrong, which is the defect a compiled
-# lane actually suffers. Not caught by the harness's own assertion -- under
-# W8 that assertion accepts any vocabulary member and `source` is one -- but
+# The execution mode as the literal `source` for every lane. Distinct from
+# the deletion mutation above ("the source execution mode is no longer
+# declared"): this one keeps the entry and makes it wrong, which is the defect
+# a compiled lane actually suffers. Not caught by the harness's own assertion
+# -- that assertion accepts any vocabulary member and `source` is one -- but
 # by the spec's "an aot lane declares the aot mode" case, asserted with no
 # runtime present, which is why the mode logic lives in the registrar
 # rather than in the custom command.

@@ -1,28 +1,22 @@
-;;; The v0.1 release ledger: §26's fifteen release criteria and §27's eleven
+;;; The release ledger: the fifteen release criteria and the eleven
 ;;; documentation deliverables, carried as DATA a lane reads, not prose a human
-;;; audits (decision 0038). Milestone 9 Slice ⓪ ships it FIRST, before any
-;;; criterion is worked, so the milestone establishes which are already true
-;;; before spending effort on the rest — the shape decision 0034 gave Milestone
-;;; 8's error table, applied to the release exit (`§25:1665`).
+;;; audits.
 ;;;
-;;; A §26 row is (ref text state kind witness receiver):
+;;; A criterion row is (ref text state kind witness receiver):
 ;;;   ref      -- "§26:NNNN", a label. The row is KEYED ON `text`, never the line
-;;;               number: line numbers move (Milestone 8 learned this at
-;;;               §21.7:1209), the criterion's words do not.
-;;;   text     -- the criterion, VERBATIM from `§26` (parent plan lines
-;;;               1671-1685), minus the "- " bullet prefix and the trailing ";".
-;;;               The totality lane re-reads `§26` from the plan and set-compares
-;;;               against these strings, so a drift in either side fails by name.
-;;;   state    -- `met`, `partly`, `open`, or `amended`. `amended` is a v0.1
-;;;               disposition (decision 0041): a criterion the release ships NOT
-;;;               fully met, with an explicit dated `§7.3:195` amendment and a
-;;;               release-note entry — never a silent waiver. `§26:1680` is `open`
-;;;               (at Slice ⓪) although the
-;;;               property is TRUE at `62671b2` (measured 0.0 B/byte, design
-;;;               §3.3 P2): the distinction between a property holding and a
-;;;               suite KNOWING it holds is the whole reason the ledger exists,
-;;;               and a row marked `met` on this document's say-so would be the
-;;;               "sentinel computed from the test's own expectation" defect.
+;;;               number: line numbers move, the criterion's words do not.
+;;;   text     -- the criterion, VERBATIM from the release-criteria list, minus
+;;;               the "- " bullet prefix and the trailing ";". The totality lane
+;;;               re-reads that list and set-compares against these strings, so a
+;;;               drift in either side fails by name.
+;;;   state    -- `met`, `partly`, `open`, or `amended`. `amended` is a criterion
+;;;               the release ships NOT fully met, with an explicit dated
+;;;               amendment and a release-note entry — never a silent waiver. A
+;;;               property that holds but that no lane asserts is `open`, not
+;;;               `met`: the distinction between a property holding and a suite
+;;;               KNOWING it holds is the whole reason the ledger exists, and a
+;;;               row marked `met` on this document's say-so would be a sentinel
+;;;               computed from the test's own expectation.
 ;;;   kind     -- `mechanical` (the lane executes the witness: a file exists, a
 ;;;               lane is registered, a `git ls-files` result is empty, a
 ;;;               directory holds only `.gitkeep`) or `judgement` (the witness is
@@ -31,29 +25,22 @@
 ;;;               expectation it was handed asserts nothing).
 ;;;   witness  -- what establishes the row: the check descriptor for a mechanical
 ;;;               row, the standing paragraph for a judgement row.
-;;;   receiver -- the slices that move the row (symbols), or `()` for `met`.
+;;;   receiver -- the owners that move the row (symbols), or `()` for `met`.
 ;;;
-;;; A §27 row is (ref text exists? receiver): a deliverable exists as a committed
-;;; document, or it does not and a slice owns it. Two of eleven exist at Slice ⓪
-;;; (`:1694` callback/span lifetime; `:1701` the changelog, pending its `0.1.0`
-;;; entry).
+;;; A deliverable row is (ref text exists? receiver): a deliverable exists as a
+;;; committed document, or it does not and a receiver owns it.
 ;;;
-;;; TWO TOTALITY ROWS, checked by the lane, self-ratcheting (no mutation entry,
-;;; as Milestone 8 Slice ⓪'s table earned none): the criterion set against
-;;; `§26`'s fifteen and the deliverable set against `§27`'s eleven. Adding or
-;;; dropping a criterion in either the plan or this ledger fails BY NAME.
+;;; TWO TOTALITY ROWS, checked by the lane, self-ratcheting (no mutation entry):
+;;; the criterion set against the source list's fifteen and the deliverable set
+;;; against its eleven. Adding or dropping a criterion in either the source list
+;;; or this ledger fails BY NAME.
 ;;;
-;;; The design's §3.1 PROSE summary ("Nine met, three partly, one
-;;; true-but-unasserted, five open") sums to eighteen and its Slice ⓪ exit line
-;;; ("open rows are the five plus three partly") disagrees again; its TABLE and
-;;; Appendix are the consistent, authoritative disposition and are what this
-;;; ledger encodes at Slice ⓪: 6 `met`, 3 `partly`, 6 `open`. (design Appendix,
-;;; annotated 2026-09-12.) Slices ①–⑤ move rows as they land; the v0.1 CLOSE
-;;; state is 13 `met`, 2 `amended` (§26:1677 and :1678, decision 0041), 0 `open`.
+;;; The release state is 13 `met`, 2 `amended` (§26:1677 and :1678), 0 `open`,
+;;; and the lane asserts that partition.
 ;;;
 ;;; This library lives with the fixture harness, no `src/` library imports it,
 ;;; and it carries no name into the `(byte-machine ...)` prefix a public importer
-;;; would use — Slice ⑤'s leak sweep asserts both.
+;;; would use — the leak sweep asserts both.
 (library (byte-machine test release-ledger)
   (export release-criteria release-deliverables
           criterion-ref criterion-text criterion-state criterion-kind
@@ -62,8 +49,8 @@
           release-version release-version-surfaces release-version-export?)
   (import (rnrs))
 
-  ;; §26 — the fifteen v0.1 release criteria (parent plan §26, lines 1671-1685).
-  ;; `text` is verbatim minus "- " and the trailing ";".
+  ;; The fifteen release criteria. `text` is verbatim minus "- " and the
+  ;; trailing ";".
   (define release-criteria
     '(("§26:1671"
        "every approved IR node has documented semantics"
@@ -141,7 +128,7 @@
        "git ls-files matching the native-artifact pattern is empty; every HTTP path is under test/ or docs/, and byte-machine.unit.http-leak asserts the fixture is not re-exported"
        ())))
 
-  ;; §27 — the eleven documentation deliverables (parent plan §27, 1691-1701).
+  ;; The eleven documentation deliverables.
   (define release-deliverables
     '(("§27:1691" "concise README quick start"                       #t ())
       ("§27:1692" "source IR and builder reference"                  #t ())
@@ -155,61 +142,29 @@
       ("§27:1700" "portability matrix and pinned runtime versions"   #t ())
       ("§27:1701" "changelog"                                        #t (five))))
 
-  ;; §4.5 — the version surface. The CURRENT release string has ONE owner (the
-  ;; value here) and a mirror rule: every surface below carries it. `0.7.0` is
-  ;; a MINOR that, like 0.6.1, no milestone ships: issue #145 (decision 0056)
-  ;; adds two public accessors, `parser-error-span` and
-  ;; `parser-error-span-offset`, and added public API is a minor. The
-  ;; generated-runtime ABI (still 9), the emitted text and every golden are
-  ;; unchanged, so nothing makes it more. Decision 0055's op census ships with
-  ;; it and adds no API. The fifth surface is again a decision's status block:
-  ;; 0056's, the decision that makes this a minor. `0.6.1` was
-  ;; the first PATCH, and the first release no milestone shipped: issue #139's
-  ;; keyword-walk fix (decision 0054) changed no public API, no generated-runtime
-  ;; ABI (still 9), no emitted text and no golden, so by the reading below it was
-  ;; a patch and nothing made it more. With no milestone there was no close
-  ;; record, so its fifth surface was decision 0054's own status block, which
-  ;; names the release that carries it. Milestone 14
-  ;; (the emitted dispatches stop being linear scans, decisions 0048-0053) bumps
-  ;; it to `0.6.0`. It adds NO public API at all — no node kind, no graph
-  ;; constructor, no diagnostic — so by the reading below it would be a patch;
-  ;; it is a MINOR because the generated-runtime ABI breaks (8 -> 9) and two
-  ;; runtime bindings generated code calls are retired to tombstones, which is
-  ;; the same call M11 and M13 made for their own ABI bumps. Milestone 13
-  ;; (a parser can start in a mode, decision 0047) bumped it to `0.5.0`; the
-  ;; `§26`/`§27` census above is UNCHANGED — those are the release exit criteria
-  ;; (the append rule freezes them, a settable field adds no criterion row, and
-  ;; every one still holds, the two amended still the CI-blocked pair), so the
-  ;; ledger keeps checking them while this value tracks the release they were met
-  ;; for. The `(byte-machine version)` export stays DECLINED (§4.9 item 3): no
-  ;; public library exports a `version` NAME, so `release-version-export?` is #f
-  ;; and the leak sweep asserts as much. (Milestone 13 DID add public API — the
-  ;; optional `settable?` on `make-uint-field` with `uint-field-settable?`, and
-  ;; the optional `field-initials` argument to `make-parser` — but that is a
-  ;; semver-minor's added optional API, not a version-string export.)
-  ;; `current-abi-version` (now 9, runtime.sls) is the generated-runtime ABI — a
+  ;; The version surface. The CURRENT release string has ONE owner (the value
+  ;; here) and a mirror rule: every surface in `release-version-surfaces`
+  ;; carries it. Added public API makes a release a minor, and so does a
+  ;; generated-runtime ABI break; a release that changes no public API, no ABI,
+  ;; no emitted text and no golden is a patch. The criteria above do not change
+  ;; with the version: they are the release exit criteria, and the ledger keeps
+  ;; checking them while this value tracks the release they were met for. The
+  ;; `(byte-machine version)` export is DECLINED: no public library exports a
+  ;; `version` NAME, so `release-version-export?` is #f and the leak sweep
+  ;; asserts as much.
+  ;; `current-abi-version` (runtime.sls) is the generated-runtime ABI — a
   ;; different thing with a different lifecycle — and is deliberately NOT this
-  ;; value. It moved 7->8 at v0.5.0 for the settable table (an OPTIONAL fourth
-  ;; payload member the generated make-parser range-checks an override against)
-  ;; and 8->9 at v0.6.0 for decision 0052, where the callback seam changed what
-  ;; it ANSWERS — the outcome object rather than a list tagged with the
-  ;; outcome's name — so an ABI-8 parser would decode every callback wrong and
-  ;; is refused at construction. The two lifecycles have now diverged twice in
-  ;; the same direction and once in the other: an ABI bump has never been a
-  ;; major here, and v0.5.0's minor carried no ABI-breaking change at all.
-  ;; THIS COMMENT IS WHY THE VALUE BELOW IS NOT THE ONLY THING TO MOVE AT A
-  ;; RELEASE: it read `now 8` for the whole of Milestone 14, through an ABI bump
-  ;; the lane could not catch because prose is not a checked value.
+  ;; value. Do not state the ABI's number in this comment: prose here is not a
+  ;; checked value, and a number written here goes stale at the next ABI bump
+  ;; without any lane noticing.
   (define release-version "0.7.0")
   (define release-version-export? #f)
   (define release-version-surfaces
     '("CHANGELOG.md 0.7.0 entry (§26:1684)"
       "README.org status paragraph"
       "the parent plan's dated disposition"
-      ;; NOT a milestone document: 0.7.0, like 0.6.1, is a release no milestone
-      ;; ships (see above). The decision that makes it a minor names the
-      ;; release in its status block. At 0.6.1 this row was `decision 0054's
-      ;; status block`; at 0.6.0, `the milestone-14-close.md status header`.
+      ;; The record that sets this release's version names the release in its
+      ;; status block.
       "decision 0056's status block"
       "the git tag"))
 

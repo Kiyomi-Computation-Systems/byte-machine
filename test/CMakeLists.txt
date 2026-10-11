@@ -1,9 +1,7 @@
 # byte-machine test tree.
 #
-# Milestone 0 slice 1 registers only the CMake-layer specifications: the build's
-# own discovery and registration logic, which decides what every later lane can
-# even see. The portable Scheme harness and its execution lanes arrive in
-# slice 2.
+# The CMake-layer specifications come first: the build's own discovery and
+# registration logic decides what every later lane can even see.
 
 # The registration helper decides which tests exist at all, so its functional
 # core is specified before anything relies on it.
@@ -103,7 +101,7 @@ set(BYTE_MACHINE_CHEZ_OBJECT_ROOT
 # version and every machine type would share one object root, a `.so` built by
 # a different Chez could be loaded as though it were current, and every AOT
 # lane would stay green while proving nothing about the runtime that actually
-# ran it -- the exact defect this slice exists to prevent. No task in its plan
+# ran it -- the exact defect the keyed roots exist to prevent. Nothing else
 # re-derives BYTE_MACHINE_CHEZ_VERSION or BYTE_MACHINE_CHEZ_MACHINE_TYPE to
 # catch a regression here, so this is the one place that can. Guarded on
 # BYTE_MACHINE_CHEZ_EXECUTABLE: on a host with no Chez neither variable is
@@ -150,11 +148,11 @@ set(BYTE_MACHINE_HARNESS_MANIFEST
     "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/fingerprint.sls"
     "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/harness.sls")
 
-# Milestone 1 semantic-core libraries (Phase 2). Defined here beside the harness
-# manifest so every semantic-core lane below can name the exact .sls set it
-# loads; each fragment grows the previous one in dependency order, mirroring the
-# library dependency direction (parent §7.2): private conditions ← private ir.
-# names.sls (Milestone 6 Slice ⓪: the one portable-name grammar) imports only
+# Semantic-core libraries. Defined here beside the harness manifest so every
+# semantic-core lane below can name the exact .sls set it loads; each fragment
+# grows the previous one in dependency order, mirroring the library dependency
+# direction: private conditions ← private ir.
+# names.sls (the one portable-name grammar) imports only
 # (rnrs) and is imported by verify.sls, compile.sls and runtime.sls; it sits
 # beside conditions.sls in both leaf fragments so every AOT lane compiles it
 # before anything that imports it.
@@ -336,12 +334,10 @@ byte_machine_add_scheme_lane(
 # --- The Chez launcher's refusals ------------------------------------------
 #
 # The launcher decides whether a lane runs at all, and its object guard is the
-# sole mechanism that makes `mode=source` an honest claim. Three places in this
-# tree say so -- the spec's section 7.1, ByteMachineSchemeLane.cmake, and the
-# Chez adapter -- and until these lanes existed none of them checked it: every
-# decision in the launcher could be deleted, and a file dropped into the guard
-# directory, with all twenty tests still green, because a healthy lane never
-# reaches a refusal.
+# sole mechanism that makes `mode=source` an honest claim. A healthy lane never
+# reaches a refusal, so without these lanes every decision in the launcher
+# could be deleted, and a file dropped into the guard directory, with every
+# other test still green.
 #
 # One lane per `die` path, each asserting status 2 exactly. Registered through
 # the exact-status helper directly rather than through
@@ -571,7 +567,7 @@ byte_machine_add_scheme_lane(
 
 # --- Mutation proof for the harness ----------------------------------------
 
-# The harness is the instrument every later milestone is measured with, so a
+# The harness is the instrument everything else is measured with, so a
 # passing self-test suite is not evidence until something has proved it can
 # fail. This breaks each decision in the runner on a staged copy and requires
 # the self-tests to notice. Registered only when a Chez was discovered: it runs
@@ -579,16 +575,14 @@ byte_machine_add_scheme_lane(
 #
 # The self-tests load the fingerprint fixture through adapter-file-bytes; staged
 # lanes inherit this process's environment through execute_process, so the
-# variable must be set here. Pass 38 (D6 determinism, Slice B) reads the
-# committed golden the same way, through BYTE_MACHINE_GOLDEN_FILE, so it is
-# set here too rather than inside SchemeMutationSuite.cmake -- the same
-# mechanism, for the same reason, as BYTE_MACHINE_FINGERPRINT_SAMPLE. Pass 49
-# (Slice ③, the sequence golden) adds the third variable for the same reason;
-# without it that pass's BASELINE fails, and a failing baseline reads as a
-# mutation defect rather than as the missing environment it is. Milestone 4
-# Slice ③'s accumulate golden adds the fourth, before its pass exists rather
-# than after: the failure mode is a red BASELINE that names neither the variable
-# nor the lane, and it is the same failure every time.
+# variable must be set here. The determinism passes read their committed
+# goldens the same way, through the BYTE_MACHINE_*_GOLDEN_FILE variables, so
+# those are set here too rather than inside SchemeMutationSuite.cmake -- the
+# same mechanism, for the same reason, as BYTE_MACHINE_FINGERPRINT_SAMPLE.
+# Without one, that pass's BASELINE fails, and a failing baseline reads as a
+# mutation defect rather than as the missing environment it is: a red BASELINE
+# that names neither the variable nor the lane. Add a golden's variable here
+# before its pass exists, not after.
 # This is one ctest entry that runs the whole mutation suite (~5 min), and ctest
 # buffers a single test's output until it finishes -- so on a plain run this line
 # sits silent for minutes, which is easy to mistake for a hang. To watch it work,
@@ -611,7 +605,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
                 "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls"
                 "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls"
                 "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls"
-                # Milestone 11 Slice ①: the keyword-table determinism pass reads
+                # The keyword-table determinism pass reads
                 # its committed golden the same way, so the ABI-literal mutation's
                 # baseline is green rather than a missing-env failure.
                 "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls")
@@ -621,9 +615,9 @@ endif()
 #
 # Every lane above checks the fingerprint of the text it ran against the value
 # the build computed. These prove that check can fail. Without them the
-# mechanism would be a claim: protium recorded two occasions where two of its
-# lanes printed different digests for text both said they ran, and the suite
-# stayed green, because nothing read the values back.
+# mechanism would be a claim: two lanes can print different digests for text
+# both say they ran, and the suite stays green if nothing reads the values
+# back.
 #
 # Status 3 is what makes them falsifiable. Several lanes in this tree
 # legitimately expect 1 or 2, so a provenance failure sharing either status
@@ -672,12 +666,12 @@ byte_machine_add_scheme_lane(
   LABELS expected-red
   ENVIRONMENT "BYTE_MACHINE_FINGERPRINT_FILES=${CMAKE_BINARY_DIR}/fingerprints/no-such-body.scm")
 
-# Provenance configured and never performed. SOURCES guarantees the
-# environment carries a manifest; nothing until now guaranteed anything read
-# it. This program reaches harness-summary without ever reaching
-# harness-verify-provenance!, which is precisely the shape harness-bootstrap
-# would have had if its hand-placed call had been forgotten -- and that would
-# have run un-provenanced with nothing failing.
+# Provenance configured and never performed. SOURCES guarantees the environment
+# carries a manifest; this lane guarantees something reads it. This program
+# reaches harness-summary without ever reaching harness-verify-provenance!,
+# which is precisely the shape harness-bootstrap would have had if its
+# hand-placed call had been forgotten -- and that would have run un-provenanced
+# with nothing failing.
 #
 # A real manifest, deliberately: with none, the run is a process no lane
 # registration started, and skipping is correct rather than a defect.
@@ -702,8 +696,7 @@ byte_machine_add_scheme_lane(
 # exits 3. This is the only lane in the tree that can fail when a compiled
 # lane's fingerprint stops describing its artifact -- a lane rather than a
 # mutation because the Scheme mutation suite stages one already-mutated
-# tree per pass and cannot express "built before the edit, run after it"
-# (design W12, slice 5a task 6).
+# tree per pass and cannot express "built before the edit, run after it".
 byte_machine_add_scheme_lane(
   NAME byte-machine.harness.stale-artifact.chez.aot
   BACKEND chez
@@ -715,7 +708,7 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   LABELS expected-red)
 
-# --- Milestone 1 semantic core (Phase 2) -----------------------------------
+# --- Semantic core ---------------------------------------------------------
 #
 # The in-memory pipeline for the one-byte machine, proven through the reference
 # interpreter across all 256 byte values. Each feature owns a source and an AOT
@@ -765,8 +758,8 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/graph-tests.sps"
   TIMEOUT 120)
 
-# The runtime now depends on (byte-machine private conditions) for coded API
-# contract conditions (decision 0013); conditions.sls imports only (rnrs), so no
+# The runtime depends on (byte-machine private conditions) for coded API
+# contract conditions; conditions.sls imports only (rnrs), so no
 # cycle. It is listed first so the AOT lane compiles it before runtime.sls.
 set(BYTE_MACHINE_CORE_RUNTIME
     "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/private/conditions.sls"
@@ -821,9 +814,9 @@ set(BYTE_MACHINE_CORE_ALL
     ${BYTE_MACHINE_CORE_RUNTIME}
     "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/interpret.sls")
 
-# conditions.sls now reaches CORE_ALL twice — once via CORE_VERIFY's ir manifest,
-# once via CORE_RUNTIME (decision 0013) — and names.sls reaches it twice by the
-# same two routes (Milestone 6 Slice ⓪). REMOVE_DUPLICATES keeps the first (early,
+# conditions.sls reaches CORE_ALL twice — once via CORE_VERIFY's ir manifest,
+# once via CORE_RUNTIME — and names.sls reaches it twice by the
+# same two routes. REMOVE_DUPLICATES keeps the first (early,
 # before ir.sls) occurrence, so load/compile order stays conditions -> names ->
 # ir -> ... -> runtime -> interpret, and the per-lane duplicate-basename guard
 # stays green.
@@ -849,9 +842,9 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/interpret-tests.sps"
   TIMEOUT 120)
 
-# Milestone 2 Slice ②b-1 Task 3: the shared idle-vs-truncation proving machine
-# (built only through (byte-machine graph), reused by Slice ②b-2's
-# interpreter≡generated differential) driven exhaustively through the
+# The shared idle-vs-truncation proving machine (built only through
+# (byte-machine graph), reused by the EOF interpreter≡generated differential)
+# driven exhaustively through the
 # interpreter's parser-finish!/eof-target path.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.eof-interpret.chez.source
@@ -873,7 +866,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/eof-interpret-tests.sps"
   TIMEOUT 120)
 
-# Milestone 2 Slice ③: the shared pause/resume proving machine driven through
+# The shared pause/resume proving machine driven through
 # the interpreter's pause arms and the runtime's paused-feed/paused-finish/
 # finish-ready lifecycle.
 byte_machine_add_scheme_lane(
@@ -896,7 +889,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/pause-interpret-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 1 Phase 3 Slice A: normalizer ------------------------------
+# --- Normalizer ------------------------------------------------------------
 set(BYTE_MACHINE_CORE_NORMAL_IR
     ${BYTE_MACHINE_CORE_VERIFY}
     "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/private/normal-ir.sls")
@@ -923,7 +916,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/normal-ir-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 1 Phase 3 Slice A: emitter ---------------------------------
+# --- Emitter ---------------------------------------------------------------
 set(BYTE_MACHINE_CORE_COMPILE
     ${BYTE_MACHINE_CORE_NORMAL_IR}
     "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/compile.sls")
@@ -935,7 +928,7 @@ byte_machine_add_scheme_lane(
   SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
           ${BYTE_MACHINE_CORE_COMPILE}
           "${CMAKE_SOURCE_DIR}/test/common/compile-tests.sps"
-  # Milestone 7 Slice ④: the §16.2:910 witness reads compile.sls as a datum for its
+  # The emitter-totality witness reads compile.sls as a datum for its
   # derived totality row (render-state-arm's thirteen kind arms), loud when unset.
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 120)
@@ -950,14 +943,15 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 120)
 
-# --- Milestone 7 Slice ④: the §16.2:911 compile-file witness (§4.12 item 2) ----
+# --- The compile-file witness ----------------------------------------------
 # The limits lane. It both compiles a machine and executes one (it imports the
-# emitter AND the interpreter and runtime -- ${BYTE_MACHINE_CORE_EMIT}), which is
-# exactly why it is its own lane pair and not a group in the rejections program
-# (F7). It compile-files the largest emittable machine (a 256-exact-case dispatch
-# plus a complement-matcher dispatch) at run time, loads the object, and asserts one
-# feed agrees with the interpreter. TIMEOUT from the measured wall-clock (0.29 s
-# source) plus a wide margin -- compile-file of a ~36 KB library is fast.
+# emitter AND the interpreter and runtime -- ${BYTE_MACHINE_CORE_EMIT}), which
+# is exactly why it is its own lane pair and not a group in the rejections
+# program, which must import no executor. It compile-files the largest emittable
+# machine (a 256-exact-case dispatch plus a complement-matcher dispatch) at run
+# time, loads the object, and asserts one feed agrees with the interpreter.
+# TIMEOUT from the measured wall-clock (0.29 s source) plus a wide margin --
+# compile-file of a ~36 KB library is fast.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.compile-limits.chez.source
   BACKEND chez
@@ -976,7 +970,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/compile-limits-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 1 Phase 3 Slice A: differential and example ----------------
+# --- Differential and example ----------------------------------------------
 set(BYTE_MACHINE_CORE_EMIT
     ${BYTE_MACHINE_CORE_ALL}
     "${BYTE_MACHINE_SRC_CHEZ_LIBRARY_ROOT}/byte-machine/private/normal-ir.sls"
@@ -1004,19 +998,15 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-one-byte-tests.sps"
   TIMEOUT 120)
 
-# Milestone 4 Slice ①b task 7: parser-field-ref across both executors. Named
-# `differential`, not `unit`: the design's exit evidence asks for
-# `byte-machine.differential.field.chez.{source,aot}` and the label vocabulary
-# reserves `differential` for exactly this shape -- a lane that runs the
-# interpreter and the emitted library over the same fixture and compares. It
-# shipped as `unit.field-access` and was renamed by the whole-branch review. It
-# emits
-# and runtime-loads a generated library, so it needs BYTE_MACHINE_CORE_EMIT and
-# the same TIMEOUT as the differential lanes -- and it imports (byte-machine
-# private conditions) to name the contract-violation code, which is already in
-# BYTE_MACHINE_CORE_EMIT. Every imported library is listed in BOTH lanes'
-# SOURCES: a library reached only through `environment` must be statically
-# imported or the AOT lane alone fails.
+# parser-field-ref across both executors. Named `differential`, not `unit`: the
+# label vocabulary reserves `differential` for exactly this shape -- a lane that
+# runs the interpreter and the emitted library over the same fixture and
+# compares. It emits and runtime-loads a generated library, so it needs
+# BYTE_MACHINE_CORE_EMIT and the same TIMEOUT as the differential lanes -- and
+# it imports (byte-machine private conditions) to name the contract-violation
+# code, which is already in BYTE_MACHINE_CORE_EMIT. Every imported library is
+# listed in BOTH lanes' SOURCES: a library reached only through `environment`
+# must be statically imported or the AOT lane alone fails.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.field.chez.source
   BACKEND chez
@@ -1035,11 +1025,10 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/field-access-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 5 Slice ①b: declarations are separable from nodes -------------
-# The slice's oracle, and the one property NO LATER SLICE CAN ESTABLISH: once a
-# callback-invocation node exists, "declared but unused" stops being the only
-# thing a declaration can be. Both lanes, because the claim is that they agree
-# AND that the shipped value tuple did not move.
+# --- Declarations are separable from nodes ---------------------------------
+# A machine that DECLARES callbacks and spans and contains no callback or span
+# NODE verifies, normalizes, emits and runs identically. Both lanes, because the
+# claim is that they agree AND that the differential's value tuple did not move.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.declaration-separability.chez.source
   BACKEND chez
@@ -1058,10 +1047,10 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/declaration-separability-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 5 Slice ②: the callback-invocation node ------------------------
+# --- The callback-invocation node -------------------------------------------
 # The first fixture whose machine CALLS OUT, so the first place the two lanes can
 # disagree about something the APPLICATION supplied rather than something the IR
-# fixed. Both lanes, over every one of §13:803-808's outcomes plus the resumed
+# fixed. Both lanes, over every callback outcome plus the resumed
 # pause, the unbound-optional short circuit and a callback on the EOF chain.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.callback.chez.source
@@ -1081,13 +1070,12 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-callback-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 5 Slice ③ task 7: Slice ④'s liveness probe, measured early ---
-# It tests an INSTRUMENT, not the parser: design §9's retention oracle rests on
-# a weak reference reading `bwp` once the test drops its own, and §9 says in its
-# own words that the measurement behind that "was taken in a throwaway scratch
-# driver and does not count". Both lanes, because AOT compilation is where a
-# probe like this is most likely to stop discriminating -- and learning that
-# while ③ is in flight is much cheaper than learning it inside ④.
+# --- The liveness probe ----------------------------------------------------
+# It tests an INSTRUMENT, not the parser: the input-retention oracle rests on
+# a weak reference reading `bwp` once the test drops its own, and this lane
+# measures that through the real harness rather than a scratch driver. Both
+# lanes, because AOT compilation is where a probe like this is most likely to
+# stop discriminating.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.liveness-probe.chez.source
   BACKEND chez
@@ -1104,12 +1092,12 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/liveness-probe-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 5 Slice ③: the two span kinds --------------------------------
+# --- The two span kinds ----------------------------------------------------
 # What is compared here is not a parser result but the FRAGMENT TRACE: two lanes
 # can agree on every tuple while handing the application different bytes, because
-# the range a data callback receives is chosen by §14:831, §14:833 and §14:834
-# and appears in no result. Six rules, one group each, plus the substep pause
-# §14:838 resumes into and the reset §12.5:739 requires.
+# the range a data callback receives is chosen by the span rules and appears in
+# no result. Six rules, one group each, plus the substep pause a resume
+# re-enters and the span state a reset must clear.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.span.chez.source
   BACKEND chez
@@ -1128,10 +1116,10 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-span-tests.sps"
   TIMEOUT 120)
 
-# --- Issue #145: the span an error abandons (decision 0056) -------------------
-# §14:839 withholds the bytes an open span took in the feed that failed, so an
-# embedder counting a span's delivered bytes got an answer that depended on the
-# schedule. The error now names the span and where its withheld bytes begin; this
+# --- The span an error abandons --------------------------------------------
+# An error withholds the bytes an open span took in the feed that failed, so an
+# embedder counting a span's delivered bytes alone gets an answer that depends on
+# the schedule. The error names the span and where its withheld bytes begin; this
 # lane pins each path to that, and checks the property itself -- delivered then
 # withheld is the span's bytes up to the error -- under every schedule of up to
 # three slices, in both lanes.
@@ -1153,11 +1141,11 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-abandoned-span-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 6 Slice ①: the counted consume in both lanes -------------------
-# §22.3:1254's four cases under §22.5's schedules, EOF truncation, the two-message
-# feed of §25:1609, the u64 count, decision 0030 item 1's two ordering witnesses,
-# the only-consumer machine compile.sls's reached-declaration walk owes, the
-# structural witness for §25:1607, and Slice ②'s §10.6:603 placement oracle as
+# --- The counted consume in both lanes -------------------------------------
+# Zero, partial, exact and surplus input under every schedule, EOF truncation,
+# a two-message feed, the u64 count, the two ordering witnesses, the
+# only-consumer machine compile.sls's reached-declaration walk needs, the
+# structural witness (one count-step per feed), and the placement oracle as
 # one case. Both lanes list counted-machine.sls in SOURCES: the aot lane resolves
 # libraries only through objects compiled from its own SOURCES.
 byte_machine_add_scheme_lane(
@@ -1180,12 +1168,12 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-counted-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 6 Slice ②: the counted body inside a span, both lanes ----------
+# --- The counted body inside a span, both lanes ----------------------------
 # The fragment trace with per-feed event placement over every schedule: the six
-# §14 rules over a counted body, §10.6:603's placement asserted against a table
-# derived from the schedule before the run, §22.5's exactness and coalesced
-# invariance, the error path, and §25:1609's span variant. No mechanism is added
-# by the slice; this lane is its oracle. Both lanes list counted-machine.sls.
+# span rules over a counted body, the completion's placement asserted against a
+# table derived from the schedule before the run, same-schedule exactness and
+# coalesced invariance, the error path, and the two-message span variant. Both
+# lanes list counted-machine.sls.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.counted-span.chez.source
   BACKEND chez
@@ -1206,8 +1194,8 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-counted-span-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 5 Slice ④: the input-retention oracle (§25:1591) --------------
-# The lane Slice ③'s liveness probe was brought forward FOR. Unlike that probe,
+# --- The input-retention oracle --------------------------------------------
+# The lane the liveness probe above validates. Unlike that probe,
 # this one imports `byte-machine` source and drives a real parser, so it is
 # inside the mutation suite and carries pins -- do not copy the probe lane's
 # "imports no project source" exemption onto it.
@@ -1254,7 +1242,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/example-one-byte-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 2 Slice 1: incremental execution over a multi-byte sequence ----
+# --- Incremental execution over a multi-byte sequence ----------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.sequence.chez.source
   BACKEND chez
@@ -1279,7 +1267,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 2 Slice ②b-2: interpreter≡generated differential over EOF ------
+# --- Interpreter≡generated differential over EOF --------------------------
 # Proves the generated /v2 finish path (exec closure's finish? EOF branch) equals
 # the interpreter's parser-finish!/eof-target execution over the shared
 # idle-vs-truncation eof-machine, for feed-then-finish across all 256 first bytes.
@@ -1305,7 +1293,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-eof-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 2 Slice ③: interpreter≡generated pause/resume differential -----
+# --- Interpreter≡generated pause/resume differential -----------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.pause.chez.source
   BACKEND chez
@@ -1328,10 +1316,10 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-pause-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 13: interpreter≡generated settable-mode differential -----------
+# --- Interpreter≡generated settable-mode differential ----------------------
 # Two parsers from one machine started in two modes through make-parser's
 # initial-values argument agree across executors, survive reset, and refuse an
-# illegal override identically (decision 0047).
+# illegal override identically.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.settable.chez.source
   BACKEND chez
@@ -1352,7 +1340,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-settable-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 3 Slice ①: all-byte class coverage through the interpreter ----
+# --- All-byte class coverage through the interpreter -----------------------
 # ABSOLUTE expected outcomes over all 256 bytes for a set, a range, a complement,
 # a nested complement and an ASCII set. Absolute rather than differential because
 # both executors canonicalize through the same matcher-bytes: a defect there is
@@ -1377,10 +1365,8 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/byte-class-interpret-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 3 Slice ①: interpreter≡generated over every class matcher -----
-# The complement fixture renders 254 sibling arms inside the single `(case b ...)`
-# -- the concrete proof that decision 0014's per-byte lowering needed no emitter
-# change.
+# --- Interpreter≡generated over every class matcher ------------------------
+# The complement fixture is the widest class: every byte but two, 254 members.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.byte-class.chez.source
   BACKEND chez
@@ -1403,7 +1389,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 3 Slice ②: sequence dispatch through the interpreter -----------
+# --- Sequence dispatch through the interpreter -----------------------------
 # ABSOLUTE expected outcomes for a single-alternative sequence node and its
 # advance-mismatch twin. Absolute rather than differential because both executors
 # read the same source IR: a defect there is invisible to a comparison and
@@ -1428,11 +1414,11 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/sequence-interpret-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 3 Slice ②: interpreter≡generated over a sequence node ----------
-# The slice's independent oracle. A single-alternative sequence node must
-# reproduce sequence-machine.sls -- four CHAINED DISPATCH NODES -- exactly: the
-# construct is new, the expected behaviour is not, and it was measured by a
-# different mechanism before this node kind existed.
+# --- Interpreter≡generated over a sequence node ----------------------------
+# An independent oracle: a single-alternative sequence node must reproduce
+# sequence-machine.sls -- four CHAINED DISPATCH NODES -- exactly, so the
+# expected behaviour comes from a different mechanism than the node kind under
+# test.
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.sequence-node.chez.source
   BACKEND chez
@@ -1457,8 +1443,8 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-sequence-node-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 3 Slice ③: multiple alternatives over a shared prefix ---------
-# The §21.2 `version = "HTTP/1.0" / "HTTP/1.1"` production. Both lanes list the
+# --- Multiple alternatives over a shared prefix ----------------------------
+# The HTTP `version = "HTTP/1.0" / "HTTP/1.1"` production. Both lanes list the
 # fixture .sls in SOURCES because the aot lane resolves libraries only through
 # objects compiled from its own SOURCES (the source-guard blocks fallback).
 byte_machine_add_scheme_lane(
@@ -1509,13 +1495,13 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-http-version-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 8 Slice ①: the request line -----------------------------------
+# --- The HTTP fixture: the request line ------------------------------------
 # The fixture machine (http-machine.sls) and the shared event-order oracle
-# (http-event-order.sls, §4.9 item 1) are grown across the milestone. The unit
-# lane pins the §21.3 events and Slice ⓪'s request-line error positions
-# absolutely (CORE_ALL); the differential lane emits/loads a generated library
-# and compares it to the interpreter across §22.5 split points (CORE_EMIT + prng
-# + error-projection), the §25:1648 criterion this lane will extend each slice.
+# (http-event-order.sls) serve every HTTP lane below. The unit lane pins the
+# request-line events and error positions absolutely (CORE_ALL); the
+# differential lane emits/loads a generated library and compares it to the
+# interpreter across split points (CORE_EMIT + prng + error-projection), over
+# the whole fixture.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.http-request-line.chez.source
   BACKEND chez
@@ -1538,7 +1524,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-request-line-tests.sps"
   TIMEOUT 120)
 
-# Slice ②: headers, the empty line, and the no-body message loop.
+# Headers, the empty line, and the no-body message loop.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.http-message.chez.source
   BACKEND chez
@@ -1561,7 +1547,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-message-tests.sps"
   TIMEOUT 120)
 
-# Slice ③: framing recognition, checked Content-Length, and the fixed body.
+# Framing recognition, checked Content-Length, and the fixed body.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.http-framing.chez.source
   BACKEND chez
@@ -1584,7 +1570,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-framing-tests.sps"
   TIMEOUT 120)
 
-# Slice ④: the chunked body, extensions, the zero chunk, and trailers.
+# The chunked body, extensions, the zero chunk, and trailers.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.http-chunked.chez.source
   BACKEND chez
@@ -1607,7 +1593,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-chunked-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 8 Slice ⑤: the close ------------------------------------------
+# --- The HTTP fixture: close ----------------------------------------------
 # The malformed sweep, pipelining, and the EOF rules.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.http-close.chez.source
@@ -1631,7 +1617,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-close-tests.sps"
   TIMEOUT 120)
 
-# The leak check reads src/ and the harness root as data (§25:1649).
+# The leak check reads src/ and the harness root as data.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.http-leak.chez.source
   BACKEND chez
@@ -1701,15 +1687,16 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-http-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 9 Slice ⓪: the release ledger (decision 0038) -----------------
-# §26's fifteen release criteria and §27's eleven deliverables as data a lane
-# reads. The two totality rows re-read §26/§27 from the parent plan and
-# set-compare; mechanical rows are executed; judgement rows are recorded. No
-# mutation entry: the totality rows self-ratchet (as M8 Slice ⓪'s table did).
+# --- The release ledger ----------------------------------------------------
+# The fifteen release criteria and eleven documentation deliverables as data a
+# lane reads. The two totality rows re-read the source lists and set-compare;
+# mechanical rows are executed; judgement rows are recorded. No mutation entry:
+# the totality rows self-ratchet.
 #
-# §26:1685's mechanical witness is `git ls-files` matching the native-artifact
-# pattern being empty. The build layer runs git (the lane cannot) and writes the
-# result to a file; the lane asserts it is empty. Regenerated every configure.
+# The native-artifact criterion's mechanical witness is `git ls-files` matching
+# the native-artifact pattern being empty. The build layer runs git (the lane
+# cannot) and writes the result to a file; the lane asserts it is empty.
+# Regenerated every configure.
 set(BYTE_MACHINE_NATIVE_ARTIFACTS_FILE
     "${CMAKE_BINARY_DIR}/release-ledger-native-artifacts.txt")
 execute_process(
@@ -1741,10 +1728,10 @@ byte_machine_add_scheme_lane(
               "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
               "BYTE_MACHINE_NATIVE_ARTIFACTS_FILE=${BYTE_MACHINE_NATIVE_ARTIFACTS_FILE}")
 
-# --- Milestone 9 Slice ①: the dry Windows-cell audit -------------------------
-# The tree-answerable rows of .plans/milestone-9-windows-cell-audit.md, as
-# assertions (the machine-type identity, the discovery names, the executable
-# fallback). The two runner-only rows are deferred past v0.1 (decision 0041).
+# --- The dry Windows-cell audit -------------------------------------------
+# The Windows portability questions this tree can answer without a Windows
+# host, as assertions (the machine-type identity, the discovery names, the
+# executable fallback). The two that need a Windows runner are not asserted.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.windows-audit.chez.source
   BACKEND chez
@@ -1763,16 +1750,16 @@ byte_machine_add_scheme_lane(
   TIMEOUT 60
   ENVIRONMENT "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}")
 
-# --- Milestone 9 Slice ③: the allocation audit (decision 0040) ---------------
-# The gated, deterministic half of §26:1680: the generated per-byte path
-# allocates nothing (slope 0.0), proved against a live control, both executors
-# measured. Loads the emitted generated library, so SOURCES mirror the
-# determinism-http lane. The committed benchmark baseline (§26:1679) is produced
+# --- The allocation audit -------------------------------------------------
+# The gated, deterministic half of the allocation criterion: the generated
+# per-byte path allocates nothing (slope 0.0), proved against a live control,
+# both executors measured. Loads the emitted generated library, so SOURCES
+# mirror the determinism-http lane. The committed benchmark baseline is produced
 # by bench/runner/benchmark.sps and recorded in bench/fixtures/ — not a gating
-# lane (§23.1: no noisy CI perf gate); its existence and shape are checked by the
+# lane (no noisy CI perf gate); its existence and shape are checked by the
 # release-ledger lane.
 #
-# The op census (decision 0055) READS compile.sls as data to derive every
+# The op census READS compile.sls as data to derive every
 # runtime procedure emitted code can call, so it needs the source tree that is
 # actually running -- the same BYTE_MACHINE_SOURCE_ROOT contract as the
 # diagnostic census, overridden to the staged copy by the mutation suite. The
@@ -1802,7 +1789,7 @@ byte_machine_add_scheme_lane(
   TIMEOUT 180
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
 
-# --- Milestone 4 Slice ①a task 7: all three §12.7 position kinds -------------
+# --- Every position kind --------------------------------------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.differential.position-kind.chez.source
   BACKEND chez
@@ -1827,7 +1814,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/position-kind-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 1 Phase 3 Slice B: D7 identifier repertoire + binary LF -------
+# --- Identifier repertoire + binary LF -------------------------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.verify.identifier-repertoire.chez.source
   BACKEND chez
@@ -1846,7 +1833,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/identifier-repertoire-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 1 Phase 3 Slice B: D6 determinism against a committed golden ---
+# --- Determinism against a committed golden (one-byte) ---------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.determinism.one-byte.chez.source
   BACKEND chez
@@ -1867,7 +1854,7 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls")
 
-# --- Milestone 2 Slice ③: determinism against a committed golden (pause) ------
+# --- Determinism against a committed golden (pause) ------------------------
 # Unlike the one-byte neighbor above, this program imports (byte-machine test
 # pause-machine) rather than building its machine inline, so both lanes below
 # list pause-machine.sls in SOURCES -- exactly as the differential.pause block
@@ -1895,12 +1882,11 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_PAUSE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-pause.golden.sls")
 
-# --- Milestone 4 Slice ③: determinism against a committed golden (accumulate) -
-# The FOURTH golden, and the reason §8's "an empty test/fixtures diff" was
-# reworded rather than obeyed: an integer-accumulate node renders an arm no
-# existing golden contains -- three disjoint digit ranges, a checked multiply-add
-# and two distinct EOF routes -- so a determinism claim that excluded it would be
-# a claim about the other three machines. Like the pause and sequence lanes this
+# --- Determinism against a committed golden (accumulate) -------------------
+# An integer-accumulate node renders an arm no other golden contains -- three
+# disjoint digit ranges, a checked multiply-add and two distinct EOF routes --
+# so a determinism claim that excluded it would be a claim about the other
+# machines only. Like the pause and sequence lanes this
 # program imports its machine from a harness library, so both lanes list
 # accumulate-machine.sls in SOURCES: the aot lane resolves libraries only through
 # objects compiled from its own SOURCES.
@@ -1926,12 +1912,12 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_ACCUMULATE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-accumulate.golden.sls")
 
-# --- Milestone 6 Slice ①: determinism against a committed golden (counted) -----
-# The FIFTH golden, for the accumulate golden's reason: a counted-consume node
-# renders an arm no other golden contains -- a zero-count jump, a bulk commit
-# through `min`, an exhausted clause that is not the shared preamble -- so a
-# determinism claim about emission that excluded it would be a claim about the
-# other four machines. Both lanes list counted-machine.sls in SOURCES.
+# --- Determinism against a committed golden (counted) ----------------------
+# For the accumulate golden's reason: a counted-consume node renders an arm no
+# other golden contains -- a zero-count jump, a bulk commit through `min`, an
+# exhausted clause that is not the shared preamble -- so a determinism claim
+# about emission that excluded it would be a claim about the other machines
+# only. Both lanes list counted-machine.sls in SOURCES.
 byte_machine_add_scheme_lane(
   NAME byte-machine.determinism.counted.chez.source
   BACKEND chez
@@ -1954,11 +1940,11 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls")
 
-# --- Milestone 3 Slice ③: determinism against a committed golden (sequence) ---
-# The third golden. Unlike the one-byte and pause goldens, this machine has a
-# BRANCHING prefix state, which is the only shape whose child order can be
-# unstable at all -- decision 0016's ascending-byte child rule, and the way
-# §25:1539's "normalized output is deterministic" would otherwise be lost. The
+# --- Determinism against a committed golden (sequence) ---------------------
+# Unlike the one-byte and pause goldens, this machine has a BRANCHING prefix
+# state, which is the only shape whose child order can be unstable at all --
+# the ascending-byte child rule is what keeps normalized output deterministic
+# there. The
 # rule lives in trie-put, not in the `list-sort` that orders a byte-dispatch
 # node's transitions; SchemeMutationSuite.cmake's Pass 49 carries the
 # measurement that separates the two. Like the pause block above, this program
@@ -1987,7 +1973,7 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_HTTP_VERSION_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-http-version.golden.sls")
 
-# --- Milestone 1 Phase 3 Slice B: property generator + differential ----------
+# --- Property generator + differential ------------------------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.property.differential.chez.source
   BACKEND chez
@@ -2001,8 +1987,8 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${CMAKE_SOURCE_DIR}/test/common/property-differential-tests.sps"
   # BYTE_MACHINE_SOURCE_ROOT: the totality rows read ir.sls as a datum and every
-  # shipped datum reader raises when it is unset (this is NOT decision 0033 item
-  # 3's "the registrations pass nothing" -- that clause is about the SEED). Under
+  # datum reader raises when it is unset. (No SEED is passed: an unset seed
+  # selects the committed default.) Under
   # the mutation suite the variable is set process-wide, so the failure appears
   # only under an ordinary ctest run -- the harder direction to notice.
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
@@ -2023,17 +2009,17 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 180)
 
-# --- Milestone 7 Slice ③: the printer, the fixture saver, and the minimizer ----
-# The fixture lane. SOURCES gains machine-print.sls beside machine-gen.sls and
+# --- The printer, the fixture saver, and the minimizer ---------------------
+# The fixture lane. SOURCES carries machine-print.sls beside machine-gen.sls and
 # property-driver.sls; the driver does NOT import machine-print, so machine-print
-# is in only THIS lane's manifest, not the differential's (Task 7 Step 1).
+# is in only THIS lane's manifest, not the differential's.
 # BYTE_MACHINE_SOURCE_ROOT for the same reason as the differential lane: the
 # printer's totality rows read ir.sls as a datum and the reader raises when it is
-# unset (NOT the seed clause of decision 0033 item 3). No seed is passed. TIMEOUT
+# unset. No seed is passed. TIMEOUT
 # is set from THIS lane's measured wall-clock -- one machine through the saver and
 # the minimizer, 0.53 s source / 0.29 s aot registered -- plus a wide margin, NOT
 # copied from the differential's 180. (The fixture lane is far below the differential
-# lanes' ~4 s of §4.10, which drive 64 machines through the full sweep, not one.)
+# lanes' ~4 s, which drive 64 machines through the full sweep, not one.)
 byte_machine_add_scheme_lane(
   NAME byte-machine.property.fixture.chez.source
   BACKEND chez
@@ -2066,22 +2052,22 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
   TIMEOUT 60)
 
-# --- Milestone 7 Slice ④: the corruption catalogue and the independent oracle --
+# --- The corruption catalogue and the independent oracle ------------------
 # The rejections lane. Its SOURCES are ${BYTE_MACHINE_CORE_VERIFY} -- CORE_GRAPH
 # plus verify.sls and NO executor -- and the test-support libraries the two
 # instruments read: prng/machine-gen (the draws), machine-print (the corruption
-# datum), rejection-ledger (the property lane's rejected draws, F6/F13),
+# datum), rejection-ledger (the property lane's rejected draws),
 # machine-corrupt (the catalogue) and verify-oracle (the independent oracle). It
 # deliberately omits ${BYTE_MACHINE_CORE_EMIT}'s executor libraries and
 # property-driver.sls, so (byte-machine interpret/compile/runtime) are absent: under
 # the AOT lane the program's static-import closure CANNOT reach an executor, which
-# is what makes "the corrupted machine is never handed to an executor" (§22.6:1297,
-# F7) structurally enforceable rather than a runtime claim. BYTE_MACHINE_SOURCE_ROOT
+# is what makes "the corrupted machine is never handed to an executor"
+# structurally enforceable rather than a runtime claim. BYTE_MACHINE_SOURCE_ROOT
 # for the code sentinel (reads verify.sls as a datum) and BYTE_MACHINE_HARNESS_ROOT
 # for the matcher-bytes prohibition (reads verify-oracle.sls as a datum), both loud
 # when unset. TIMEOUT from the measured wall-clock (2.90 s source; the oracle's
 # three-source drive over 834 machines x 9 rules and the AOT build are the cost, not
-# the catalogue arithmetic -- P3 priced that at 0.83 s) plus a wide margin, NOT
+# the catalogue arithmetic, about 0.83 s) plus a wide margin, NOT
 # copied from the differential's 180.
 byte_machine_add_scheme_lane(
   NAME byte-machine.property.rejections.chez.source
@@ -2117,7 +2103,7 @@ byte_machine_add_scheme_lane(
               "BYTE_MACHINE_HARNESS_ROOT=${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}"
   TIMEOUT 120)
 
-# --- Milestone 1 Phase 3 Slice B: member-2 runtime-export drift guard ---------
+# --- The member-2 runtime-export drift guard ------------------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.reserved-drift.chez.source
   BACKEND chez
@@ -2138,8 +2124,8 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/reserved-drift-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 5 Slice ⓪ task 2: the kind x position matrix ------------------
-# Reads ir.sls as data for its closed-set drift row (S2), so it needs the same
+# --- The kind x position matrix -------------------------------------------
+# Reads ir.sls as data for its closed-set drift row, so it needs the same
 # BYTE_MACHINE_SOURCE_ROOT the diagnostic census does, and for the same reason:
 # under the mutation suite it must read the STAGED tree.
 byte_machine_add_scheme_lane(
@@ -2162,7 +2148,7 @@ byte_machine_add_scheme_lane(
   TIMEOUT 180
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src")
 
-# --- Milestone 5 Slice ⓪ task 6: the verifier's diagnostic census ------------
+# --- The verifier's diagnostic census -------------------------------------
 # The program READS `verify.sls` and `ir.sls` as data, so it needs a path to the
 # source tree -- and it must be the tree that is actually RUNNING. Under the
 # mutation suite that is the staged copy, not `${CMAKE_SOURCE_DIR}`: a census
@@ -2180,9 +2166,10 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/diagnostic-census-tests.sps"
   TIMEOUT 120
   # REPO_ROOT is set only for the ordinary ctest lane, never by the mutation
-  # suite (which sets only SOURCE_ROOT, to the staged tree). The §27:1696
+  # suite (which sets only SOURCE_ROOT, to the staged tree). The diagnostic
   # catalog-vs-census check keys on it, so it runs here and is skipped under the
-  # mutation suite — where docs/ is not staged and the check does not belong.
+  # mutation suite — where the catalog is not staged and the check does not
+  # belong.
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
               "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}")
 
@@ -2197,10 +2184,10 @@ byte_machine_add_scheme_lane(
   ENVIRONMENT "BYTE_MACHINE_SOURCE_ROOT=${CMAKE_SOURCE_DIR}/src"
               "BYTE_MACHINE_REPO_ROOT=${CMAKE_SOURCE_DIR}")
 
-# --- Milestone 8 Slice ⓪: the fixture-state -> expected-error table -----------
-# §21.4:1177's precondition, shipped before any grammar node (decision 0034).
-# The table library imports only (rnrs) -- pure data -- so the lane needs the
-# harness manifest, the table library, and the program; no core.
+# --- The fixture-state -> expected-error table ----------------------------
+# The error each HTTP fixture state must report, as data. The table library
+# imports only (rnrs) -- pure data -- so the lane needs the harness manifest,
+# the table library, and the program; no core.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.http-error-table.chez.source
   BACKEND chez
@@ -2219,7 +2206,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/http-error-table-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 4 Slice ①a task 4.7-2: the member-3 drift guard ---------------
+# --- The member-3 drift guard ---------------------------------------------
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.member3-drift.chez.source
   BACKEND chez
@@ -2242,18 +2229,18 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/member3-drift-tests.sps"
   TIMEOUT 120)
 
-# --- Milestone 11 Slice ①: the keyword-table node kind -----------------------
-# A new IR node kind (decision 0043) that matches a set of keywords tolerating
-# proper prefixes (GET vs GET-PARAMETER) and, per table, case-insensitively
-# (decision 0045's fold). It lowers to ONE compact table state walked by
-# `byte-machine-keyword-step/v1` (decision 0044), not a trie of dispatch states.
+# --- The keyword-table node kind ------------------------------------------
+# An IR node kind that matches a set of keywords tolerating proper prefixes
+# (GET vs GET-PARAMETER) and, per table, case-insensitively (an ASCII fold). It
+# lowers to ONE compact table state walked by `byte-machine-keyword-step/v1`,
+# not a trie of dispatch states.
 # The two fixtures carry the same keyword set and differ only in the fold flag,
 # so the differential can show the case-sensitive table refusing a mixed-case
 # name the case-insensitive one accepts, with nothing else changed.
 
 # The interpreter-absolute oracle. Absolute rather than differential because both
 # executors read the same source IR: a walk-logic defect in the interpreter's own
-# kw-step (derived independently, decision 0015) is invisible to a comparison and
+# kw-step (derived independently) is invisible to a comparison and
 # visible here.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.keyword-table.chez.source
@@ -2298,12 +2285,12 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-table-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 11 Slice ①: determinism against a committed golden (keyword-table)
-# The SEVENTH golden, on the counted golden's reasoning: a keyword-table node
+# --- Determinism against a committed golden (keyword-table) ---------------
+# On the counted golden's reasoning: a keyword-table node
 # renders an arm no other golden contains -- the tag-15 compact table datum, the
 # keyword-step op, the resumable compound `current`, and the per-table fold byte
 # -- so a determinism claim about emission that excluded it would be a claim
-# about the other six machines. The case-insensitive fixture is the golden
+# about the other machines only. The case-insensitive fixture is the golden
 # because it is the strictly richer render (it carries the fold datum the
 # case-sensitive table omits).
 byte_machine_add_scheme_lane(
@@ -2328,10 +2315,10 @@ byte_machine_add_scheme_lane(
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls")
 
-# --- Milestone 11 Slice ②: the HTTP-header case-insensitivity demonstration ---
-# Brief §7 criterion 4: a case-insensitive header table folds every casing of a
-# name to one target and a case-sensitive one over the same names does not; and
-# decision 0045 item 3's per-table folded-collision rejection, verified directly
+# --- The HTTP-header case-insensitivity demonstration ---------------------
+# A case-insensitive header table folds every casing of a name to one target
+# and a case-sensitive one over the same names does not; and the per-table
+# folded-collision rejection, verified directly
 # (the case-insensitive collision machine is invalid by design, so it is never
 # handed to make-interpreted-machine). interpreter ≡ generated with the generated
 # side asserted absolutely.
@@ -2355,7 +2342,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-header-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 11 Slice ③: span composition (criterion 5) ---------------------
+# --- Span composition ----------------------------------------------------
 # A method span opened before a keyword table closes at the matched keyword's
 # length (span[method]="MKCOL" from six bytes of MKCOLA); interpreter ≡ generated
 # with the delivered span DATA asserted absolutely on the generated side.
@@ -2379,7 +2366,7 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/differential-keyword-span-tests.sps"
   TIMEOUT 180)
 
-# --- Milestone 11 Slice ③: the emitted-size measurement (criterion 7) ---------
+# --- The emitted-size measurement -----------------------------------------
 # The 47 llhttp methods as ONE keyword-table node vs the equivalent 242-node
 # byte-dispatch trie, both rendered through the emitter; the compact table emits
 # ~34x fewer bytes. Labelled `unit` (an absolute self-contained measurement); an

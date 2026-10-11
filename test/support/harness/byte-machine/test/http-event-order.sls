@@ -1,22 +1,20 @@
-;;; The §21.3 event contract as a GRAMMAR OVER EVENTS, checked once (§4.9 item 1,
-;;; owner-approved). Every HTTP fixture lane validates its recorded event trace
-;;; against this, rather than each writing its own expected sequence: a shared
-;;; checker catches an ordering defect no single expected-trace case was written
-;;; for (the reason the scope addition was approved).
+;;; The HTTP event contract as a GRAMMAR OVER EVENTS, checked once. Every HTTP
+;;; fixture lane validates its recorded event trace against this, rather than
+;;; each writing its own expected sequence: a shared checker catches an
+;;; ordering defect no single expected-trace case was written for.
 ;;;
 ;;; A trace is a list of entries, each either an event-name symbol
 ;;; (`message-begin`, `method-complete`, `version-complete`, ...) or a
 ;;; two-element list `(data-name fragment)` for a span-data delivery
 ;;; (`(method-data "GET")`). `trace-skeleton` drops the fragments and COALESCES
 ;;; consecutive deliveries of the same span-data event into one token, because
-;;; §22.5:1287 makes the coalesced trace — not the raw fragment boundaries —
-;;; the thing invariant across feed schedules.
+;;; the coalesced trace — not the raw fragment boundaries — is the thing
+;;; invariant across feed schedules.
 ;;;
-;;; The grammar is a list of terms, each `(one E)` or `(star E)`. Terminals are
-;;; distinct event names, so a greedy left-to-right match needs no backtracking.
-;;; MILESTONE 8 SLICE ①: the request line, ending at `version-complete`. Later
-;;; slices EXTEND `http-request-grammar` (headers, body, chunks, trailers, the
-;;; message loop) — the grammar grows, the matcher does not.
+;;; The grammar is a list of terms (`one`, `star`, `rep`, `opt`; see
+;;; `match-terms`). Terminals are distinct event names, so a greedy
+;;; left-to-right match needs no backtracking. `http-request-grammar` grows
+;;; with the fixture; the matcher does not.
 (library (byte-machine test http-event-order)
   (export http-data-events http-request-grammar
           trace-skeleton event-sequence-matches? event-sequence-diagnosis)
@@ -29,12 +27,11 @@
       chunk-extension-name-data chunk-extension-value-data
       trailer-name-data trailer-value-data))
 
-  ;; §21.3's no-body message event order (Slices ① and ②). `method`/`target`
-  ;; are 1*, so their data is `star`. The header section is zero or more
-  ;; header-fields — a `rep` of a header group — then headers-complete and, with
-  ;; no body yet, message-complete. `header-value` may be empty (§21.2:1097), so
-  ;; its data is `star` and can be absent entirely. Slice ③ inserts the body
-  ;; between headers-complete and message-complete.
+  ;; A request message's event order. `method`/`target` are 1*, so their data
+  ;; is `star`. The header section is zero or more header-fields — a `rep` of a
+  ;; header group — then headers-complete, the body, and message-complete.
+  ;; `header-value` may be empty, so its data is `star` and can be absent
+  ;; entirely.
   (define http-request-grammar
     '((one message-begin)
       (star method-data)
@@ -46,8 +43,8 @@
            (star header-value-data) (one header-value-complete))
       (one headers-complete)
       ;; the body is one of three shapes, distinguished by which events appear:
-      ;;  * fixed body (Slice ③): body-data* with no completion (§21.3:1145);
-      ;;  * chunked body (Slice ④): nonzero chunks*, the zero chunk, trailers*;
+      ;;  * fixed body: body-data* with no completion event;
+      ;;  * chunked body: nonzero chunks*, the zero chunk, trailers*;
       ;;  * empty: none of the above.
       ;; A chunk carries optional extensions before its chunk-header; a nonzero
       ;; chunk adds body-data* and chunk-complete, the zero chunk does not.

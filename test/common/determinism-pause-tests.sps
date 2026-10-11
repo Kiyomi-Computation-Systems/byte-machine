@@ -1,9 +1,8 @@
-;;; D6 (parent §22.9, §20) over the pause/resume proving machine (Milestone 2
-;;; Slice 3): deterministic emission proved against a committed golden, and
-;;; the emitted library's pause/resume walks proved directly. Byte-identity in
-;;; this process AND equality to the golden (which every cell and lane
-;;; compares against) give cross-process, cross-lane, and cross-cell identity
-;;; transitively; M9 completes the four-cell matrix with the same golden.
+;;; Deterministic emission over the pause/resume proving machine, proved
+;;; against a committed golden, and the emitted library's pause/resume walks
+;;; proved directly. Byte-identity in this process AND equality to the golden
+;;; (which every cell and lane compares against) give cross-process,
+;;; cross-lane, and cross-cell identity transitively.
 ;;; Comparison is over raw bytes through the project-owned writer, never via
 ;;; implementation `write`.
 (import (rnrs) (rnrs eval)

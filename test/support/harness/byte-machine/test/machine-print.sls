@@ -1,31 +1,29 @@
-;;; (byte-machine test machine-print): the fixture printer (Milestone 7 Slice ③,
-;;; design §4.7, decision 0033 item 4). Given a built machine, it returns a DATUM
-;;; -- a Scheme s-expression of `(byte-machine graph)` constructor calls -- that,
-;;; evaluated in an environment importing `(rnrs)` and `(byte-machine graph)`,
-;;; rebuilds a machine with the same IR. The saver (Slice ③, in the property lane)
-;;; `write`s that datum into a fixture; the round-trip test evaluates it directly.
+;;; (byte-machine test machine-print): the fixture printer. Given a built
+;;; machine, it returns a DATUM -- a Scheme s-expression of `(byte-machine graph)`
+;;; constructor calls -- that, evaluated in an environment importing `(rnrs)` and
+;;; `(byte-machine graph)`, rebuilds a machine with the same IR. The saver (in the
+;;; property lane) `write`s that datum into a fixture; the round-trip test
+;;; evaluates it directly.
 ;;;
-;;; A FUNCTIONAL CORE (F18, as the property driver is): every entry returns a datum
+;;; A FUNCTIONAL CORE (as the property driver is): every entry returns a datum
 ;;; and asserts NOTHING -- no `check`, no harness import, no I/O. The one seam that
 ;;; writes is the saver, in the LANE.
 ;;;
-;;; IT DOES NOT `write` A MACHINE OBJECT (Task 2 Step 6). A machine is a tagged
-;;; vector and `(write machine)` renders `#(…)`, which no reader rebuilds through
-;;; the public API. So the printer walks the machine through `(byte-machine private
-;;; ir)`'s accessors and BUILDS a list of constructor-call forms. §4.7's phrase "the
-;;; harness's own writer" names no such export (`harness.sls`'s only datum writer is
-;;; the internal `with-output-to-string`+`write` at :149); Task 12 corrects it.
+;;; IT DOES NOT `write` A MACHINE OBJECT. A machine is a tagged vector and
+;;; `(write machine)` renders `#(…)`, which no reader rebuilds through the public
+;;; API. So the printer walks the machine through `(byte-machine private ir)`'s
+;;; accessors and BUILDS a list of constructor-call forms.
 ;;;
-;;; READS through `(byte-machine private ir)` (F3): §9.1 fixes a construction
-;;; surface and `graph.sls` exports no node accessors, so reading a built machine
-;;; back is not part of the public API and the printer reaches the private library
-;;; -- F18's option 2, the four-program precedent. It EMITS calls to `graph.sls`'s
-;;; public constructors only: the datum names `make-machine`, the thirteen
-;;; `make-*-node`, `make-byte-case`, `make-sequence-case`, `make-edge`, the four
-;;; matcher constructors, and the four declaration constructors, and nothing private.
+;;; READS through `(byte-machine private ir)`: `graph.sls` is a construction
+;;; surface and exports no node accessors, so reading a built machine back is not
+;;; part of the public API and the printer reaches the private library knowingly,
+;;; as other test programs do. It EMITS calls to `graph.sls`'s public constructors
+;;; only: the datum names `make-machine`, the thirteen `make-*-node`,
+;;; `make-byte-case`, `make-sequence-case`, `make-edge`, the four matcher
+;;; constructors, and the four declaration constructors, and nothing private.
 ;;;
-;;; THE ARM TABLES ARE HAND-WRITTEN AND EXPORTED (F4, the S2 technique). Dispatch
-;;; runs off `node-print-arm-table` / `matcher-print-arm-table`, each a literal list
+;;; THE ARM TABLES ARE HAND-WRITTEN AND EXPORTED. Dispatch runs off
+;;; `node-print-arm-table` / `matcher-print-arm-table`, each a literal list
 ;;; of `(kind-stem predicate arm)` naming all thirteen node kinds and all four
 ;;; matcher kinds by hand. The fixture program's totality row derives `node?`'s and
 ;;; `matcher?`'s disjuncts from `ir.sls` AS A DATUM and set-equals them to these
@@ -33,8 +31,7 @@
 ;;; the row would compare `ir.sls` against itself and close nothing; hand-writing
 ;;; the table is what makes a fourteenth node kind added to `ir.sls` without a
 ;;; printer arm fail the row (and the dispatcher's own `no-arm` raise) rather than
-;;; pass silently. This table is one of the test-side censuses design §4.9's
-;;; Appendix names for Milestone 8.
+;;; pass silently.
 (library (byte-machine test machine-print)
   (export print-machine node-print-arm-table matcher-print-arm-table)
   (import (rnrs) (byte-machine private ir))
@@ -118,7 +115,7 @@
   (define (print-finish n)
     (list 'make-finish-node (lit (finish-node-name n)) (lit (finish-node-source-label n))))
   (define (print-pause n)
-    ;; M12: the 4-arg form carrying the optional reason (a symbol or #f), so a
+    ;; The 4-arg form carrying the optional reason (a symbol or #f), so a
     ;; reason-bearing pause survives print -> reparse.
     (list 'make-pause-node (lit (pause-node-name n)) (lit (pause-node-continuation n))
           (lit (pause-node-reason n)) (lit (pause-node-source-label n))))
@@ -141,7 +138,7 @@
           (lit (integer-accumulate-node-eof-target n))
           (lit (integer-accumulate-node-source-label n))))
   (define (print-callback n)
-    ;; M12: the 7-arg form carrying the optional reason (a symbol or #f).
+    ;; The 7-arg form carrying the optional reason (a symbol or #f).
     (list 'make-callback-node (lit (callback-node-name n)) (lit (callback-node-callback n))
           (lit (callback-node-continue-target n)) (lit (callback-node-branch-targets n))
           (lit (callback-node-pause-continuation n)) (lit (callback-node-reason n))
@@ -187,7 +184,7 @@
           (lit (error-declaration-code d)) (error-declaration-reason d)
           (lit (error-declaration-source-label d))))
   (define (print-uint-field f)
-    ;; The 5-arg form, always: the settable flag (Milestone 13) is the field's
+    ;; The 5-arg form, always: the settable flag is the field's
     ;; fourth element, so a settable machine printed and reparsed keeps it -- the
     ;; 4-arg form would silently reparse settable? to #f.
     (list 'make-uint-field (lit (uint-field-name f)) (uint-field-width f)
@@ -205,8 +202,8 @@
           (lit (span-declaration-complete-callback d))
           (lit (span-declaration-source-label d))))
 
-  ;; ---- the machine (Task 2 Step 3: declarations and make-machine, not only
-  ;; nodes -- a printer total over nodes but partial over declarations reprints a
+  ;; ---- the machine (declarations and make-machine, not only nodes -- a
+  ;; printer total over nodes but partial over declarations reprints a
   ;; machine that verifies and is not the same machine). ----
   (define (print-machine m)
     (list 'make-machine

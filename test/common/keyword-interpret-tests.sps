@@ -1,19 +1,18 @@
-;;; Milestone 11 Slice ①: the keyword-table node through the reference
-;;; interpreter, with ABSOLUTE expected outcomes tied to the brief's §7
-;;; acceptance criteria.
+;;; The keyword-table node through the reference interpreter, with ABSOLUTE
+;;; expected outcomes.
 ;;;
 ;;; Absolute, not differential, on purpose: both executors are built from the
 ;;; same source IR, so a defect there makes them wrong IDENTICALLY and leaves a
 ;;; comparison green. This program is what a walk-logic mutation in the
 ;;; interpreter's own kw-step reddens; differential-keyword-table-tests.sps is
 ;;; what proves the interpreter and the generated table agree. The interpreter's
-;;; kw-step is derived independently of the normalizer (decision 0015), so this
+;;; kw-step is derived independently of the normalizer, so this
 ;;; lane's expectations are an independent statement of the semantics, not a
 ;;; readback of the lowering.
 ;;;
 ;;; Each keyword routes to a distinct stop node, so `parser-state-name` at the
 ;;; terminal is the WHICH-keyword witness -- the field that separates a GET match
-;;; from a GET-PARAMETER match and a close from a closed (criteria 2, 3).
+;;; from a GET-PARAMETER match and a close from a closed.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test keyword-table-machine)
@@ -33,7 +32,7 @@
 (define (error-off-of r)
   (let ((e (parser-result-error r))) (and (parser-error? e) (parser-error-offset e))))
 
-;; One whole-string feed. The tuple carries every field the criteria constrain:
+;; One whole-string feed. The tuple carries every field the cases constrain:
 ;; status, the span length (consumed) that must close at the keyword and not the
 ;; delimiter, next / stream-offset, the terminal node name, and the error code
 ;; and offset (#f on an accept).
@@ -44,7 +43,7 @@
           (parser-result-next r) (parser-result-stream-offset r)
           (parser-state-name p) (error-code-of r) (error-off-of r))))
 
-;; Feed then finish!, for the EOF criterion.
+;; Feed then finish!, for the EOF cases.
 (define (feed-finish cm s)
   (let ((p (make-parser cm '() #f)))
     (unless (= 0 (string-length s)) (parser-feed! p (str->bv s) 0 (string-length s)))
@@ -64,10 +63,10 @@
      (list (list 'kwtable (make-keyword-table-machine))
            (list 'kwtableci (make-keyword-table-ci-machine))))))
 
-;; Criteria 1-2: GET and GET-PARAMETER both live; the longer wins when present,
+;; GET and GET-PARAMETER both live; the longer wins when present,
 ;; the shorter when the next byte cannot extend it, and a byte that leaves the
 ;; longer keyword mid-way with no shorter terminal at that point is a no-match --
-;; NOT a rewind to GET (no backtracking, brief §7).
+;; NOT a rewind to GET (no backtracking).
 (harness-group "proper-prefix keywords: longest match, no backtracking"
   (lambda ()
     (harness-case "GET-PARAMETER takes the long keyword"
@@ -79,7 +78,7 @@
     (harness-case "GET-X commits down the GET-PARAMETER path and no-matches at X, never rewinding to GET"
       (lambda () (check-equal "get-x" (feed1 cs "GET-X") '(error 4 4 4 reject unexpected-byte 4))))))
 
-;; Criterion 3: close and closed are distinguished -- closed reaches got-closed,
+;; close and closed are distinguished -- closed reaches got-closed,
 ;; and close + a non-extending byte reaches got-close, each at its own span.
 (harness-group "close / closed are distinguished"
   (lambda ()
@@ -97,7 +96,7 @@
     (harness-case "a non-keyword first byte routes to the no-match error, consuming nothing"
       (lambda () (check-equal "xyz" (feed1 cs "xyz") '(error 0 0 0 reject unexpected-byte 0))))))
 
-;; The per-table fold (decision 0045). The case-sensitive table refuses a
+;; The per-table fold. The case-sensitive table refuses a
 ;; lowercased method; the case-insensitive one accepts every casing to the same
 ;; target, folds letters only (the hyphen still matches only itself), and keeps
 ;; the proper-prefix structure (get vs get-parameter do not collide under fold).
@@ -119,7 +118,7 @@
     (harness-case "a mismatch inside a folded prefix no-matches at that offset"
       (lambda () (check-equal "gExY" (feed1 ci "gExY") '(error 2 2 2 reject unexpected-byte 2))))))
 
-;; The EOF criterion. Acceptance requires a byte that closes the keyword; EOF
+;; EOF inside a table. Acceptance requires a byte that closes the keyword; EOF
 ;; closes nothing, so a parked table -- at the entry, mid-keyword, OR sitting on
 ;; a complete-but-prefix keyword like GET, or even a complete non-prefix keyword
 ;; -- always takes the eof-target, never a keyword.

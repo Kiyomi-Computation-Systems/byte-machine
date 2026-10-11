@@ -1,5 +1,4 @@
-;;; The unreached-provenance body, as a program. Merged from its .chez.sps
-;;; wrapper by the include collapse (decision 0006).
+;;; The unreached-provenance check, as a program.
 
 (import (rnrs) (byte-machine test harness))
 

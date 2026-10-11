@@ -1,5 +1,4 @@
-;;; interpreter ≡ generated over the settable-mode proving machine (Milestone 13,
-;;; decision 0047). Two parsers built from ONE compiled machine start in two modes
+;;; interpreter ≡ generated over the settable-mode proving machine. Two parsers built from ONE compiled machine start in two modes
 ;;; through the make-parser initial-values argument; both executors must agree on
 ;;; the fork, the mode must survive parser-reset!, and an illegal override must be
 ;;; refused identically. A disagreement here is a real defect in the settable

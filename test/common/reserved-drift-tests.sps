@@ -1,14 +1,13 @@
-;;; The member-2 runtime-export drift guard (Slice A design §6; parent §9.2, §20).
-;;; compile.sls's reserved-member-2 must exactly mirror (byte-machine runtime)'s
-;;; exports; otherwise the emitter could accept a binding that collides with a
-;;; runtime export. This asserts the two sets are equal. It passes today (they are
-;;; identical); its RED is the mutation that drops an entry (SchemeMutationSuite
-;;; Pass 40). If a /v2 export is ever added, both lists change together or this
-;;; lane fails.
+;;; The member-2 runtime-export drift guard. compile.sls's reserved-member-2
+;;; must exactly mirror (byte-machine runtime)'s exports; otherwise the emitter
+;;; could accept a binding that collides with a runtime export. This asserts the
+;;; two sets are equal; its RED is the mutation that drops an entry
+;;; (SchemeMutationSuite Pass 40). If a /v2 export is ever added, both lists
+;;; change together or this lane fails.
 ;;;
 ;;; (byte-machine runtime) is imported below even though no binding from it is
 ;;; referenced by name -- environment-symbols reaches it dynamically by name via
-;;; `environment`. Measured against Chez 10.4.1 on 2026-08-23: the AOT compile
+;;; `environment`. Measured against Chez 10.4.1: the AOT compile
 ;;; step (chez-compile.ss) runs compile-program with compile-imported-libraries
 ;;; #t, which compiles only what the program statically imports; the AOT
 ;;; launcher then loads exclusively from compiled objects (its source guard is

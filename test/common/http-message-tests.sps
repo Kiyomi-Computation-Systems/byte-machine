@@ -1,9 +1,9 @@
-;;; Milestone 8 Slice ②: headers, the empty line, and the no-body message loop
-;;; (§25:1635-1636), through the reference interpreter with ABSOLUTE outcomes.
-;;; The request-line events are http-request-line-tests.sps's; this file pins the
-;;; header block, headers-complete/message-complete, the all-OWS value
-;;; (§21.2:1097), the message loop (§21.3:1150), and the header error rows of
-;;; Slice ⓪'s table. Agreement between the executors is differential-http-tests's.
+;;; Headers, the empty line, and the no-body message loop, through the
+;;; reference interpreter with ABSOLUTE outcomes. The request-line events are
+;;; http-request-line-tests.sps's; this file pins the header block,
+;;; headers-complete/message-complete, the all-OWS value, the message loop, and
+;;; the header error rows. Agreement between the executors is
+;;; differential-http-tests's.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test http-machine)
@@ -84,7 +84,7 @@
                        (target-data "/a") target-complete version-complete
                        headers-complete message-complete))))))
 
-;; --- the all-OWS value (§21.2:1097) -------------------------------------------
+;; --- the all-OWS value -------------------------------------------------------
 
 (harness-group "OWS handling and the all-OWS value (§21.2:1097)"
   (lambda ()
@@ -98,10 +98,9 @@
     (harness-case "an all-OWS value produces one empty value fragment followed by completion"
       (lambda ()
         ;; "X-Empty:  \r\n": leading OWS consumes both spaces, the value span
-        ;; opens and closes empty. Per decision 0042 the empty span now delivers
-        ;; ONE empty fragment (header-value-data "") before header-value-complete
-        ;; -- the exact shape the chez-httparse consumer needs to tell "present
-        ;; and empty" from "absent".
+        ;; opens and closes empty. The empty span delivers ONE empty fragment
+        ;; (header-value-data "") before header-value-complete -- the shape a
+        ;; consumer needs to tell "present and empty" from "absent".
         (let ((tr (cadddr (feed-finish "GET / HTTP/1.1\r\nX-Empty:  \r\n\r\n"))))
           (check-equal "exactly one header-value-data for the empty value"
                        (count-of 'header-value-data
@@ -109,7 +108,7 @@
           (check "and it is the empty string" (and (member '(header-value-data "") tr) #t))
           (check "header-value-complete still fires" (and (memq 'header-value-complete tr) #t)))))))
 
-;; --- the no-body message loop (§21.3:1150) ------------------------------------
+;; --- the no-body message loop ------------------------------------------------
 
 (harness-group "two requests in one feed each produce a complete message (§21.3:1150)"
   (lambda ()
@@ -132,7 +131,7 @@
                            (header-value-data "v") header-value-complete
                            headers-complete message-complete))))))))
 
-;; --- the header error rows of Slice ⓪'s table ---------------------------------
+;; --- the header error rows ---------------------------------------------------
 
 (harness-group "header errors at their §21.4:1175 positions"
   (lambda ()

@@ -1,30 +1,29 @@
-;;; The Milestone 11 Slice ① keyword-table proving machines, shared by the
-;;; absolute interpreter lane and the interpreter≡generated differential so each
-;;; graph descriptor is written once. Built only through (byte-machine graph).
+;;; The keyword-table proving machines, shared by the absolute interpreter lane
+;;; and the interpreter≡generated differential so each graph descriptor is
+;;; written once. Built only through (byte-machine graph).
 ;;;
 ;;; Both machines carry the SAME keyword set -- GET, GET-PARAMETER, close,
 ;;; closed -- and differ only in `case-insensitive?`. That is deliberate: it is
-;;; the one difference decision 0045 item 5 says must move the fingerprint, and
-;;; it lets the differential lane show the case-sensitive table refusing a
-;;; mixed-case name that the case-insensitive one accepts, with nothing else
-;;; changed. The set itself is the brief's shape: GET is a proper prefix of
-;;; GET-PARAMETER (§7 criterion 1-2), and close is a proper prefix of closed
-;;; (criterion 3) -- longest-match, not first-match, and no backtracking.
+;;; the one difference that must move the fingerprint, and it lets the
+;;; differential lane show the case-sensitive table refusing a mixed-case name
+;;; that the case-insensitive one accepts, with nothing else changed. GET is a
+;;; proper prefix of GET-PARAMETER, and close is a proper prefix of closed --
+;;; longest-match, not first-match, and no backtracking.
 ;;;
 ;;; Each keyword routes to a DISTINCT stop node, so `parser-state-name` at the
 ;;; terminal witnesses WHICH keyword matched -- an identity a shared stop node
 ;;; could not carry. A no-match routes to an error node (reexecute: the
-;;; unmatched byte is not consumed, so the span closes at the keyword length,
-;;; criterion 5). The keyword-table node's own eof-target is a distinct error
+;;; unmatched byte is not consumed, so the span closes at the keyword length).
+;;; The keyword-table node's own eof-target is a distinct error
 ;;; node `eof-incomplete`: EOF mid-table takes no keyword, and reaching a stop
 ;;; terminal by an EOF path is itself a verifier diagnostic
 ;;; (`eof-reachable-stop`), so an incomplete keyword at EOF is an error, routed
 ;;; distinctly from the machine-level default EOF an empty parser finishes
 ;;; through and from the no-match error a wrong byte takes.
 ;;;
-;;; This is the fold-mechanism fixture (Slice ①). The brief §2b HTTP-header
-;;; case-insensitivity demonstration and the folded-collision rejection are
-;;; Slice ②'s (decision 0045, amended 2026-09-13).
+;;; This is the case-fold mechanism fixture. The HTTP-header case-insensitivity
+;;; demonstration is keyword-header-machine.sls, and the folded-collision
+;;; rejection is a verifier fixture in machine-corrupt.sls.
 (library (byte-machine test keyword-table-machine)
   (export make-keyword-table-machine make-keyword-table-ci-machine
           keyword-table-keywords)

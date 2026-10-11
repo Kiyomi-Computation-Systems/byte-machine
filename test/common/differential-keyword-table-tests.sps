@@ -1,15 +1,14 @@
-;;; interpreter ≡ generated over the keyword-table node (Milestone 11 Slice ①).
-;;; The lowering is decision 0044's compact table walked by
-;;; `byte-machine-keyword-step/v1`, NOT one dispatch state per prefix; the
-;;; interpreter's kw-step is derived independently (decision 0015). This lane is
-;;; the differential that catches a lowering or runtime-walk defect the
+;;; interpreter ≡ generated over the keyword-table node. The lowering is a
+;;; compact table walked by `byte-machine-keyword-step/v1`, NOT one dispatch
+;;; state per prefix; the interpreter's kw-step is derived independently. This
+;;; lane is the differential that catches a lowering or runtime-walk defect the
 ;;; interpreter-absolute lane (keyword-interpret-tests.sps) cannot see.
 ;;;
 ;;; Agreement alone cannot carry the lane -- a fold or walk mutation that hit
 ;;; both executors identically would leave a comparison green -- so every group
 ;;; but the exhaustive byte sweep also asserts the GENERATED side ABSOLUTELY
-;;; against the brief's §7 criteria. The sweep's own value is coverage: every
-;;; trie transition at every prefix, across all 256 next-bytes, in both the
+;;; against expected tuples. The sweep's own value is coverage: every trie
+;;; transition at every prefix, across all 256 next-bytes, in both the
 ;;; case-sensitive and case-insensitive tables, which no fixed tuple set stands
 ;;; in for.
 (import (rnrs) (rnrs eval)
@@ -73,7 +72,7 @@
 (define ci-ref (make-interpreted-machine (verify-machine (make-keyword-table-ci-machine))))
 (define ci-gen (generated-machine 'kwtableci (make-keyword-table-ci-machine)))
 
-;; --- the §7 criteria, agreement AND generated-absolute (case-sensitive) ------
+;; --- the keyword-match cases, agreement AND generated-absolute (case-sensitive)
 (harness-group "the brief criteria hold on the generated table and both lanes agree"
   (lambda ()
     (define cases
@@ -100,7 +99,7 @@
           (check-equal "no case misbehaved" bad 'none)
           (check-equal "all eight criteria cases ran" ran 8))))))
 
-;; --- the per-table fold (decision 0045), agreement AND generated-absolute ----
+;; --- the per-table fold, agreement AND generated-absolute -------------------
 (harness-group "the fold holds on the generated table and both lanes agree"
   (lambda ()
     (harness-case "the case-sensitive generated table refuses a lowercase method"
@@ -128,7 +127,7 @@
         (check-equal "agree get-parameter" (feed1 ci-ref "get-parameter ") (feed1 ci-gen "get-parameter "))
         (check-equal "agree gExY" (feed1 ci-ref "gExY") (feed1 ci-gen "gExY"))))))
 
-;; --- cross-feed resume (decision 0044: the compound current is resumable) -----
+;; --- cross-feed resume (the compound current is resumable) ------------------
 ;; GET-PARAMETER split at every k accepts got-gp at stream-offset 13; the walk
 ;; survives a feed boundary at any depth. Generated-absolute at each split, and
 ;; agreement with the interpreter.
@@ -197,7 +196,7 @@
           (check-equal "the prefix set is the whole trie" (length all-prefixes) 20)
           (check-equal "the sweep ran every drive" drives (* 20 256 2)))))))
 
-;; --- decision 0045 item 5: the flag is fingerprint-visible -------------------
+;; --- the case-insensitive? flag is fingerprint-visible ----------------------
 ;; Two tables differing ONLY in case-insensitive? must compile to different
 ;; parsers. The two fixtures carry different machine-names, so their renders
 ;; would differ from the name alone; to isolate the flag this builds two tables
@@ -229,11 +228,12 @@
           (check "the two renders differ on the flag alone" (not (equal? cs-bytes ci-bytes))))))))
 
 ;; --- the error position-kind is compared across executors --------------------
-;; interpret.sls:177-182 lists position-kind among the fields "required to match
-;; across executors", but the 7-tuple above excludes it, so a keyword-step
-;; position-kind lowering defect (the no-match else branch's `byte`) would agree
-;; on every other field and slip. This group compares it directly, both lanes,
-;; and asserts the generated value absolutely.
+;; interpret.sls (the comment above `declaration-index`) lists position-kind
+;; among the fields "required to match across executors", but the 7-tuple
+;; above excludes it, so a keyword-step position-kind lowering defect (the
+;; no-match else branch's `byte`) would agree on every other field and slip.
+;; This group compares it directly, both lanes, and asserts the generated value
+;; absolutely.
 (define (err-pk cm s)
   (let* ((bv (str->bv s)) (p (make-parser cm '() #f))
          (r (parser-feed! p bv 0 (bytevector-length bv))) (e (parser-result-error r)))
@@ -255,8 +255,8 @@
         (check-equal "agree" (err-pk-finish cs-ref "GET") (err-pk-finish cs-gen "GET"))))))
 
 ;; --- the no-match edge's advance mode ----------------------------------------
-;; The fixtures above use a reexecute no-match; the walk's advance arm (it
-;; consumes the offending byte and reports `boundary` after it) had no coverage.
+;; The fixtures above use a reexecute no-match; this group covers the walk's
+;; advance arm (it consumes the offending byte and reports `boundary` after it).
 ;; A table identical but for the no-match mode isolates that arm on both lanes.
 (define (build-mode name mode)
   (make-machine name 'table '() '() '()
@@ -292,8 +292,8 @@
 ;; that makes the table the sole consumer of the default-eof declaration, so the
 ;; emitter must credit the keyword-table kind in its reached-declaration walk or
 ;; the declaration is filtered out of the errs table and render-machine raises on
-;; a machine the verifier accepted (the Milestone 4 Slice ③ defect, one kind
-;; later). Rendering, loading and running such a machine exercises that credit.
+;; a machine the verifier accepted. Rendering, loading and running such a
+;; machine exercises that credit.
 (define (build-default-eof)
   (make-machine 'defeofkw 'table '() '() '()
     (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
@@ -318,7 +318,7 @@
             (check-equal "the machine default eof code" (parser-error-code (parser-result-error r)) 'eof)
             (check-equal "position kind eof" (parser-error-position-kind (parser-result-error r)) 'eof)))))))
 
-;; --- the prefix read in place (issue #139, decision 0054) ---------------------
+;; --- the prefix read in place -----------------------------------------------
 ;; The runtime walk compares each keyword, in one pass, against the prefix as two
 ;; parts -- the `path` a previous feed parked, then this feed's bytes where they
 ;; lie -- instead of building one list, and stops where the longest shared

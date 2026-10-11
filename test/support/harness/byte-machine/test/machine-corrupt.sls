@@ -1,34 +1,35 @@
-;;; (byte-machine test machine-corrupt): the corruption catalogue (Milestone 7
-;;; Slice ④, design §4.5). Given a verified machine, an ENTRY produces a machine
-;;; differing in exactly one decision -- the corruption -- and a TWIN differing in
-;;; the closest LEGAL way, so the catalogue's positive half (the corruption emits
-;;; the entry's diagnostic) and its negative half (the twin verifies and does not)
-;;; are two edits of one machine, not two machines.
+;;; (byte-machine test machine-corrupt): the corruption catalogue. Given a
+;;; verified machine, an ENTRY produces a machine differing in exactly one
+;;; decision -- the corruption -- and a TWIN differing in the closest LEGAL way,
+;;; so the catalogue's positive half (the corruption emits the entry's
+;;; diagnostic) and its negative half (the twin verifies and does not) are two
+;;; edits of one machine, not two machines.
 ;;;
-;;; A FUNCTIONAL CORE (F18, as machine-gen and machine-print are): every entry
+;;; A FUNCTIONAL CORE (as machine-gen and machine-print are): every entry
 ;;; returns machines and datums and asserts NOTHING -- no `check`, no harness
 ;;; import, no I/O. The drive (positive containment, negative over the twin, the
 ;;; per-entry counts, the two totality rows) is the rejections PROGRAM's.
 ;;;
-;;; THE CORRUPTION MECHANISM IS DATUM SURGERY (F3). Slice ③'s `print-machine`
+;;; THE CORRUPTION MECHANISM IS DATUM SURGERY. machine-print's `print-machine`
 ;;; returns a datum of `(byte-machine graph)` constructor calls; an entry LOCATES
 ;;; the one form a fault lives in and SUBSTITUTES one operand, then `eval`s the
 ;;; datum in `(environment '(rnrs) '(byte-machine graph))` -- the same environment
 ;;; the fixture round-trip uses. So "exactly one decision" is a located
 ;;; substitution, and a fault the constructors REFUSE (the `constructor-refusals`
-;;; table) surfaces as a raise out of `eval`, asserted rather than described (F5).
+;;; table) surfaces as a raise out of `eval`, asserted rather than described.
 ;;;
-;;; THE EDIT KIT'S CONTRACT IS EXACTLY ONE (Step 3). `locate`/`edit` match forms
+;;; THE EDIT KIT'S CONTRACT IS EXACTLY ONE. `locate`/`edit` match forms
 ;;; whose car is in a family and whose operand at `match-pos` equals a literal, and
 ;;; raise unless exactly one form matches -- so an entry that stops locating its
 ;;; site is loud rather than silently a no-op. Callers match by a NAME (unique in a
 ;;; valid machine) at `match-pos` and edit a possibly-different `edit-pos`.
 ;;;
-;;; THE ENTRY TABLE AND THE REFUSAL TABLE ARE HAND-WRITTEN AND EXPORTED (S2/F4), as
+;;; THE ENTRY TABLE AND THE REFUSAL TABLE ARE HAND-WRITTEN AND EXPORTED, as
 ;;; machine-gen's draw tables and machine-print's arm tables are: a row read out of
 ;;; the artifact at run time would compare the artifact to itself and close nothing.
-;;; `corruption-entries` is worked from the design appendix's `§16.2` ledger row by
-;;; row; `constructor-refusals` is keyed by `§16.2` bullet.
+;;; Every row carries a `bullet` label -- a symbol such as `:884` naming the
+;;; verifier rule it exercises -- which the rejections program prints in its
+;;; check labels; rows sharing a rule share a label.
 (library (byte-machine test machine-corrupt)
   (export corruption-entry? make-corruption-entry
           corruption-entry-name corruption-entry-bullet corruption-entry-applies?
@@ -167,15 +168,15 @@
   ;; A `dup-*` entry's twin is the pre-corruption machine itself (identity): the
   ;; closest LEGAL shape to "give two declarations one name" is the machine with
   ;; distinct names, and renaming a referenced declaration to a fresh name instead
-  ;; would DANGLE its references (a different fault) rather than verify. §4.5's
-  ;; "closest legal shape" is the machine that lacks exactly this fault; here that
-  ;; is the accepted machine. (Structural entries in later batches get the specific
-  ;; non-identity twins §4.5 names, where identity would not isolate the fault.)
+  ;; would DANGLE its references (a different fault) rather than verify. The
+  ;; closest legal shape is the machine that lacks exactly this fault; here that
+  ;; is the accepted machine. (Structural entries below get specific non-identity
+  ;; twins, where identity would not isolate the fault.)
   (define (identity-twin m) m)
 
-  ;; ---- the entry table (worked from the appendix ledger, in ledger order) ---
-  ;; expected pairs are derived from the bullet and confirmed against the drive;
-  ;; the positive half is CONTAINMENT (collateral diagnostics are expected, F4).
+  ;; ---- the entry table -----------------------------------------------------
+  ;; expected pairs are derived from the verifier rule and confirmed against the
+  ;; drive; the positive half is CONTAINMENT (collateral diagnostics are expected).
   (define corruption-entries
     (list
      ;; :884 shape -- the not-a-machine half is an entry; the version half is
@@ -236,7 +237,7 @@
       (lambda (m) (build (edit (->d m) '(make-machine) 1 (machine-name m) 2 (q 'zz-ghost-entry))))
       (lambda (m) m)
       (lambda (m) (list (cons 'missing-target 'zz-ghost-entry))))
-     ;; Milestone 11: an exact duplicate keyword. dup-first duplicates the first
+     ;; An exact duplicate keyword. dup-first duplicates the first
      ;; keyword entry in the keyword-table's entries (list ...) operand (position 2).
      (make-corruption-entry
       'dup-keyword ':894
@@ -247,8 +248,7 @@
       identity-twin
       (lambda (m) (list (cons 'duplicate-keyword
                               (keyword-table-node-name (first-node-of m keyword-table-node?))))))
-     ;; Milestone 11 Slice ②: a case-insensitive fold collision (decision 0045
-     ;; item 3). Flip the keyword-table's case-insensitive? flag (operand 5) to #t
+     ;; A case-insensitive fold collision. Flip the keyword-table's case-insensitive? flag (operand 5) to #t
      ;; and append two byte-DISTINCT case variants -- A (65) and a (97) -- both
      ;; routed to the first entry's EXISTING target, so no missing-target or
      ;; unreachable collateral is introduced. Under folding the two are equal, so
@@ -362,7 +362,7 @@
       (lambda (m) m)
       (lambda (m) (list (cons 'unreferenced-callback-declaration 'zz-unref))))
      ;; :897 unreachable node -- INSERT an orphan finish node (no in-edge). The twin
-     ;; (design §4.5, :897) inserts the SAME node but makes it reachable, by pointing
+     ;; inserts the SAME node but makes it reachable, by pointing
      ;; a byte-dispatch node's free (#f) eof-target at it -- an EOF accept into a
      ;; finish, legal -- so the isolated fault is reachability, not the node's
      ;; presence. Gated on a node with a free eof-target so the twin can wire it.
@@ -408,7 +408,7 @@
       (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (f (first-node-of m finish-node?)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 3
                                  (list 'make-edge (q (finish-node-name f)) (q 'advance))))))
-      ;; twin (design §4.5, :908): the same finish reached by an EOF-only edge (the
+      ;; twin: the same finish reached by an EOF-only edge (the
       ;; node's eof-target) rather than a byte edge -- a legal accept.
       (lambda (m) (let ((n (first-node-of m byte-dispatch-node?)) (f (first-node-of m finish-node?)))
                     (build (edit (->d m) '(make-byte-dispatch-node) 1 (byte-dispatch-node-name n) 4
@@ -423,9 +423,9 @@
       (lambda (m) m)
       (lambda (m) (list (cons 'eof-zero-progress-cycle (byte-dispatch-node-name (first-node-of m byte-dispatch-node?))))))
      ;; :909 EOF-reachable stop -- point a byte-dispatch node's FREE (#f) eof-target
-     ;; at a stop, so an EOF route reaches a stop terminal. The twin (design §4.5,
-     ;; :909) points the same free eof route at an ERROR node instead -- a legal EOF
-     ;; rejection -- so neither half orphans an existing eof-target.
+     ;; at a stop, so an EOF route reaches a stop terminal. The twin points the same
+     ;; free eof route at a fresh finish instead (below), so neither half orphans an
+     ;; existing eof-target.
      (make-corruption-entry
       'eof-reachable-stop ':909
       (lambda (m) (and (bd-with-no-eof m) (first-node-of m stop-node?)))
@@ -477,7 +477,7 @@
       (lambda (m) (list (cons 'span-active-at-exit 'zz-exit-finish))))
      ;; :899 inconsistent span state -- a span-start jumps to an EXISTING pause that
      ;; keeps its own (span-closed) in-edge, so the pause is reached with two
-     ;; different active-span sets (the merge disagreement, decision 0029).
+     ;; different active-span sets (the merge disagreement).
      (make-corruption-entry
       'inconsistent-span-state ':899
       (lambda (m) (and (first-node-of m span-start-node?) (first-node-of m pause-node?)))
@@ -487,7 +487,7 @@
       (lambda (m) m)
       (lambda (m) (list (cons 'inconsistent-span-state (pause-node-name (first-node-of m pause-node?))))))))
 
-  ;; ---- the refusal table (F5 row 2) ----------------------------------------
+  ;; ---- the refusal table ---------------------------------------------------
   ;; Faults the PUBLIC constructors refuse, so no machine can carry them and the
   ;; catalogue reaches them only as a raise. Each thunk performs the refused
   ;; construction by evaluating a `(byte-machine graph)` call in `eval-env` (graph
@@ -521,18 +521,18 @@
      (make-refusal ':906 'terminal-out-edge #f
        "terminal node constructors (make-stop-node/make-finish-node/make-error-node) take name and source-label only -- there is no out-edge slot to give")))
 
-  ;; ---- the unconstructible list (Step 7) ------------------------------------
+  ;; ---- the unconstructible list -------------------------------------------
   ;; Census codes reachable neither by a catalogue entry nor by a constructor
   ;; refusal, so this corruption catalogue -- which corrupts ACCEPTED machines --
   ;; never produces them. Two members:
-  ;;   - `invalid-shape` via its unsupported-version half (§9.1:320-322) --
+  ;;   - `invalid-shape` via its unsupported-version half --
   ;;     `verify-tests.sps` forges such a descriptor with a test-only vector, and
   ;;     this catalogue does not. Its NOT-a-machine half IS an entry
   ;;     (`shape-not-a-machine`).
-  ;;   - `settable-consume-counter` (Milestone 13, decision 0047): a settable
+  ;;   - `settable-consume-counter`: a settable
   ;;     field used as a counted-consume counter. It IS constructible through the
   ;;     public API, but no corruption of an accepted machine makes a field
   ;;     settable, so the catalogue cannot reach it; `diagnostic-census-tests.sps`
   ;;     and `verify-tests.sps` cover it directly.
-  ;; The code sentinel (F5 row 1) adds these codes to the entry codes' union.
+  ;; The code sentinel adds these codes to the entry codes' union.
   (define unconstructible-codes '(invalid-shape settable-consume-counter)))

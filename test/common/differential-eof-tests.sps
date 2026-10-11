@@ -1,7 +1,6 @@
-;;; interpreter ≡ generated over the idle-vs-truncation EOF machine (Milestone 2
-;;; Slice ②b-2, parent §22.4). Proves the generated /v2 finish path — the exec
-;;; closure's finish? EOF branch — equals the interpreter's parser-finish!/
-;;; eof-target execution for BOTH feed and finish: idle completion at entry
+;;; interpreter ≡ generated over the idle-vs-truncation EOF machine. Proves the
+;;; generated finish path — the exec closure's finish? EOF branch — equals the
+;;; interpreter's parser-finish!/eof-target execution for BOTH feed and finish: idle completion at entry
 ;;; (finish -> finished), one-byte truncation (feed 1 then finish -> error/
 ;;; truncated-input), the full sequence (feed 1 2 -> stopped), and every one of
 ;;; the 256 first bytes fed then finished. The interpreter is the reference; a
@@ -39,12 +38,10 @@
         (check-equal "trunc is error" (car (rfields cm-gen '(1))) 'error)))
     (harness-case "all 256 first bytes: op and gen agree on feed-then-finish"
       (lambda ()
-        ;; Whole-branch review finding 4, back-ported from differential-pause-
-        ;; tests.sps's b1-final: `bad` alone proves no DISAGREEMENT was seen,
-        ;; not that the loop ran -- a loop that silently never executed would
-        ;; leave `bad` at its seeded 'none too. last-byte is set on every
-        ;; iteration regardless of outcome, so it reaches its final value 255
-        ;; only if all 256 iterations actually ran.
+        ;; `bad` alone proves no DISAGREEMENT was seen, not that the loop ran --
+        ;; a loop that silently never executed would leave `bad` at its seeded
+        ;; 'none too. last-byte is set on every iteration regardless of outcome,
+        ;; so it reaches its final value 255 only if all 256 iterations ran.
         (let ((bad 'none) (last-byte 'unset))
           (let loop ((b 0))
             (when (< b 256)

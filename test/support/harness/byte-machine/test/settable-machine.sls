@@ -1,15 +1,16 @@
-;; A two-mode proving machine for Milestone 13 (a parser can start in a mode).
+;; A two-mode proving machine: a parser can start in a mode.
 ;; A SETTABLE `mode` field, and an entry field-branch that reads it: with the
 ;; embedder's `make-parser` override `mode == 1` the machine accepts 'R' (the
 ;; "request" arm), and with the declared initial `mode == 0` it accepts 'S' (the
 ;; "response" arm). So two parsers built from ONE compiled machine start in two
-;; different states -- the whole point of the milestone -- and the two arms fork
-;; observably (one input stops, the other errors) so a cross-lane disagreement or
-;; a lost override is a red differential, not a silent pass.
+;; different states, and the two arms fork observably (one input stops, the
+;; other errors) so a cross-lane disagreement or a lost override is a red
+;; differential, not a silent pass.
 ;;
 ;; The mode field is a field-branch SELECTOR, never a counted-consume counter, so
-;; it verifies clean (decision 0047 item 4 refuses only the latter). It is the
-;; consumer's `type` shape (llhttp request vs response) reduced to one field.
+;; it verifies clean (the verifier refuses a settable counted-consume counter,
+;; not a settable selector). It is the consumer's `type` shape (llhttp request
+;; vs response) reduced to one field.
 (library (byte-machine test settable-machine)
   (export make-settable-machine)
   (import (rnrs) (byte-machine graph))

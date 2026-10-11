@@ -1,16 +1,13 @@
 ;;; reserved-member-3 against the symbols the emitter actually binds.
 ;;;
-;;; reserved-member-2 has had a drift guard since reserved-drift-tests.sps;
-;;; member-3 has had none, and compile.sls said so in its own words ("checked,
-;;; not assumed, since it has no automated drift guard"). Slice ①a adds three
-;;; entries to it, so the gap is demonstrated rather than theoretical: a new
-;;; emitted local that nobody adds to the list lets render-machine accept a
-;;; caller binding that collides with it, and the collision surfaces as a
-;;; generated library that shadows its own loop variable.
+;;; reserved-member-2's drift guard is reserved-drift-tests.sps; this is
+;;; member-3's. Without it, a new emitted local that nobody adds to the list
+;;; lets render-machine accept a caller binding that collides with it, and the
+;;; collision surfaces as a generated library that shadows its own loop
+;;; variable.
 ;;;
-;;; This is NEW construction, not a copy of reserved-drift-tests.sps: that file
-;;; sorts two lists and asserts one check-equal. Nothing in the tree walked a
-;;; read datum before this.
+;;; Unlike reserved-drift-tests.sps, which sorts two lists and asserts one
+;;; check-equal, this walks the rendered library as a read datum.
 (import (rnrs)
         (only (byte-machine private names) portable-name?)
         (rnrs eval)
@@ -36,42 +33,29 @@
 ;; dispatch, stop, error, finish and pause -- so every arm of render-state-arm
 ;; contributes its locals to the walk.
 (define binding 'pausem)
-;; *** The fixture is the pause machine PLUS two field nodes, added by Slice ②.
-;; *** The pause machine alone declares no fields, so the emitted body binds
-;; neither `v` nor `r` and both would sit in reserved-member-3 as reservations
-;; nothing exercises -- the guard would stop guarding the thing ② added to it.
-;; The two field arms are what put those locals in the rendered text.
-;;
-;; *** Slice ③ extends the same fixture again, with an integer-accumulate node.
-;; *** Its arm binds `b`, `d` and `v`; `b` and `v` come from arms already here,
-;; but `d` does not, and without this node `d` would sit in reserved-member-3 as
-;; a reservation nothing exercises -- the same gap ② closed for `v` and `r`,
-;; reopened by ③'s own addition to the list.
+;; *** The fixture is the pause machine PLUS the nodes whose arms bind locals
+;; the pause machine's do not. *** A local in reserved-member-3 that no rendered
+;; arm binds is a reservation nothing exercises. The pause machine declares no
+;; fields, so its emitted body binds neither `v` nor `r`; the two field nodes
+;; put them in the rendered text. The integer-accumulate node's arm binds `b`,
+;; `d` and `v`, and `d` is bound by no other arm.
 (define (make-field-drift-machine)
   (make-machine 'pausem 'start (list (make-uint-field 'count 8 0 #f))
-    ;; *** Milestone 5 Slice ② extends the fixture once more, with a callback
-    ;; node. *** Its arm binds `o`, which no other arm does, so without this
-    ;; declaration and the node below `o` would sit in reserved-member-3 as a
-    ;; reservation nothing exercises -- the gap ② closed for `v` and `r`, and ③
-    ;; for `d`, reopened by this slice's own addition to the list.
-    ;; *** AND SLICE ③ EXTENDS IT A SECOND TIME, with a span and a pause. ***
-    ;; Its census reconciliation found the fixture rendering only part of
-    ;; `render-state-arm`, and the FINAL REVIEW corrected the number: SEVEN of
-    ;; the twelve arms, not the nine first written here. Measured both ways by
-    ;; rendering this fixture and probing the emitted text -- stop, error,
-    ;; accumulate, field-action, field-branch, callback and dispatch were
-    ;; rendered; finish, pause, span-start, span-end and span-completion were
-    ;; not. All five are added here, so the row the design Appendix carries for
-    ;; this fixture -- "must render EVERY emitted arm" -- is literally true at
-    ;; twelve of twelve rather than nearly true. Milestone 6 Slice ① made it
-    ;; thirteen of thirteen: `cbody` below renders the counted-consume arm.
+    ;; The callback node's arm binds `o`, which no other arm does, so without
+    ;; this declaration and the node below `o` would sit in reserved-member-3
+    ;; as a reservation nothing exercises.
+    ;;
+    ;; The fixture renders thirteen of `render-state-arm`'s arms: stop, error,
+    ;; accumulate, field-action, field-branch, callback, dispatch, finish,
+    ;; pause, span-start, span-end, span-completion and counted-consume
+    ;; (`cbody` below). It has no keyword-table node.
     ;;
     ;; The span arms are not inert: two render a `let` binding `o`, and
     ;; compile.sls's stated property that none of them binds a local beyond `o`
-    ;; was prose in the file under test rather than a check here. The pause arm
-    ;; binds nothing at all, which is exactly why it went unnoticed -- and is
-    ;; also why it is worth rendering: an arm that binds nothing TODAY is one
-    ;; nobody re-checks when it starts to.
+    ;; would otherwise be prose in the file under test rather than a check
+    ;; here. The pause arm binds nothing at all, which is also why it is worth
+    ;; rendering: an arm that binds nothing is one nobody re-checks when it
+    ;; starts to.
     (list (make-callback-declaration 'note 'event #t '() #f #f)
           (make-callback-declaration 'on-data 'span-data #t '() #f #f)
           (make-callback-declaration 'on-done 'span-complete #t '() #f #f))
@@ -88,20 +72,17 @@
           ;; A FALLIBLE action, so the emitted arm binds `r` as well as `v`; a
           ;; safe one emits no bound check and would leave `r` unwitnessed.
           (make-field-action-node 'bump 'increment '(count) 'test 'reject #f)
-          ;; Its true leg went straight to `done` until Milestone 5 Slice ②
-          ;; threaded the callback node in front of it. `done` is a STOP and not
-          ;; a finish for the reason that predates both: §16.2:908 rejects a
-          ;; byte-reachable zero-width node targeting a finish terminal, which
-          ;; this fixture ran into on its first draft.
+          ;; Its true leg reaches `done` through the callback node. `done` is a
+          ;; STOP and not a finish because the verifier rejects a
+          ;; byte-reachable zero-width node targeting a finish terminal.
           (make-field-branch-node 'test 'zero '(count) 'note-it 'acc #f)
           ;; A REQUIRED event callback, so the emitted arm renders `#f` for the
           ;; default target and an empty branch map -- the ordinary event shape.
           ;; Its pause continuation is the ERROR node and not the stop: a parser
-          ;; parked at a callback resumes on that one edge (§13:812), so a stop
-          ;; there is an EOF path reaching a stop terminal and §16.2:909 rejects
-          ;; it. Found by building this fixture.
+          ;; parked at a callback resumes on that one edge, so a stop there is
+          ;; an EOF path reaching a stop terminal, which the verifier rejects.
           (make-callback-node 'note-it 'note 'done '() 'reject #f)
-          ;; Slice ③'s INPUT-READING arm. Reached from the branch's false leg so
+          ;; The INPUT-READING arm. Reached from the branch's false leg so
           ;; the fixture keeps a single entry; base 16 because that arm renders
           ;; the three-range `cond`, which is where `d` is bound.
           (make-integer-accumulate-node 'acc 'count 16 'acc
@@ -110,27 +91,27 @@
           ;; edge in this fixture with nothing else on it. `sread` consumes so
           ;; the span has a nonempty payload to close over; `send`'s successor is
           ;; a DISPATCH and not the stop, because a span end is a parked state
-          ;; (§16.2:909) and continuing it straight into a stop is exactly the
-          ;; shape this slice taught the verifier to reject.
+          ;; and continuing it straight into a stop is a shape the verifier
+          ;; rejects.
           (make-span-start-node 'sopen 'body 'sread #f)
           (make-byte-dispatch-node 'sread
             (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'send 'reexecute) #f))
             ;; Its OWN error terminal. The shared `reject` is reached from
             ;; outside the span with no span open, so routing this EOF there
             ;; joins `(active body)` with `none` and the machine is rejected for
-            ;; an inconsistent merge -- found by building it.
+            ;; an inconsistent merge.
             (make-edge 'sread 'advance) 'rej2 #f)
           (make-span-end-node 'send 'body 'sdone #f)
-          ;; The twelfth arm, on `sdone`'s fallback. Its continuation is the
+          ;; The pause arm, on `sdone`'s fallback. Its continuation is the
           ;; ERROR node and not the stop, for the reason the callback node above
           ;; records: a parser parked at a pause resumes on that one edge, so a
-          ;; stop there is an EOF path reaching a stop terminal (§16.2:909).
+          ;; stop there is an EOF path reaching a stop terminal.
           (make-byte-dispatch-node 'sdone
             (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'cbody 'advance) #f))
             (make-edge 'pz 'reexecute) 'fin #f)
-          ;; The thirteenth arm (Milestone 6 Slice ①), on `sdone`'s byte, after
-          ;; the span has closed: it consumes `count` bytes in bulk and is the one
-          ;; arm that binds `n`, the local this slice adds to reserved-member-3.
+          ;; The counted-consume arm, on `sdone`'s byte, after the span has
+          ;; closed: it consumes `count` bytes in bulk and is the one arm that
+          ;; binds `n`.
           (make-counted-consume-node 'cbody 'count 'done #f #f)
           (make-pause-node 'pz 'reject #f)
           (make-finish-node 'fin #f)
@@ -149,21 +130,18 @@
 ;; those are DATA the emitted body carries, not identifiers it binds, and a
 ;; caller binding may legitimately equal one of them.
 ;;
-;; *** `case` CLAUSE DATUMS are skipped too, and Milestone 5 Slice ② is what
-;; found it. *** They are data by exactly the argument the paragraph above
-;; makes: `case` compares them with `eqv?` against literals and binds nothing,
-;; so a clause datum equal to a caller's name cannot capture it. They are
-;; skipped explicitly rather than by the quote rule only because `case` does not
-;; write them inside a `quote`. Before this, the emitted `case` over numeric
-;; state ids and bytes made the gap invisible -- numbers are not symbols -- and
-;; the callback arm's `(case (car o) ((goto) ...) ((pause) ...))` is the first
-;; emitted `case` whose datums are symbols. (Measured on the pre-slice goldens:
-;; every emitted `case` was over NUMBERS -- state ids and byte values.)
+;; *** `case` CLAUSE DATUMS are skipped too. *** They are data by exactly the
+;; argument the paragraph above makes: `case` compares them with `eqv?` against
+;; literals and binds nothing, so a clause datum equal to a caller's name cannot
+;; capture it. They are skipped explicitly rather than by the quote rule only
+;; because `case` does not write them inside a `quote`. An emitted `case` over
+;; numeric state ids and bytes cannot show the gap -- numbers are not symbols
+;; -- but the callback arm's `(case (car o) ((goto) ...) ((pause) ...))` has
+;; symbol datums.
 ;;
-;; Reserving `goto` and `pause` instead would have forbidden two perfectly good
-;; OUTPUT BINDINGS -- reserved-member-3 is checked by `validate-binding` against
-;; the caller's binding symbol and against nothing else; an earlier draft of this
-;; paragraph said "machine names", which no reserved-member list gates.
+;; Reserving `goto` and `pause` instead would forbid two perfectly good OUTPUT
+;; BINDINGS -- reserved-member-3 is checked by `validate-binding` against the
+;; caller's binding symbol and against nothing else.
 ;;
 ;; The KEY expression and every clause BODY are still walked, which is what
 ;; keeps that arm's own `o` in the measurement: it appears only inside
@@ -183,7 +161,8 @@
 
 (define observed (symbols-outside-quote datum '()))
 
-;; Three subtractions the design names, and a fourth it does not.
+;; The subtractions: the (rnrs) environment, the runtime environment, the
+;; binding and machine name, and the emitted file's structural names.
 ;;
 ;; MEASURED, not assumed: (rnrs) does NOT bind `library`, `import` or `export`
 ;; as identifiers -- they survive the first subtraction. Neither does it bind
@@ -272,18 +251,13 @@
         ;; parameter been named that, the first subtraction above would have
         ;; swallowed it and its membership could never be exercised.
         ;;
-        ;; *** The list grows with the slices, and Slice ③ found it had not. ***
-        ;; It said "the three locals THIS SLICE added" and still named Slice ①a's
-        ;; three; ② added `v` and `r` to reserved-member-3 and made the fixture
-        ;; render them, but never named them here, so nothing failed when a
-        ;; later edit could have dropped either. ③ adds `d` and names all six,
-        ;; and the case is renamed so the next slice inherits the obligation
-        ;; rather than a claim about one slice.
-        ;; Milestone 5 Slice ①a adds `psr` and `cbv`, emitted `exec`'s eighth and
-        ;; ninth parameters (decision 0025 point 3), and inherits that obligation
-        ;; as intended: eight names, and the sentinel counts what it iterates.
-        ;; Milestone 5 Slice ② adds `o`, the callback arm's outcome binding, and
-        ;; the fixture gains a callback node so it is actually rendered: nine.
+        ;; The list names reserved-member-3's arm- and parameter-specific
+        ;; locals: `fieldv`, `errs`, `pk`; `v` and `r` (the field arms); `d` (the
+        ;; accumulate arm); `o` (the callback arm's outcome binding); `psr` and
+        ;; `cbv` (emitted `exec`'s eighth and ninth parameters); `n` (the
+        ;; counted-consume arm). A local added to reserved-member-3 is added
+        ;; here too, and the fixture made to render it; the sentinel counts
+        ;; what it iterates.
         (let ((seen 'seed) (n 0))
           (set! seen '())
           (for-each (lambda (s)

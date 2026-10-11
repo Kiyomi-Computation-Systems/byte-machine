@@ -1,11 +1,10 @@
-;;; D6 (parent §22.9, §20) over the Milestone 11 Slice ① keyword-table machine:
-;;; deterministic emission proved against a committed golden, and the emitted
-;;; library's keyword walks proved directly. The SEVENTH golden, on the counted
-;;; golden's reasoning: a keyword-table node renders an arm no other golden
-;;; contains -- decision 0044's compact table datum (encoder tag 15) walked by
-;;; `byte-machine-keyword-step/v1`, with the resumable compound `current` and the
-;;; per-table fold byte -- so a determinism claim about emission that excluded it
-;;; would be a claim about the other six machines.
+;;; Deterministic emission of the keyword-table machine, proved against a
+;;; committed golden, and the emitted library's keyword walks proved directly.
+;;; A keyword-table node renders an arm no other golden contains -- the compact
+;;; table datum (encoder tag 15) walked by `byte-machine-keyword-step/v1`, with
+;;; the resumable compound `current` and the per-table fold byte -- so a
+;;; determinism claim about emission that excluded it would be a claim about the
+;;; other machines only.
 ;;;
 ;;; The case-INSENSITIVE fixture is the golden, because it is the strictly richer
 ;;; render: it carries the fold datum the case-sensitive table omits, and its

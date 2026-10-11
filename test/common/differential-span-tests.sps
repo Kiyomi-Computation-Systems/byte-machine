@@ -1,38 +1,36 @@
-;;; interpreter ≡ generated over the two span kinds (Milestone 5 Slice ③;
-;;; parent §14:830-843, §19.3:1024, §22.4:1268-1271).
+;;; interpreter ≡ generated over the two span kinds.
 ;;;
-;;; Slice ② compared what a callback ANSWERS. A span callback answers the same
-;;; three things (§13:812), so what is new here is what it is HANDED: a range of
-;;; the caller's bytevector, chosen by rules that live in three different places
-;;; -- the span end (§14:831, which since decision 0042 delivers even an empty
-;;; fragment once), the feed boundary (§14:833) and the empty-fragment suppression
-;;; that still governs the flush (§14:834). Every one of those rules can be
-;;; wrong in one lane and right in the other, and none of them is visible in a
-;;; parser result: two lanes can agree on `(stopped 5 5 5 #f stopped)` while
-;;; delivering different bytes to the application.
+;;; The callback differential compares what a callback ANSWERS. A span callback
+;;; answers the same three things, so what is new here is what it is HANDED: a
+;;; range of the caller's bytevector, chosen by rules that live in three
+;;; different places -- the span end (which delivers even an empty fragment
+;;; once), the feed boundary, and the empty-fragment suppression that governs
+;;; the flush. Every one of those rules can be wrong in one lane and right in
+;;; the other, and none of them is visible in a parser result: two lanes can
+;;; agree on `(stopped 5 5 5 #f stopped)` while delivering different bytes to
+;;; the application.
 ;;;
 ;;; So the compared object here is the FRAGMENT TRACE -- one recording closure
 ;;; per lane, each with its own accumulator, each copying the slice inside the
-;;; callback's dynamic extent (§13:799 permits exactly that, and §28:1725
+;;; callback's dynamic extent (the callback contract permits exactly that, and
 ;;; forbids the runtime from retaining the bytevector, so a trace that did not
 ;;; copy would be reading whatever the next feed put there).
 ;;;
-;;; Task 5's six rules, one group each:
-;;;   a nonempty fragment at the span end          §14:831
-;;;   an empty one delivered once                  §14:831 amended, decision 0042
-;;;   a flush at a feed boundary, span still open  §14:833-834
-;;;   a pause DURING the flush                     §14:837
-;;;   a pause between the span-end substeps        §14:838, §14:841
-;;;   an error with a span open                    §14:839
+;;; Six rules, one group each:
+;;;   a nonempty fragment at the span end
+;;;   an empty one delivered once
+;;;   a flush at a feed boundary, span still open
+;;;   a pause DURING the flush
+;;;   a pause between the span-end substeps
+;;;   an error with a span open
 ;;;
-;;; The oracle over §22.5's schedule list is Task 6's. This file is the
-;;; both-lanes fixture the plan puts BEFORE it: without it, a lowering defect
-;;; would first be seen by a test whose own schedule table is the thing under
-;;; construction.
+;;; The oracle over the schedule list follows them. The fixed-schedule groups
+;;; come first so that a lowering defect is seen against one literal schedule,
+;;; not first by a test whose own schedule table is also under test.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness)
-        ;; `error-state-id` too: §12.7:777 keeps the id out of the projection and
-        ;; still requires one, so the only way to assert it is beside.
+        ;; `error-state-id` too: the projection leaves the id out and an id is
+        ;; still required, so the only way to assert it is beside.
         (byte-machine test error-projection)
         (byte-machine graph) (byte-machine verify)
         (byte-machine interpret) (byte-machine compile) (byte-machine runtime))
@@ -50,16 +48,16 @@
 ;;
 ;; Four verifier rules shaped this graph, and each was found by building it:
 ;;
-;;   - `body`'s Z case REEXECUTES. A span end emits `[mark,cursor)` (§14:831), so
+;;   - `body`'s Z case REEXECUTES. A span end emits `[mark,cursor)`, so
 ;;     consuming Z on the way in would put the delimiter inside the payload.
-;;   - `body`'s eof-target is an ERROR and not `fin`: §14:843 rejects reaching a
-;;     successful finish with a span active, and this is pass 7's
-;;     `span-active-at-exit`. That the error terminal is ACCEPTED there is
-;;     decision 0023 item 5's kept distinction doing work.
+;;   - `body`'s eof-target is an ERROR and not `fin`: reaching a successful
+;;     finish with a span active is rejected, and this is pass 7's
+;;     `span-active-at-exit`. That the error terminal is ACCEPTED there is the
+;;     verifier keeping finish distinct from error.
 ;;   - nothing between `sopen` and `sclose` may pause or invoke an event or
-;;     decision callback (§13:826) -- only the span's own data callback may --
-;;     so `body` is a bare dispatch node.
-;;   - `fin` is on the EOF side only (§16.2:908).
+;;     decision callback -- only the span's own data callback may -- so `body`
+;;     is a bare dispatch node.
+;;   - `fin` is on the EOF side only.
 (define (span-machine complete-cb)
   (make-machine 'spanm 'start '()
     ;; *** THE COMPLETION CALLBACK IS DECLARED FIRST, and that ordering is the
@@ -81,7 +79,7 @@
     ;; own lifecycle -- so a fixture reaching spans only through `parser-feed!`
     ;; leaves half the interpreted span implementation unrun. This span opens ON
     ;; the EOF chain, so its mark is 0 and its span end delivers one empty `[0,0)`
-    ;; fragment (decision 0042); `parser-finish!`'s re-anchor to 0 makes a carried
+    ;; fragment; `parser-finish!`'s re-anchor to 0 makes a carried
     ;; span reach the same `from == to == 0`.
     (list (make-byte-dispatch-node 'start
             (list (make-byte-case (make-exact-byte-matcher 65)
@@ -106,10 +104,10 @@
     'default-eof #f))
 
 ;; TWO machines, because the emitter renders TWO span-completion arms and only
-;; one of them is a call. §10.4:516 makes the completion callback optional at the
+;; one of them is a call. The completion callback is optional at the
 ;; DECLARATION, and an absent one lowers to a substep that closes the span and
-;; jumps -- a shape no test would otherwise load, which is the failure mode
-;; Slice ② named: an emitted arm nothing executes.
+;; jumps -- a shape no test would otherwise load: an emitted arm nothing
+;; executes.
 (define m-full (span-machine 'ondone))
 (define m-bare (span-machine #f))
 (define v-full (verify-machine m-full))
@@ -131,10 +129,10 @@
 
 (define (bytes . bs) (u8-list->bytevector bs))
 (define (frag bv from to)
-  ;; §13:799: the callback may copy within its dynamic extent, and must if it
-  ;; wants the bytes afterwards. THIS is that copy -- the trace is a list of
-  ;; fresh bytevectors, never of (bv from to) triples, because a triple would
-  ;; still be describing storage the runtime is forbidden to keep (§28:1725).
+  ;; The callback may copy within its dynamic extent, and must if it wants the
+  ;; bytes afterwards. THIS is that copy -- the trace is a list of fresh
+  ;; bytevectors, never of (bv from to) triples, because a triple would still
+  ;; be describing storage the runtime is forbidden to keep.
   (let ((out (make-bytevector (- to from))))
     (let loop ((i from))
       (if (>= i to) out
@@ -157,9 +155,8 @@
        done-answer)
      (lambda () (reverse trace)))))
 
-;; Each lane gets its OWN recorder: Slice ②'s plan asked for one closure shared
-;; by both parsers, which yields one interleaved list with nothing to compare it
-;; to. The correction is carried forward here rather than rediscovered.
+;; Each lane gets its OWN recorder: one closure shared by both parsers would
+;; yield one interleaved list with nothing to compare it to.
 (define (make-lane cm answers done-answer with-complete)
   (let* ((r (recorder answers done-answer))
          (p (make-parser cm
@@ -178,12 +175,9 @@
 ;; tuples plus the fragment trace and the parser's final active span.
 (define (run lane script)
   (let ((p (car lane)) (trace-of (cadr lane)))
-    ;; No step bound. One stood here as `(> n 12)` with a comment saying it
-    ;; guarded the mutation suite against a hanging mutant; the final review
-    ;; found it could not fire -- every script in this file is a literal of at
-    ;; most three steps -- and could not do the job either, since a mutant that
-    ;; hangs does so INSIDE `parser-feed!`, which no counter out here can
-    ;; interrupt.
+    ;; No step bound: every script in this file is a literal of at most three
+    ;; steps, and a mutant that hangs does so INSIDE `parser-feed!`, which no
+    ;; counter out here can interrupt.
     (let loop ((ss script) (out '()))
       (if (null? ss)
           (list (reverse out) (trace-of) (parser-active-span p))
@@ -191,10 +185,10 @@
                  (r (case (car s)
                       ((feed) (let ((b (cadr s)))
                                 (parser-feed! p b 0 (bytevector-length b))))
-                      ;; A SUB-slice, so `start` is not always 0. §14:833 makes
-                      ;; the mark a slice offset and §14:833 re-anchors it to the
-                      ;; next feed's `start`; with every feed starting at 0, that
-                      ;; re-anchor and a bare `0` are the same program.
+                      ;; A SUB-slice, so `start` is not always 0. The mark is a
+                      ;; slice offset, re-anchored to the next feed's `start`;
+                      ;; with every feed starting at 0, that re-anchor and a
+                      ;; bare `0` are the same program.
                       ((feed-slice) (parser-feed! p (cadr s) (caddr s) (cadddr s)))
                       ((finish) (parser-finish! p))
                       ((resume) (parser-resume! p) #f)
@@ -247,8 +241,8 @@
           (check "the fragment excludes the opener and the delimiter"
                  (not (equal? (car (cadr (car r))) (bytes 65 98 99 100 90)))))))))
 
-;; §14:834 amended by decision 0042: a span that opens and closes having
-;; delivered nothing is now OBSERVABLE -- its data callback fires once with an
+;; A span that opens and closes having delivered nothing is OBSERVABLE -- its
+;; data callback fires once with an
 ;; empty range -- so a consumer can tell "an optional field was present and
 ;; empty" from "this field never happened". The suppression is kept only at the
 ;; flush and the EOF-side span end (the groups below and "a span on the EOF
@@ -267,7 +261,7 @@
                        (cadr (cadr r)) (list (bytes) 'complete))
           (check-equal "and the span is inactive afterwards" (caddr (car r)) #f))))))
 
-;; The two hazards decision 0042 §5 names, both by value: an empty FINAL fragment
+;; Two hazards of empty-span delivery, both by value: an empty FINAL fragment
 ;; of a NONEMPTY span is suppressed (the naive `> from to` fix would announce it),
 ;; and a flush that finds nothing accumulated delivers nothing (and does not set
 ;; the delivered flag, so a genuinely empty span split across the boundary still
@@ -278,7 +272,7 @@
       (lambda ()
         ;; feed 1 flushes `bc`; feed 2 closes the span on its first byte with
         ;; from==to, but the span has delivered, so the empty final fragment is
-        ;; suppressed. Criterion 2.
+        ;; suppressed.
         (let ((r (both (list (list 'feed (bytes 65 98 99)) (list 'feed (bytes 90)))
                        '() callback-continue)))
           (check-equal "the lanes agree" (caddr r) #t)
@@ -287,7 +281,7 @@
     (harness-case "a flush that finds nothing delivers nothing, and the empty span still delivers once"
       (lambda ()
         ;; feed 1 opens the span and ends with nothing accumulated: the flush
-        ;; finds from==to and delivers nothing (criterion 3) and must NOT set the
+        ;; finds from==to and delivers nothing and must NOT set the
         ;; delivered flag. feed 2 closes the still-empty span, so the span END
         ;; delivers the one empty fragment -- a genuinely empty span split across
         ;; the boundary.
@@ -328,7 +322,7 @@
                        (car (car (car r))) '(need-input 3 3 3 #f ready)))))
     (harness-case "the span is still active between the two feeds"
       (lambda ()
-        ;; §14:833's "remains logically open", asserted where it is observable:
+        ;; The span "remains logically open", asserted where it is observable:
         ;; after the flush and before the close. A lane that closed the span at
         ;; the boundary would still produce the same two fragments.
         (let* ((lane (make-lane cm-full-ref '() callback-continue #t))
@@ -339,7 +333,7 @@
           (check-equal "generated" (caddr mid) 'payload))))
     (harness-case "a fragment is never delivered twice across the boundary"
       (lambda ()
-        ;; The mark re-anchor (§14:833) is what makes this true, and a count
+        ;; The mark re-anchor is what makes this true, and a count
         ;; cannot see it: re-delivering `bc` would give three fragments, but so
         ;; would splitting `bcd` differently. The SEQUENCE is the oracle.
         (let ((r (both (list (list 'feed (bytes 65 98 99))
@@ -369,18 +363,18 @@
   (lambda ()
     (harness-case "the feed reports error, and the flush's own arm builds it"
       (lambda ()
-        ;; *** THE THIRD OUTCOME OF THE FLUSH, and nothing in the tree executed
-        ;; it until the final review said so. *** `span-boundary-flush!` has
+        ;; *** THE THIRD OUTCOME OF THE FLUSH. *** `span-boundary-flush!` has
         ;; goto, pause and failure arms; the two above drive the first two, and
-        ;; the failure arm could be deleted with the suite green.
+        ;; without this case the failure arm could be deleted with the suite
+        ;; green.
         ;;
         ;; It is the ONE callback-domain error in the tree that no machine node
         ;; produces -- the flush is not a machine step -- so the node name comes
         ;; from `parser-state-name` and the state id from the data callback's
-        ;; SLOT. The §22.4:1271 projection carries domain, code, reason, node,
-        ;; OFFSET and kind, so the slot is not in it; what this row pins is that
-        ;; the parked node's own name and §12.7:770's `boundary` survive a flush,
-        ;; and the state id is asserted per lane below.
+        ;; SLOT. The error projection carries domain, code, reason, node, OFFSET
+        ;; and kind, so the slot is not in it; what this row pins is that the
+        ;; parked node's own name and the `boundary` position kind survive a
+        ;; flush, and the state id is asserted per lane below.
         (let ((r (both (list (list 'feed (bytes 65 98 99)))
                        (list (make-callback-failure 'flush-said-no #f))
                        callback-continue)))
@@ -389,16 +383,16 @@
                        (cadr (car r)) (list (bytes 98 99)))
           (check-equal "and the feed is an error at the boundary"
                        (car (car (car r)))
-                       ;; Decision 0056: the failure leaves `payload` open, and the
-                       ;; flush HANDED `bc` to the callback that failed -- so the
-                       ;; error names the span with nothing withheld, [3,3).
+                       ;; The failure leaves `payload` open, and the flush HANDED
+                       ;; `bc` to the callback that failed -- so the error names
+                       ;; the span with nothing withheld, [3,3).
                        '(error 3 3 3 (callback flush-said-no "callback failure"
                                       body 3 boundary payload 3)
                          error)))))
     (harness-case "the state id it carries is the DATA callback's slot, in both lanes"
       (lambda ()
-        ;; §12.7:777 excludes the id from the cross-lane comparison and still
-        ;; requires an integer. Here it is a value: slot 1, because this lane's
+        ;; The projection excludes the id from the cross-lane comparison, and
+        ;; the id must still be an integer. Here it is a value: slot 1, because this lane's
         ;; machine declares the COMPLETION callback first -- so a lane hard-coding
         ;; 0 answers the wrong integer and this is the only check that sees it.
         (let ((ids (map (lambda (cm)
@@ -443,8 +437,7 @@
         ;; *** THE PAIR, NOT EITHER HALF. *** The status assertion above is
         ;; printed byte-for-byte by a DIFFERENT defect -- a flush that never runs
         ;; at all also reports `need-input` here -- so on its own it does not
-        ;; attribute the catch. Measured, and it is what the final review found.
-        ;; The two part on the FRAGMENT: a flush that ran and mis-reported its
+        ;; attribute the catch. The two part on the FRAGMENT: a flush that ran and mis-reported its
         ;; status still delivered `bc`, and one that never ran delivered nothing.
         (let* ((lane (make-lane cm-full-ref (list callback-pause) callback-continue #t))
                (r (run lane (list (list 'feed (bytes 65 98 99))))))
@@ -453,7 +446,7 @@
                        (list (list (bytes 98 99)) '(paused 3 3 3 #f paused-feed))))))
     (harness-case "the flush pause is not re-delivered on the next feed"
       (lambda ()
-        ;; §14:837's "resume begins with the next supplied input". A lane that
+        ;; After a flush pause, resume begins with the next supplied input. A lane that
         ;; re-anchored the mark to the OLD slice's offset would re-emit `bc`, or
         ;; emit a slice of the new bytevector nobody asked for.
         (let ((r (both (list (list 'feed (bytes 65 98 99))
@@ -480,8 +473,8 @@
                        (car (car (car r))) '(paused 4 4 4 #f paused-feed)))))
     (harness-case "the span is STILL ACTIVE while parked between the substeps"
       (lambda ()
-        ;; §14:841 makes the span inactive *before* the completion callback and
-        ;; not before the pause, so this is the one moment a paused parser
+        ;; The span becomes inactive *before* the completion callback and not
+        ;; before the pause, so this is the one moment a paused parser
         ;; answers a span name. Both lanes, because the two park on different
         ;; things -- a compound name here, a numbered internal state there.
         (let* ((la (make-lane cm-full-ref (list callback-pause) callback-continue #t))
@@ -492,8 +485,8 @@
           (check-equal "generated" (caddr b) 'payload))))
     (harness-case "the completion substep pauses, and the span is already inactive"
       (lambda ()
-        ;; §14:841: "Before invoking the completion callback, execution makes the
-        ;; span inactive." A lane that closed the span AFTER the callback would
+        ;; Before invoking the completion callback, execution makes the span
+        ;; inactive. A lane that closed the span AFTER the callback would
         ;; be caught only here -- every fragment and every tuple is identical.
         (let* ((la (make-lane cm-full-ref '() callback-pause #t))
                (a (run la (list (list 'feed (bytes 65 98 99 100 90)))))
@@ -508,22 +501,21 @@
   (lambda ()
     (harness-case "no final fragment, no completion, earlier fragments observable"
       (lambda ()
-        ;; All three clauses of §14:839 in one script: `bc` flushed at the feed
-        ;; boundary, then EOF with the span still open takes `body`'s eof-target
-        ;; into the error terminal.
+        ;; All three clauses of the error-with-a-span-open rule in one script:
+        ;; `bc` flushed at the feed boundary, then EOF with the span still open
+        ;; takes `body`'s eof-target into the error terminal.
         (let ((r (both (list (list 'feed (bytes 65 98 99)) (list 'finish))
                        '() callback-continue)))
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "only the flushed fragment" (cadr (car r)) (list (bytes 98 99)))
-          ;; §12.7:768's `eof` position kind, and the node named is the ERROR
-          ;; terminal the EOF chain reached -- `body` routed there rather than
-          ;; raising there. The projection carries the declaration's CATEGORY
-          ;; (§9.4), not its name, which is why `truncated` appears only as the
-          ;; reason text.
+          ;; The `eof` position kind, and the node named is the ERROR terminal
+          ;; the EOF chain reached -- `body` routed there rather than raising
+          ;; there. The projection carries the declaration's CATEGORY, not its
+          ;; name, which is why `truncated` appears only as the reason text.
           (check-equal "the finish is the truncation error"
                        (cadr (car (car r)))
-                       ;; Decision 0056: the error abandons `payload`, whose bytes
-                       ;; the flush already handed over -- nothing withheld, [3,3).
+                       ;; The error abandons `payload`, whose bytes the flush
+                       ;; already handed over -- nothing withheld, [3,3).
                        '(error 3 0 3 (machine eof "span truncated" trunc 3 eof payload 3)
                          error)))))
     (harness-case "an error mid-slice flushes nothing either"
@@ -559,8 +551,7 @@
         ;; it once, exactly as a feed-side empty span does. The generated lane
         ;; reaches this through the SAME emitted span-end arm it uses in a feed
         ;; (parser-finish-v2! runs `exec` with finish? and cursor 0), so both
-        ;; lanes deliver here without any emitted-text change (decision 0042
-        ;; item 4). A span CARRIED from a feed into finish is the different shape:
+        ;; lanes deliver here without any emitted-text change. A span CARRIED from a feed into finish is the different shape:
         ;; its mark is uncoordinated, so `from > to` and the step's `from == to`
         ;; guard suppresses -- not reachable in this machine, whose only EOF-chain
         ;; span opens at finish.
@@ -578,7 +569,7 @@
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "paused-finish, then finished"
                        (map car (car (car r))) '(paused finished))
-          ;; §13:814: the completion event was committed before the pause, so
+          ;; The completion event was committed before the pause, so
           ;; resuming must not deliver it again; the empty data fragment was
           ;; delivered on the first finish and is not re-delivered either.
           (check-equal "the empty fragment then the completion, each once"
@@ -588,8 +579,7 @@
   (lambda ()
     (harness-case "a parser parked mid-span answers #f after a reset, in both lanes"
       (lambda ()
-        ;; F2: the reset comment said span state "still does not exist". It does
-        ;; now, and §12.5:739 lists it FIRST among what a full reset clears.
+        ;; Span state is the first thing a full reset clears.
         (let* ((la (make-lane cm-full-ref '() callback-continue #t))
                (a (run la (list (list 'feed (bytes 65 98 99)))))
                (lb (make-lane cm-full-gen '() callback-continue #t))
@@ -617,17 +607,16 @@
 
 
 
-;; --- Task 6: the oracle (§22.4:1269, §22.5:1286-1289, §25:1590) -------------
+;; --- the schedule oracle -----------------------------------------------------
 ;;
-;; The groups above assert what ONE schedule does. §22.5 asks two further
-;; questions, and they pull in opposite directions:
+;; The groups above assert what ONE schedule does. Two further questions pull
+;; in opposite directions:
 ;;
 ;;   - for the SAME schedule, the two lanes must have identical fragment
-;;     boundaries (§22.5:1285) -- exact ranges and contents (§22.4:1269);
-;;   - ACROSS schedules, they must not. §22.5:1287 calls fragment boundaries
-;;     "intentionally schedule-dependent" and §14:836 tells consumers not to read
-;;     meaning into them. What is invariant is the trace COALESCED per logical
-;;     span.
+;;     boundaries -- exact ranges and contents;
+;;   - ACROSS schedules, they must not. Fragment boundaries are intentionally
+;;     schedule-dependent, and consumers are told not to read meaning into
+;;     them. What is invariant is the trace COALESCED per logical span.
 ;;
 ;; So a test that pinned raw boundaries across schedules would assert the
 ;; opposite of the contract. This file asserts the coalesced trace is invariant
@@ -638,9 +627,10 @@
 (define padded (bytes 200 201 65 98 99 100 90 202))
 (define nothing (make-bytevector 0))
 
-;; §22.5's list, over the same five logical bytes. The shape is Slice ②'s, which
-;; is deliberate: a second, differently-written schedule table would be a second
-;; thing to keep in step with §22.5 rather than one.
+;; The schedule list, over the same five logical bytes. The shape is
+;; `differential-callback-tests.sps`'s, deliberately: a second,
+;; differently-written schedule table would be a second thing to keep in step
+;; with the schedule list rather than one.
 (define (span-splits)
   (let loop ((k 0) (acc '()))
     (if (> k 5) (reverse acc)
@@ -664,20 +654,20 @@
    ;; from a zero-length one, and the one that lands a flush on `[k,k)`
    (list (list pay 0 3) (list pay 3 3) (list pay 3 5))
    ;; nonzero start/end into a bytevector carrying unrelated prefix and suffix
-   ;; bytes: §22.5's fourth bullet, and the schedule that catches a lane reading
-   ;; from index 0 regardless of `start`
+   ;; bytes: the schedule that catches a lane reading from index 0 regardless
+   ;; of `start`
    (list (list padded 2 7))
    (list (list padded 2 4) (list padded 4 7))
    (list (list padded 2 3) (list padded 3 5) (list padded 5 7))
-   ;; deterministic multi-split schedules, written out: §22.5's "deterministic
-   ;; random" bullet is about reproducibility, and a literal is the most
+   ;; deterministic multi-split schedules, written out: a "deterministic
+   ;; random" schedule is about reproducibility, and a literal is the most
    ;; reproducible form there is.
    (list (list pay 0 1) (list pay 1 2) (list pay 2 3) (list pay 3 4) (list pay 4 5))
    (list (list pay 0 0) (list pay 0 2) (list nothing 0 0) (list pay 2 2) (list pay 2 5))))
 (define (all-schedules) (append (span-splits) (span-pairs) span-others))
 
-;; One recording closure per lane, each with its own accumulator -- Slice ②'s
-;; correction, which is not optional here: the drivers below alternate the two
+;; One recording closure per lane, each with its own accumulator -- not
+;; optional here: the drivers below alternate the two
 ;; parsers, so a shared accumulator would interleave them and a lane-swap defect
 ;; would be invisible.
 (define (record-span cm slices answers done-answer)
@@ -690,8 +680,8 @@
             (parser-result-stream-offset r)
             (and (parser-result-error r) (parser-error-code (parser-result-error r)))))))
 
-;; §22.5:1286's "normalized semantic trace that coalesces fragments belonging to
-;; the same logical span". One concatenation per logical span, emitted even when
+;; The normalized semantic trace, coalescing fragments belonging to the same
+;; logical span. One concatenation per logical span, emitted even when
 ;; it is empty -- the normalized form has to be TOTAL, or a span that produced
 ;; no fragment in one schedule and one empty fragment in another would normalize
 ;; to two different shapes and the invariance below would be about nothing.
@@ -759,7 +749,7 @@
                        baseline (list (bytes 98 99 100) 'complete)))))
     (harness-case "the RAW trace is schedule-dependent, which is the contract"
       (lambda ()
-        ;; §22.5:1287 and §14:836. Without this, "coalesced is invariant" would
+        ;; Without this, "coalesced is invariant" would
         ;; also hold of an implementation that never split a fragment at all --
         ;; and a test asserting raw boundaries across schedules would be
         ;; asserting the opposite of what the spec says.
@@ -780,32 +770,25 @@
                        (list (bytes 98 99) (bytes 100) 'complete)))))))
 
 
-;; --- Task 6 step 3: every invalid span topology, enumerated as data ---------
+;; --- every invalid span topology, enumerated as data ------------------------
 ;;
-;; §25:1590's exit criterion is "every invalid span topology is rejected" -- a
-;; UNIVERSAL over a set the parent plan never enumerates. Slice ⓪'s matrix is
-;; the honest shape for that: write the set down, DERIVE each verdict from
-;; §14:843 and §16.2:899 before running, and let the count be the sentinel. The
-;; bounded invalid-machine generator is Milestone 7's, and this must not quietly
-;; become it.
+;; "Every invalid span topology is rejected" is a UNIVERSAL over a set nothing
+;; else enumerates. A matrix is the honest shape for that: write the set down,
+;; DERIVE each verdict from the span rules before running, and let the count be
+;; the sentinel.
 ;;
-;; *** 2026-09-11, Milestone 7 Slice ④ (design §4.11 item 4, closing note): the
-;; bounded invalid-machine generator now EXISTS -- the corruption catalogue and the
-;; independent oracle in property-rejections-tests.sps, over the generator's drawn
-;; span-bearing bases. This table did NOT become it and keeps its own job: it is a
-;; HAND-DERIVED census of span topologies with per-row verdicts derived from the
-;; spec before running (the "write the set down" shape §25:1590's universal wants),
-;; whereas the catalogue corrupts DRAWN machines one decision at a time and the
-;; oracle re-derives the graph rules. §25:1590 stays only PARTLY a universal (§4.11
-;; item 6): the catalogue rejects drawn span faults by edit but §4.6 keeps pass 7's
-;; span-state lattice outside the oracle, so this enumerated table remains the
-;; nearest thing to the universal and is not superseded.
+;; The bounded invalid-machine generator (the corruption catalogue and the
+;; independent oracle in property-rejections-tests.sps) is a different job: it
+;; corrupts DRAWN machines one decision at a time, its oracle re-derives the
+;; graph rules, and it keeps pass 7's span-state lattice outside that oracle.
+;; This table is a HAND-DERIVED census of span topologies with per-row verdicts
+;; derived before running, and is the nearest thing to the universal.
 ;;
 ;; Every row shares one skeleton so the graph plumbing cannot differ between
 ;; them: a one-byte dispatch consuming `A` into the row's head, a reject
 ;; terminal, and an `exit` dispatch whose EOF route is the finish -- which is
-;; where §16.2:908 wants a finish, and keeps the rows differing only in their
-;; span shape.
+;; where a finish belongs, and keeps the rows differing only in their span
+;; shape.
 (define (d1 name target eof-target)
   (make-byte-dispatch-node name
     (list (make-byte-case (make-exact-byte-matcher 65) (make-edge target 'advance) #f))
@@ -819,7 +802,7 @@
     ;; reaches the finish -- is per row: a row whose span ends at a stop or an
     ;; error never routes through it, and appending it anyway made those rows
     ;; report `unreachable-node` on top of the span verdict they were written to
-    ;; check. Measured, then narrowed.
+    ;; check.
     (append nodes (list (make-finish-node 'fin #f)
                         (make-error-node 'reject 'rejected #f)))
     'default-eof #f))
@@ -832,7 +815,7 @@
                   (verification-diagnostics (verify-machine (topo-machine spans nodes))))))
 
 ;; Each row is (NAME SPANS NODES EXPECTED-CODES DERIVATION). The expectation is
-;; written from the section named in the derivation, not from a run.
+;; written from the rule stated in the derivation, not from a run.
 (define topologies
   (list
    (list 'reentry one-span
@@ -911,7 +894,7 @@
    (list 'join-disagree one-span
          ;; Two byte edges into `mrg`: one through the span, one around it. The
          ;; lattice joins `(active payload)` with `none` and answers `top`,
-         ;; which decision 0029 item 2 makes a diagnostic at the join itself.
+         ;; which is reported as a diagnostic at the join itself.
          (list (make-byte-dispatch-node 'start
                  (list (make-byte-case (make-exact-byte-matcher 65)
                                        (make-edge 'op1 'advance) #f)
@@ -968,7 +951,7 @@
           (check "and some are expected to be rejected" (memq #f verdicts)))))
     (harness-case "all four span codes appear, and each is derived from its own rule"
       (lambda ()
-        ;; §16.2:899's four codes as a set. A table exercising three of them
+        ;; The four span codes as a set. A table exercising three of them
         ;; would satisfy every check above.
         (let ((codes '()))
           (for-each (lambda (r)
@@ -981,16 +964,17 @@
                        '(inconsistent-span-state invalid-span-state span-active-at-exit
                          span-active-at-pause)))))))
 
-;; --- Task 6 step 4: the error path (§14:839, §22.5:1289) --------------------
+;; --- the error path ----------------------------------------------------------
 
 (harness-group "the error path, per lane and across schedules (§14:839, §22.5:1289)"
   (lambda ()
     (harness-case "a truncated span delivers no completion, under every schedule"
       (lambda ()
-        ;; §14:839's second clause. The COMPLETION is the thing that must not
-        ;; appear -- fragments flushed at earlier boundaries stay observable, and
-        ;; how many of them there are is schedule-dependent, so counting them
-        ;; across schedules would assert the opposite of §22.5:1287.
+        ;; An error with a span open delivers no completion. The COMPLETION is
+        ;; the thing that must not appear -- fragments flushed at earlier
+        ;; boundaries stay observable, and how many of them there are is
+        ;; schedule-dependent, so counting them across schedules would assert
+        ;; the opposite of the contract.
         (let ((driven 0) (bad '()))
           (for-each
            (lambda (sl)
@@ -1015,7 +999,7 @@
           (check-equal "no schedule synthesizes a completion" bad '()))))
     (harness-case "acceptance, error category and absolute position agree across schedules"
       (lambda ()
-        ;; §22.5:1289 exactly: for malformed inputs these THREE are compared
+        ;; For malformed inputs these THREE are compared
         ;; across schedules, and the callback prefix is not -- a partial span may
         ;; have been flushed at a boundary in one schedule and not another.
         (let ((seen '()) (driven 0))
@@ -1038,8 +1022,7 @@
           (check-equal "five schedules driven" driven 5)
           (check-equal "one acceptance/category/position triple across all of them"
                        ;; `truncated` is the DECLARATION's name; the code a
-                       ;; parser error carries is its §9.4 CATEGORY, which is
-                       ;; what §22.5:1289 calls the error category.
+                       ;; parser error carries is its CATEGORY.
                        seen '((error 4 eof))))))
     (harness-case "and the callback PREFIX is schedule-dependent, which is why it is not compared"
       (lambda ()
@@ -1057,7 +1040,7 @@
                        (list (bytes 98) (bytes 99) (bytes 100))))))
     (harness-case "the success path delivers exactly one completion (§14:835)"
       (lambda ()
-        ;; The positive half of §14:839's first two clauses: what the error path
+        ;; The positive half of the error-path rule: what the error path
         ;; must NOT do, the success path must do exactly once, under every
         ;; schedule.
         (let ((driven 0) (bad '()))
@@ -1074,71 +1057,60 @@
           (check-equal "thirty-seven schedules driven" driven 37)
           (check-equal "exactly one completion in every one" bad '()))))))
 
-;; --- Milestone 5 Slice ④: the measured remainder of §25:1589's EOF and reset
-;; legs -----------------------------------------------------------------------
+;; --- EOF and reset: the shapes the groups above do not reach -----------------
 ;;
-;; `§25:1589` reads "fragment tests cover boundaries, pause, completion, error,
-;; EOF, and reset", and design §8 allocated four of those legs to Slice ③ and
-;; **EOF and reset to Slice ④**, saying the split is "how the milestone avoids
-;; each believing the other covered a leg".
-;;
-;; ③ then shipped an EOF group and a reset group anyway, and `record-span` drives
-;; `parser-finish!` on all thirty-seven schedules. So the question this slice had
-;; to answer was not "write the two legs" but "which SHAPES of them does nothing
-;; cover". Three, measured group by group against the file above:
+;; Fragment tests cover six legs: boundaries, pause, completion, error, EOF and
+;; reset. `record-span` drives `parser-finish!` on all thirty-seven schedules,
+;; and the groups above include an EOF group and a reset group, but three SHAPES
+;; of those two legs are reached by nothing above:
 ;;
 ;;   1. A span OPEN when `parser-finish!` is called, closed on the EOF chain.
-;;      Every EOF case above opens AND closes inside finish, so no test has had a
-;;      span whose fragments come from `parser-feed!` and whose completion comes
-;;      from `parser-finish!`. It is legal: `§14:843` forbids REACHING a
+;;      Every EOF case above opens AND closes inside finish, so none has a span
+;;      whose fragments come from `parser-feed!` and whose completion comes
+;;      from `parser-finish!`. It is legal: the verifier forbids REACHING a
 ;;      successful stop/finish with a span active, not entering finish with one
 ;;      open.
-;;   2. Reset while parked BETWEEN the span-end substeps. `§14:841` says that
-;;      park retains an internal completion-pending continuation; ③'s reset case
-;;      parks mid-span, which is a different state and a different continuation.
-;;   3. Reset of a POISONED parser with a span open. `§12.2:698` makes reset the
-;;      one operation a poisoned parser may run, and `parser-reset!` reaches
+;;   2. Reset while parked BETWEEN the span-end substeps. That park retains an
+;;      internal completion-pending continuation; the "reset clears span state"
+;;      case parks mid-span, which is a different state and a different
+;;      continuation.
+;;   3. Reset of a POISONED parser with a span open. Reset is the one operation
+;;      a poisoned parser may run, and `parser-reset!` reaches
 ;;      `byte-machine-span-close/v1` only after its `busy` guard.
 ;;
-;; *** WHERE EACH OF THE SIX LEGS LIVES. *** This mapping was written into Slice
-;; 4's commit message first, which is one end of a two-ended thing: the reader
-;; who needs it is looking at this file, not at `git log`.
+;; *** WHERE EACH OF THE SIX LEGS LIVES. ***
 ;;
 ;;   boundaries  "a feed boundary flushes and the span stays open (§14:833-834)"
 ;;               "the mark is a SLICE offset (§14:833)"
 ;;   pause       "a pause DURING the flush commits the fragment (§14:837)"
 ;;               "a pause between the span-end substeps (§14:838, §14:841)"
 ;;   completion  "a span end delivers [mark,cursor) and exactly one completion"
-;;               "an empty span delivers one empty fragment then the completion"  [10]
-;;               "an empty final fragment vs an empty span across a feed boundary" [10]
-;;               "a pause on the EMPTY span-end delivery"                 [10]
+;;               "an empty span delivers one empty fragment then the completion"
+;;               "an empty final fragment vs an empty span across a feed boundary"
+;;               "a pause on the EMPTY span-end delivery"
 ;;               "a span declaring no completion callback (§10.4:516)"
 ;;   error       "an error with a span open (§14:839)"
 ;;               "a FAILURE during the flush is a callback-domain error"
 ;;               "the error path, per lane and across schedules"
-;;   EOF         "a span on the EOF chain (§12.4:729, §14:831 amended)"    [3][10]
-;;               "a span open at finish, closed on the EOF chain"         [4]
-;;               "an empty span carried into finish delivers once"        [10]
-;;   reset       "reset clears span state (§12.5:739)"                    [3]
-;;               "reset while parked BETWEEN the span-end substeps"       [4]
-;;               "reset of a POISONED parser with a span open"            [4]
+;;   EOF         "a span on the EOF chain (§12.4:729, §14:831 amended)"
+;;               "a span open at finish, closed on the EOF chain"
+;;               "an empty span carried into finish delivers once"
+;;   reset       "reset clears span state (§12.5:739)"
+;;               "reset while parked BETWEEN the span-end substeps"
+;;               "reset of a POISONED parser with a span open"
 
-;; Gap 1 needs its own machine. `body`'s eof-target above is the `trunc` ERROR --
-;; which is what makes the truncated-span cases work -- so it cannot also be a
-;; span end. Written out rather than parameterised because the difference is a
+;; Shape 1 needs its own machine. `body`'s eof-target above is the `trunc` ERROR
+;; -- which is what makes the truncated-span cases work -- so it cannot also be
+;; a span end. Written out rather than parameterised because the difference is a
 ;; NODE, not a value: `span-machine`'s parameter is one optional callback and
 ;; everything else is shared, whereas this graph replaces an error terminal with
-;; a span end and adds a node. (An earlier version of this comment said the pair
-;; above was written out for the same reason and that a shared constructor would
-;; collapse two `FIND` sites. Both halves were false: `span-machine` IS
-;; parameterised, and this file is not a `FILE` in any `byte_machine_mutation`,
-;; so it has no `FIND` sites at all.)
+;; a span end and adds a node.
 ;;
 ;; The only difference from `span-machine` that matters is `body`'s eof-target:
 ;; `bclose`, a span end whose next is `fin`. Pass 7 accepts it because the span
 ;; is closed BEFORE the finish terminal, and `fin` is reached with the span
 ;; inactive down every one of its three routes -- which is the lattice meeting at
-;; a merge point (`0029`), not an accident of this graph.
+;; a merge point, not an accident of this graph.
 
 ;; ---------------------------------------------------------------------------
 ;; The escape catcher, in the shape `differential-callback-tests.sps` uses: on a
@@ -1192,7 +1164,7 @@
   (lambda ()
     (harness-case "the machine verifies clean"
       (lambda ()
-        ;; Stated first: `§14:843` rejects a span active at a successful finish,
+        ;; Stated first: the verifier rejects a span active at a successful finish,
         ;; and the whole point of this fixture is that closing it ON the EOF
         ;; chain is not that. A machine that failed here would make every case
         ;; below vacuous rather than red.
@@ -1201,11 +1173,11 @@
     (harness-case "the fragment comes from the feed and the completion from finish"
       (lambda ()
         ;; The shape nothing above reaches. `A b c` opens the span and leaves it
-        ;; open at the end of the feed, so `§14:833`'s boundary flush delivers
+        ;; open at the end of the feed, so the boundary flush delivers
         ;; `bc` and sets the span's delivered flag; `parser-finish!` then runs
         ;; `bclose`, whose own fragment is `[0,0)` (the mark re-anchored to 0) but
-        ;; is suppressed because the flag is set (decision 0042 -- a non-empty span
-        ;; carried to EOF has no empty tail to announce), and the completion is the
+        ;; is suppressed because the flag is set (a non-empty span carried to
+        ;; EOF has no empty tail to announce), and the completion is the
         ;; only thing EOF adds.
         ;; *** THE FRAGMENT IS OBSERVED BETWEEN THE TWO STEPS, not only at the
         ;; end. *** `run` returns the trace after the whole script, so a lane
@@ -1231,8 +1203,8 @@
       (lambda ()
         ;; A non-empty span carried into finish: the flush already delivered `bc`
         ;; and set the span's delivered flag, so the EOF span end -- over the
-        ;; re-anchored `[0,0)` -- suppresses (decision 0042: the empty tail of a
-        ;; span that already delivered). A lane that re-delivered `[mark,end)`
+        ;; re-anchored `[0,0)` -- suppresses (the empty tail of a span that
+        ;; already delivered). A lane that re-delivered `[mark,end)`
         ;; here would hand the application `bc` twice, and every result tuple would
         ;; still agree.
         (let* ((r (both-eof (list (list 'feed (bytes 65 98 99)) (list 'finish))
@@ -1293,10 +1265,10 @@
     ;; A span opens in a feed, stays EMPTY, and closes on the EOF chain (bclose).
     ;; parser-finish! re-anchors the mark to 0, so the EOF span end sees from==to
     ;; and delivers the one empty fragment -- and the result does NOT depend on
-    ;; the opening feed's slice `start`. Before that finish re-anchor the carried
-    ;; empty span was announced only when an intervening feed had re-anchored the
-    ;; mark to 0 (a slicing-dependent inconsistency the whole-branch review found);
-    ;; the two cases below, opened at start 0 and at a nonzero start, must agree.
+    ;; the opening feed's slice `start`. Without the finish re-anchor the
+    ;; carried empty span would be announced only when an intervening feed had
+    ;; re-anchored the mark to 0, which depends on slicing; the two cases below,
+    ;; opened at start 0 and at a nonzero start, must agree.
     (harness-case "opened by a whole-bytevector feed (start 0)"
       (lambda ()
         (let ((r (both-eof (list (list 'feed (bytes 65)) (list 'finish))
@@ -1335,9 +1307,9 @@
   (lambda ()
     (harness-case "completion-pending is cleared, and the parser re-parses whole"
       (lambda ()
-        ;; ③'s reset case parks MID-SPAN. This one parks after the data substep
-        ;; committed its fragment, where `§14:841` says the only thing retained
-        ;; is an internal completion-pending continuation -- a compound name in
+        ;; The "reset clears span state" case parks MID-SPAN. This one parks
+        ;; after the data substep committed its fragment, where the only thing
+        ;; retained is an internal completion-pending continuation -- a compound name in
         ;; one lane and a numbered internal state in the other, which is why both
         ;; are driven rather than one.
         (let loop ((cms (list cm-full-ref cm-full-gen)) (seen '()))
@@ -1369,8 +1341,7 @@
                (p (car la))
                (a (run la (list (list 'feed (bytes 65 98 99 100 90))))))
           (check-equal "parked, span still active" (caddr a) 'payload)
-          ;; Two different values, and the first version of this case named one
-          ;; and asserted the other: `rfields` puts the result STATUS at index 0
+          ;; Two different values: `rfields` puts the result STATUS at index 0
           ;; and the parser's LIFECYCLE at index 5.
           (check-equal "the result status is paused" (map car (car a)) '(paused))
           (check-equal "and the lifecycle is paused-feed"
@@ -1388,8 +1359,8 @@
   (lambda ()
     (harness-case "reset is accepted, clears the span, and the parser is reusable"
       (lambda ()
-        ;; The one operation `§12.2:698` lets a poisoned parser run, driven in
-        ;; the one state that makes the span half of `§12.5:739` observable. The
+        ;; The one operation a poisoned parser may run, driven in the one state
+        ;; that makes reset's clearing of span state observable. The
         ;; data callback raises ONCE: after the reset it records normally, so the
         ;; case asserts reuse and not merely that reset did not raise.
         (let ((go (lambda (cm)

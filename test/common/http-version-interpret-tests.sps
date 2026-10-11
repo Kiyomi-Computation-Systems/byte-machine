@@ -1,18 +1,17 @@
-;;; Multi-alternative sequence dispatch (§25:1529's multi-alternative half;
-;;; exit §25:1538-1540) through the reference interpreter, with ABSOLUTE
-;;; expected outcomes.
+;;; Multi-alternative sequence dispatch through the reference interpreter, with
+;;; ABSOLUTE expected outcomes.
 ;;;
 ;;; Absolute, not differential, on purpose: both executors are built from the
 ;;; same source IR, so a defect there makes them wrong IDENTICALLY and leaves a
 ;;; comparison green. What this program reddens is a defect in the INTERPRETER's
 ;;; own alternative walk -- seq-step's live-alternative filter and its path
 ;;; bookkeeping. A LOWERING defect is invisible here: the interpreter never
-;;; touches the normalizer (interpret.sls's header, §18), so the trie is
+;;; touches the normalizer (interpret.sls's header), so the trie is
 ;;; normal-ir-tests.sps's to assert, not this file's.
 ;;;
-;;; Proving the two executors AGREE is a different lane's job, and that lane now
-;;; exists: differential-http-version-tests.sps drives this same fixture through
-;;; both executors.
+;;; Proving the two executors AGREE is a different lane's job:
+;;; differential-http-version-tests.sps drives this same fixture through both
+;;; executors.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test http-version-machine)
@@ -22,9 +21,9 @@
 
 (harness-begin "unit.http-version")
 
-;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
-;; every non-error result. These are single-executor lanes, so they compare the
-;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; The error slot holds a parser-error record, and is #f on every non-error
+;; result. These are single-executor lanes, so they compare the CODE rather
+;; than the error projection the differential lanes use --
 ;; but they must stay #f-tolerant, because the same accessor is read on results
 ;; that carry no error at all.
 (define (error-code-of r)
@@ -50,11 +49,10 @@
   (list (list 'reexecute (make-http-version-machine))
         (list 'advance (make-http-version-advance-machine))))
 
-;; §22.6 forbids using an invalid graph to test executor behaviour, so both
-;; fixtures are proved clean before any behavioural case runs -- and after
-;; Slice ③'s §16.2:894 pass that is a real check, not a formality: two
-;; alternatives sharing `HTTP/1.` are exactly the shape a broken ambiguity
-;; test would refuse.
+;; An invalid graph must never be used to test executor behaviour, so both
+;; fixtures are proved clean before any behavioural case runs -- and that is a
+;; real check, not a formality: two alternatives sharing `HTTP/1.` are exactly
+;; the shape a broken sequence-ambiguity check would refuse.
 (harness-group "both fixtures verify clean under the §16.2:894 pass"
   (lambda ()
     (harness-case "the fixture list holds both mismatch modes"
@@ -101,9 +99,9 @@
 
 ;; Every input below is TRUNCATED at (and including) the mismatching byte, so
 ;; each tuple is the mismatch's OWN result. Feeding the rest of the string and
-;; reading the last tuple is a trap this plan fell into once while measuring:
-;; after the error the parser is parked, further feeds are no-ops, and the
-;; final tuple silently reports the parked state instead of the mismatch. The
+;; reading the last tuple is a trap: after the error the parser is parked,
+;; further feeds are no-ops, and the final tuple silently reports the parked
+;; state instead of the mismatch. The
 ;; two agree only when the mismatch happens to be on the last byte -- which is
 ;; true of `HTTP/1.2` and false of a position-0 mismatch, so a fixture set that
 ;; used whole strings would have been right in one case and quietly wrong in
@@ -147,8 +145,8 @@
         ;; length check below is NOT one -- it reads a literal against a literal
         ;; and the loop bound is the hard-coded 7, so it can only catch the
         ;; fixture string being edited. Fixture integrity, kept for that, and
-        ;; labelled as that (AGENTS.md: a sentinel computed from the test's own
-        ;; expectation closes nothing). The group-level sentinel is
+        ;; labelled as that (a sentinel computed from the test's own expectation
+        ;; closes nothing). The group-level sentinel is
         ;; (length machines), asserted where the fixture list is iterated.
         (let ((full (bytes "HTTP/1.0")))
           (check-equal "the fixture is eight bytes long" (length full) 8)

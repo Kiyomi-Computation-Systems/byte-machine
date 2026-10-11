@@ -7,12 +7,10 @@
 ;;; WHY FLAGS RATHER THAN POSITIONS
 ;;;
 ;;; A lane needs one library root per library family it imports, and the count
-;;; grows: slice 3 has two, slice 5's compiled lanes and Milestone 1's
-;;; libraries add more. A positional protocol renumbers every caller at each
-;;; of those steps. A separator-joined list was rejected outright: it would
-;;; need a path separator that is `:` on Unix and `;` on Windows, which is the
-;;; open question in milestone-0-portability-spike.md section 9, for no
-;;; benefit here.
+;;; differs between lanes. A positional protocol would renumber every caller
+;;; whenever it grows. A separator-joined list is not used: it would need a
+;;; path separator that is `:` on Unix and `;` on Windows, for no benefit
+;;; here.
 ;;;
 ;;; THE OBJECT GUARD
 ;;;
@@ -26,8 +24,8 @@
 ;;; WHAT THIS LAUNCHER DELIBERATELY DOES NOT CHECK
 ;;;
 ;;; Petite, and whether the build is threaded. Discovery rejects Petite at
-;;; configure time and re-probes the exact binary registered here, and decision
-;;; 0001 refused to gate on threading because byte-machine has no threads. A
+;;; configure time and re-probes the exact binary registered here, and nothing
+;;; gates on threading because byte-machine has no threads. A
 ;;; second copy of either rule would be a requirement inherited rather than
 ;;; owned.
 ;;;
@@ -127,12 +125,10 @@
 
 (compile-imported-libraries #f)
 
-;; Nothing includes, so nothing resolves through source-directories at all
-;; (decision 0006; measured inert for the aot launcher as mutation C3b, and
-;; extended here by the absence of any include form). Emptied rather than
-;; left at Chez's CWD-containing default: it still narrows what a later
-;; top-level load or include added to this file could reach, and an empty
-;; list costs nothing to state.
+;; Nothing includes, so nothing resolves through source-directories at all.
+;; Emptied rather than left at Chez's CWD-containing default: it still narrows
+;; what a top-level load or include added to this file could reach, and an
+;; empty list costs nothing to state.
 (source-directories '())
 
 ;; Every root is paired with the same always-empty guard directory.

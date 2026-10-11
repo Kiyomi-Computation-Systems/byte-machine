@@ -5,17 +5,17 @@
 ;;; only to search them — never to compare against implementation `write` output.
 (import (rnrs)
         (rnrs eval)
-        ;; environment-symbols is a Chez extension (member3-drift-tests.sps's import);
-        ;; the §16.2:910 witness below subtracts the (rnrs) and (byte-machine runtime)
-        ;; environments from the emitted identifiers. (byte-machine runtime) is
-        ;; imported statically so the AOT lane compiles it (reserved-drift's surprise).
+        ;; environment-symbols is a Chez extension; the no-declared-name witness
+        ;; below subtracts the (rnrs) and (byte-machine runtime) environments
+        ;; from the emitted identifiers. (byte-machine runtime) is imported
+        ;; statically so the AOT lane compiles it.
         (only (chezscheme) environment-symbols)
         (only (byte-machine private names) portable-name?)
         (byte-machine test harness)
         (byte-machine graph)
         (byte-machine runtime)
-        ;; ir's reading accessors graph does not re-export -- the §16.2:910 witness
-        ;; walks the witness machine's nodes. The names graph DOES re-export (e.g.
+        ;; ir's reading accessors graph does not re-export -- the no-declared-name
+        ;; witness walks the witness machine's nodes. The names graph DOES re-export (e.g.
         ;; sequence-dispatch-node?) are the same bindings, so importing both is legal.
         (only (byte-machine private ir)
               machine-nodes machine-spans node-name
@@ -43,7 +43,7 @@
 ;; entry, this does not make normalize-machine itself raise when a mutation
 ;; skips the verification-ok? branch in compile-machine, so the mutation
 ;; suite's "reported as compiled ok" pass observes the wrong answer instead of
-;; an unrelated crash (Pass 36, task-3 self-review).
+;; an unrelated crash (Pass 36).
 (define broken
   (make-machine 'one-byte 'start '() '() '() (list eof-decl rej-decl)
     (list (make-byte-dispatch-node 'start
@@ -54,7 +54,7 @@
           (make-stop-node 'unused #f))
     'default-eof #f))
 
-;; Slice ①b task 6: the same one-byte machine with two field declarations.
+;; The same one-byte machine with two field declarations.
 (define with-fields
   (make-machine 'one-byte 'start
     (list (make-uint-field 'count 8 0 #f) (make-uint-field 'limit 16 65535 #f))
@@ -87,15 +87,15 @@
 (define (eof-text) (utf8->string (render-machine eof-ok 'eof-parser)))
 (define (eof-has? needle) (harness-string-contains? (eof-text) needle))
 
-;; A third machine exercising the pause kind (Slice 3): byte 1 -> pause p1
+;; A third machine exercising the pause kind: byte 1 -> pause p1
 ;; (continuation s1); byte 2 at s1 -> stop. EOF at entry -> pause pe
 ;; (continuation done, a finish node). Inlined rather than imported --
 ;; (byte-machine test pause-machine) is the source of truth for this graph
-;; (kept in sync by hand); the compile lanes carry no fixture libraries today
-;; (the eof-fin precedent above), and this file's charter is the rendered
-;; TEXT (header :1-5), not execution -- the CORE_COMPILE manifest carries no
+;; (kept in sync by hand); the compile lanes carry no fixture libraries
+;; (as with eof-fin above), and this file's charter is the rendered
+;; TEXT (see the header), not execution -- the CORE_COMPILE manifest carries no
 ;; runtime.sls, so a compile+eval case cannot even load the generated library
-;; here. The pause/resume execution walks are Task 5's, in the CORE_EMIT lanes.
+;; here. The pause/resume execution walks live in the CORE_EMIT lanes.
 (define pausem
   (make-machine 'pausem 's0 '() '() '()
     (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
@@ -121,17 +121,17 @@
 ;; string -- "paused 2" for
 ;;   ((1) (byte-machine-make-feed-outcome/v1 (quote paused) pos #f 2 off))
 ;;
-;; Both Slice 3 emitter decisions -- which status a pause arm emits, and which
+;; Both emitter decisions -- which status a pause arm emits, and which
 ;; state it parks on -- live in that ONE line, and a `check` over a substring
 ;; probe reports the same content-blind "expected a true value" for either, so
-;; the mutation suite could not tell the two mutations apart (Slice 3 pin
-;; audit). Splitting the probe in two does not separate them either: a pause
+;; the mutation suite could not tell the two mutations apart. Splitting the
+;; probe in two does not separate them either: a pause
 ;; continuation is a dispatch node whose own need-input arm parks on that same
 ;; state id, so the " pos #f 2 off))" tail survives the next-state mutation
 ;; elsewhere in the rendered text and a target-only probe would be vacuous.
 ;; Comparing the two extracted fields with check-equal puts them in the
 ;; failure detail instead, so each decision has its own signature. This is
-;; still search-only over the rendered text (header :1-5): two tokens read out
+;; still search-only over the rendered text (see the header): two tokens read out
 ;; of one known line, never a re-parse of the emitted library.
 (define (pause-arm-fields line)
   (let loop ((fs (harness-split line #\space)) (acc '()))
@@ -147,9 +147,9 @@
         ((harness-string-contains? (car lines) head)
          ;; ("(define" "(%s1" "pos" "st" "off" "pk)"
          ;;  "(byte-machine-make-feed-outcome/v1" "(quote" "paused)" "pos" "#f"
-         ;;  "2" "off))") -- the six-field define header precedes what used to
-         ;; be the whole line, so the status is field 8 and the next state is
-         ;; field 11, still the one before "off))". Any other shape is reported
+         ;;  "2" "off))") -- the six-field define header precedes the outcome
+         ;; call, so the status is field 8 and the next state is field 11, the
+         ;; one before "off))". Any other shape is reported
          ;; whole rather than indexed into, so a mutation that changes the
          ;; arm's arity fails the comparison instead of raising.
          (let ((fields (pause-arm-fields (car lines))))
@@ -194,41 +194,30 @@
         (check "import" (has? "(import (rnrs) (byte-machine runtime))"))))
     (harness-case "it constructs the compiled machine through one unversioned call"
       (lambda ()
-        ;; Decision 0018: the versioned NAME is retired and the version NUMBER
-        ;; survives; 0018 moved it to 3. The trailing quoted vector is the
-        ;; growable payload. The payload is a vector OF members rather than a
-        ;; bare #() because an empty vector has no member 0 -- Milestone 4 ①b
-        ;; would have had to add one, moving every golden in the slice whose
-        ;; headline invariant is that none moves.
-        ;;
-        ;; Milestone 5 Slice ①a (decision 0025 point 2) moves the version to 4
-        ;; and grows the payload with a second member, reserved empty. Slice ②
-        ;; moves it to 5 and adds member 2, §17:963's state-id to source-name
-        ;; table -- which is not reservable-empty, because it is what
-        ;; `parser-state-name` reads. The version literal has since moved to 6
-        ;; (Milestone 11, the keyword-step op) and to 7 (Milestone 12, the pause
-        ;; reason in the outcome), while the 3-member payload is unchanged -- so
-        ;; the literal reads 7 and a zero-field machine renders
-        ;; #(#() #() #(<its state names>)).
+        ;; The constructor's name carries no version; the ABI version NUMBER is
+        ;; its first argument. The trailing quoted vector is the growable
+        ;; payload: a vector OF members rather than a bare #(), because an
+        ;; empty vector has no member 0, so a member can be filled without
+        ;; changing the payload's shape. Member 0 is the field table, member 1
+        ;; the callback table, both empty here; member 2 is the state-id to
+        ;; source-name table `parser-state-name` reads, which is never empty. So
+        ;; a zero-field machine renders #(#() #() #(<its state names>)).
         (check "unversioned call"
                (has? "(byte-machine-make-compiled-machine 9 14095574568398596535 0 exec (quote #(#() #() #(start stop reject))))"))
         (check "no versioned name survives"
                (not (has? "byte-machine-make-compiled-machine/v")))))
-    ;; Milestone 4 Slice ①b task 6 (decision 0019 item 3(b)). Member 0 stops
-    ;; being empty for a machine that DECLARES fields, and stays exactly `#()`
-    ;; for one that does not -- which is the whole content of ①a's reservation
-    ;; and the reason the case above still passes verbatim.
+    ;; Member 0 is non-empty for a machine that DECLARES fields, and exactly
+    ;; `#()` for one that does not -- which is why the case above passes for
+    ;; the zero-field machine.
     ;;
     ;; It carries (name . initial) PAIRS rather than bare initials, though the
     ;; member is named for the initials. The parser needs two things from the
     ;; declarations -- the initial values, and the name-to-slot resolution
     ;; `parser-field-ref` answers by -- and the slot is the pair's POSITION, so
     ;; one member carries both and still renders `#()` when there are no fields.
-    ;; A second member would have been a second ABI growth for data the first
-    ;; already determines. That argument is about FIELD data and is NOT a
-    ;; prohibition on further members: Milestone 5 Slice ①a adds member 1,
-    ;; reserved empty (decision 0025 point 2), and it is the trailing `#()` in
-    ;; the expectation below.
+    ;; A second member for field data would be a second ABI growth for data the
+    ;; first already determines. Member 1 (the callback table, empty here) is
+    ;; the `#()` that follows member 0 in the expectation below.
     (harness-case "a field-declaring machine renders its declarations in member 0"
       (lambda ()
         (check "pairs in slot order"
@@ -238,22 +227,15 @@
                 "exec (quote #(#((count . 0) (limit . 65535)) #() #(start stop reject)))"))))
     (harness-case "exec carries its three reserved parameters"
       (lambda ()
-        ;; `fieldv` was reserved empty by decision 0019 item 3(c) and filled in
-        ;; Milestone 4 Slice ②. `psr` and `cbv` are Milestone 5 Slice ①a's, by
-        ;; decision 0025 point 3, and are reserved the same way and for the same
-        ;; reason: a parameter added LATER changes the emitted text of every
-        ;; machine, including the ones the feature never touches, so the
-        ;; widening is paid once before any arm needs it.
+        ;; `fieldv`, `psr` and `cbv` are part of every machine's exec signature,
+        ;; including machines that declare no fields or callbacks: a parameter
+        ;; added to some machines only would change the emitted text of every
+        ;; machine the feature never touches.
         ;;
-        ;; This is the only assertion that names the parameter list as TEXT, and
-        ;; the only witness that runs in the SPEC lane of the mutation that pins
-        ;; it. It is NOT the only thing in the tree that would notice a change:
-        ;; measured 2026-09-04, all four committed goldens carry the same line at
-        ;; `:5`, and the determinism lanes compare them byte for byte. An earlier
-        ;; draft of this comment claimed tree-wide uniqueness and was wrong --
-        ;; the standing rule is that a novelty claim needs measuring, and the
-        ;; measurement that produced it had searched the MUTATION declarations
-        ;; only.
+        ;; This is the only assertion in this lane that names the parameter
+        ;; list as TEXT, and the witness that runs in the SPEC lane of the
+        ;; mutation that pins it. The committed goldens carry the same line,
+        ;; and the determinism lanes compare them byte for byte.
         (check "the full parameter list"
                (has? "(define (exec state offset bv start end finish? fieldv psr cbv)"))))
     (harness-case "the accepted byte advances and the fallback reexecutes"
@@ -263,7 +245,7 @@
         ;; it is called with. Both are checked -- a mutation that changed only
         ;; the callee would otherwise leave a well-formed call to the wrong
         ;; state carrying the right id.
-        ;; A byte class is rendered as range clauses now, so a single accepted
+        ;; A byte class is rendered as range clauses, so a single accepted
         ;; byte is an equality clause rather than a `case` datum.
         (check "advance arm" (has? "((fx=? b 0) (%s1 (+ pos 1) 1 (+ off 1) (quote boundary)))"))
         (check "fallback"    (has? "(else (%s2 pos 2 off (quote byte)))"))
@@ -302,7 +284,7 @@
         (check-raises "member 1" (lambda (e) #t) (lambda () (render-machine ok 'define)))))
     ;; make-compiled-machine, not parser-feed!: the latter's trailing "!" is
     ;; already refused by the name grammar, so it cannot witness the
-    ;; reserved-member-2 membership check specifically (Pass 36 self-review).
+    ;; reserved-member-2 membership check specifically (Pass 36).
     (harness-case "a runtime export binding is refused (reserved member 2)"
       (lambda ()
         (check-raises "member 2" (lambda (e) #t) (lambda () (render-machine ok 'make-compiled-machine)))))
@@ -323,14 +305,15 @@
                          (get) (render-machine ok 'one-byte-parser))))))))
 
 
-;; --- Milestone 6 Slice ①: the structural witness for §25:1607 (design §4.7) -----
+;; --- the structural witness for the counted consume's bulk read -------------
 ;;
 ;; "counted consume does not dispatch once per body byte" is a claim about the
 ;; emitted STRUCTURE, and no behavioural lane can see it: a per-byte self-loop
 ;; consumes the same bytes, reads the same field and returns the same tuple. So
-;; the rendered library is read back as a datum (the technique member3-drift
-;; ships), the counted state's `case` arm is located by its id, and the arm is
-;; asserted to contain exactly one `min` application and no `(+ pos 1)` form.
+;; the rendered library is read back as a datum (the technique
+;; member3-drift-tests.sps uses), the counted state's arm is located by its
+;; id, and the arm is asserted to contain exactly one `min` application and no
+;; `(+ pos 1)` form.
 (define cc-witness
   (make-machine 'ccw 'start (list (make-uint-field 'len 8 3 #f)) '() '()
                 (list eof-decl rej-decl)
@@ -384,11 +367,11 @@
             (check-equal "no per-byte advance"
                          (count-forms arm (lambda (f) (equal? f '(+ pos 1)))) 0)))))))
 
-;; --- Milestone 14: a callback's goto target is drawn from a known set --------
+;; --- a callback's goto target is drawn from a known set ---------------------
 ;;
-;; A callback answers `goto TARGET`, and the emitted arm handed that target to
-;; `%dispatch` -- the one linear `case` over every state id the emitter still
-;; writes. The target is not known until the callback returns, but the SET it
+;; A callback answers `goto TARGET`. Handing that target to `%dispatch` would
+;; pay a search over every state id. The target is not known until the
+;; callback returns, but the SET it
 ;; is drawn from is: the runtime's seam can only answer the node's continue
 ;; target, one of its declared branch targets, or its default, and the emitter
 ;; renders all three as literals into that very call. So the arm can test the
@@ -471,13 +454,13 @@
             (check-equal "exactly one %dispatch in the arm"
                          (count-forms arm (lambda (f) (eq? (car f) '%dispatch))) 1)))))))
 
-;; --- Milestone 7 Slice ④: the §16.2:910 structural witness (design §4.8, F10) --
+;; --- the no-declared-name structural witness --------------------------------
 ;;
-;; §25:1617's discharge and §4.12 item 1's witness: NO declared name becomes a
-;; generated identifier. Over an every-construct machine (all fourteen node kinds,
-;; a span with a complete callback so the span-completion arm fires) hand-built in
-;; this file's style, because the compile lane has neither the generator nor the
-;; printer (F10). Its totality is a DERIVED row against the emitter's arms.
+;; NO declared name becomes a generated identifier. Over an every-construct
+;; machine (all fourteen node kinds, a span with a complete callback so the
+;; span-completion arm fires) hand-built in this file's style, because the
+;; compile lane has neither the generator nor the printer. Its totality is a
+;; DERIVED row against the emitter's arms.
 (define w910-source-root
   (let ((r (adapter-environment-variable "BYTE_MACHINE_SOURCE_ROOT")))
     (if (and r (not (string=? r ""))) r
@@ -535,7 +518,7 @@
   (append (map node-name (machine-nodes w910))
           '(fld dc sd sc sp default-eof rejected)))
 
-;; --- reading compile.sls's render-state-arm keys (Step 2, derived) ---
+;; --- reading compile.sls's render-state-arm keys (derived) ---
 (define compile-src
   (call-with-input-file (string-append w910-source-root "/byte-machine/compile.sls") read))
 (define (find-defn x name)
@@ -550,7 +533,7 @@
   (let* ((rsa (find-defn compile-src 'render-state-arm))
          (kc (and rsa (find-kind-case rsa))))
     (if kc (apply append (map car (filter (lambda (cl) (pair? (car cl))) (cddr kc)))) '())))
-;; the hand-written key -> "the witness exercises this arm" map (S2/F4: the operand
+;; the hand-written key -> "the witness exercises this arm" map (the operand
 ;; a derived row compares against; a table read from the artifact would compare it
 ;; to itself). Set-equal to emitter-keys, so a fourteenth emitter arm reddens.
 (define key->present
@@ -570,7 +553,7 @@
         (cons 'dispatch        (lambda () (or (w910-any-node? byte-dispatch-node?)
                                               (w910-any-node? sequence-dispatch-node?))))))
 
-;; --- the identifier-position walk (Step 3, member3-drift's technique) ---
+;; --- the identifier-position walk (member3-drift-tests.sps's technique) ---
 (define (symbols-outside-quote x acc)
   (cond ((symbol? x) (if (memq x acc) acc (cons x acc)))
         ((pair? x)
@@ -671,20 +654,20 @@
         ;; the walk is over the names that OCCUR, not over all declared names: an
         ;; error-declaration name never reaches the emitted text (only its code and
         ;; reason do), so an occurrence check over all declared names would be
-        ;; vacuous for the error names (§4.8). A found-it guard: some declared name
+        ;; vacuous for the error names. A found-it guard: some declared name
         ;; occurs somewhere in the datum (under quote), so this is not vacuous.
         (let ((occurring (filter (lambda (nm) (w910-occurs? nm w910-lib)) w910-declared)))
           (check "at least one declared name occurs in the emitted datum" (pair? occurring))
           (check "no occurring declared name is in identifier position"
                  (for-all (lambda (nm) (not (memq nm w910-identifiers))) occurring)))))))
 
-;; --- Milestone 14: the feed entry is a search, not a scan -------------------
+;; --- the feed entry is a search, not a scan ---------------------------------
 ;;
-;; `%dispatch` is the last linear scan the emitter writes, and the one target
-;; that genuinely cannot be a literal: the state comes from the parser. What it
-;; CAN stop being is linear. A byte-at-a-time parse re-enters it once per feed
-;; and a keyword table jumps through it, so on a large machine the scan was the
-;; single largest per-feed cost.
+;; `%dispatch`'s target is the one that genuinely cannot be a literal: the
+;; state comes from the parser. What it need not be is linear. A
+;; byte-at-a-time parse re-enters it once per feed and a keyword table jumps
+;; through it, so on a large machine a linear scan here would be the single
+;; largest per-feed cost.
 ;;
 ;; The assertion is the PROPERTY, not the shape: no state is reached by more
 ;; comparisons than a balanced tree over the state count needs. A scan would
@@ -748,8 +731,7 @@
          (list w910-lib cc-datum))))
     (harness-case "no state is more than a balanced tree deep"
       (lambda ()
-        ;; ceil(log2 N) for the tree, plus one for the in-range guard that
-        ;; stands where the `case`'s else arm did.
+        ;; ceil(log2 N) for the tree, plus one for the in-range guard.
         (for-each
          (lambda (lib)
            (let* ((d (find-dispatch lib))
@@ -763,9 +745,9 @@
          (list w910-lib cc-datum))))
     (harness-case "an unknown state is still refused"
       (lambda ()
-        ;; The guard the `case`'s else arm used to be. A search with no bound
-        ;; check answers SOME state for every integer, which is worse than the
-        ;; scan it replaces.
+        ;; The in-range guard. A search with no bound check answers SOME state
+        ;; for every integer, which is worse than a linear scan with an
+        ;; else arm.
         (let ((d (find-dispatch w910-lib)))
           (when d
             (check-equal "exactly one unknown-state refusal"

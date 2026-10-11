@@ -1,12 +1,9 @@
-;;; Deterministic emission of the HTTP fixture (§22.9, §20), on the shipped
-;;; determinism goldens' shape. Milestone 8 Slice ⑤ shipped byte-identical
-;;; rendering across two emissions and the load-and-run agreement, and DEFERRED
-;;; the committed-golden variant "to a hardening slice or M9". Milestone 9
-;;; Slice ① adds it (decision 0039, obligation 2): the HTTP fixture is the sixth
-;;; committed golden, the largest machine in the tree at 196 682 bytes, compared
-;;; byte-for-byte exactly as the other five are — the cross-process/cross-lane/
-;;; cross-cell leg §24.2 stage 7 needs, proved transitively through the golden
-;;; rather than a cross-job artefact comparison.
+;;; Deterministic emission of the HTTP fixture, on the shape of the other
+;;; determinism lanes: byte-identical rendering across two emissions, equality
+;;; to a committed golden (the largest in the tree, compared byte-for-byte
+;;; exactly as the others are), and load-and-run agreement with the
+;;; interpreter. The golden gives cross-process, cross-lane and cross-cell
+;;; identity transitively rather than through a cross-job artefact comparison.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
@@ -40,12 +37,10 @@
                      (emit-to (string-append tmpdir "/http-a.sls"))
                      (emit-to (string-append tmpdir "/http-b.sls")))))))
 
-;; The sixth committed golden (Milestone 9 Slice ①, decision 0039, obligation 2).
 ;; Byte-identity within this process (above) PLUS equality to a committed golden
 ;; every cell and lane compares against gives cross-process, cross-lane and
-;; cross-cell identity transitively — the golden is the fixed point (§24.2 stage
-;; 7). With no CI this milestone (decision 0041) the cross-CELL width is one cell
-;; (macOS arm64, local); the mechanism is total, the coverage is one cell.
+;; cross-cell identity transitively -- the golden is the fixed point. The
+;; cross-cell width is the set of cells that actually run this lane.
 (harness-group "the committed golden (§24.2 stage 7, transitive)"
   (lambda ()
     (harness-case "the emitted bytes equal the committed golden"

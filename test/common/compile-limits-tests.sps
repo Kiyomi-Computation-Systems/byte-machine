@@ -1,20 +1,19 @@
-;;; The §16.2:911 compile-file witness (Milestone 7 Slice ④, §4.12 item 2, approved
-;;; 2026-09-06). §16.2:911 is "backend limits that would make emission incorrect";
-;;; it has no enforcement (the appendix ledger marks it "nobody"), so this lane is
-;;; the measurement that a v0.1 machine at the generator's bounds does not reach one.
+;;; The compile-file witness for backend limits: limits that would make emission
+;;; incorrect. The verifier enforces none, so this lane is the measurement that a
+;;; v0.1 machine at the generator's bounds does not reach one.
 ;;;
 ;;; The witness is the largest emittable dispatch: a byte-dispatch with all 256
-;;; exact-byte cases and a second dispatch over a complement matcher (§4.12 item 2's
-;;; words), rendered to a real generated library, `compile-file`d to an object,
-;;; loaded, and one feed asserted to agree with the interpreter on the full
-;;; parser-result. This is the ONE lane that both compiles a machine (it imports
-;;; (byte-machine compile)) and executes one (it imports the interpreter and the
-;;; runtime) -- exactly the three libraries the rejections lane must NOT have (F7),
-;;; which is why §4.12 item 2's witness is its own program and its own lane pair.
+;;; exact-byte cases and a second dispatch over a complement matcher, rendered to
+;;; a real generated library, `compile-file`d to an object, loaded, and one feed
+;;; asserted to agree with the interpreter on the full parser-result. This is the
+;;; ONE lane that both compiles a machine (it imports (byte-machine compile)) and
+;;; executes one (it imports the interpreter and the runtime) -- exactly the three
+;;; libraries the rejections lane must NOT have, which is why this witness is its
+;;; own program and its own lane pair.
 ;;;
-;;; The limits looked for (§30:1778): generated identifier length, emitted source
-;;; size, `case` arity, and literal size. The disposition records what was measured
-;;; for each; none is reachable by a v0.1 machine (Task 10).
+;;; The limits looked for: generated identifier length, emitted source size,
+;;; `case` arity, and literal size. The lane prints what it measured for each;
+;;; none is reachable by a v0.1 machine.
 (import (rnrs)
         (rnrs eval)
         (only (chezscheme) load compile-file generate-wpo-files with-output-to-string)
@@ -37,18 +36,15 @@
 
 ;; The 256 exact-byte cases, alternating between two identical destinations.
 ;;
-;; THE ALTERNATION IS THE POINT, AND IT IS NEW. This witness used to send every
-;; byte to one target, which made it the largest emittable dispatch when a byte
-;; class rendered one `case` arm per byte. It no longer does: consecutive bytes
-;; sharing a destination now collapse into one range clause, so 256 identical
-;; edges render as a SINGLE test and the witness measured nothing -- the
-;; emitted source fell from 18 757 bytes to a few hundred, which is what made
-;; this lane go red rather than quietly vacuous.
+;; THE ALTERNATION IS THE POINT. Consecutive bytes sharing a destination
+;; collapse into one range clause, so 256 identical edges would render as a
+;; SINGLE test and the witness would measure nothing -- the emitted source
+;; would be a few hundred bytes, and the size floor below would go red.
 ;;
-;; So the witness is rebuilt as the worst case of the lowering that exists,
-;; not the one that used to: no two consecutive bytes share a destination, so
-;; every byte is its own run and the dispatch cannot collapse at all. That is
-;; the arity a backend limit would have to survive.
+;; So the witness is the worst case of the range lowering: no two consecutive
+;; bytes share a destination, so every byte is its own run and the dispatch
+;; cannot collapse at all. That is the arity a backend limit would have to
+;; survive.
 (define (bytes-0-255)
   (let loop ((i 255) (a '())) (if (< i 0) a (loop (- i 1) (cons i a)))))
 (define cases256
@@ -89,9 +85,8 @@
 
 ;; write the source, compile-file it to an object beside it, load the object. The
 ;; "compiling ... with output to ..." line compile-file writes to current-output-port
-;; is CAPTURED here, so it cannot pollute the lane's output and resolve a pin twice
-;; (Task 9 Step 4); the captured text is checked against the suite's pins by the
-;; label audit rather than left on stdout.
+;; is CAPTURED here, so it cannot pollute the lane's output and resolve a pin
+;; twice; the captured text is checked by the lane rather than left on stdout.
 (define genfile (string-append tmpdir "/compile-limits.sls"))
 (define objfile (string-append tmpdir "/compile-limits.so"))
 (call-with-port (open-file-output-port genfile (file-options no-fail))
@@ -99,7 +94,7 @@
 (generate-wpo-files #f)
 ;; remove any object left by a previous run in the shared tmpdir, so the
 ;; object-exists check below reflects THIS run's compile-file and a mutation that
-;; bypasses compile-file cannot pass on a stale object (Task 9 Step 2).
+;; bypasses compile-file cannot pass on a stale object.
 (when (file-exists? objfile) (delete-file objfile))
 (define compile-line
   (with-output-to-string (lambda () (compile-file genfile objfile))))
@@ -128,12 +123,10 @@
     (harness-case "it verifies and renders a large generated library"
       (lambda ()
         (check "the witness verifies" (verification-ok? v))
-        ;; The source is large -- the case-arity/source-size probe. P4 measured
-        ;; 18 757 bytes when every byte rendered its own `case` arm. A
-        ;; non-collapsing range lowering renders one clause per byte instead,
-        ;; which is wider per byte but still bounded by the same 256, so the
-        ;; floor is kept where it was rather than re-tuned to whatever this
-        ;; happens to measure now.
+        ;; The source is large -- the case-arity/source-size probe. The
+        ;; non-collapsing range lowering renders one clause per byte, bounded by
+        ;; 256; the floor is a fixed size, not re-tuned to whatever this happens
+        ;; to measure.
         (check "the emitted source is large" (> emitted-size 10000))))
     (harness-case "compile-file wrote an object, and it is what was loaded"
       (lambda ()
@@ -146,11 +139,11 @@
         (check-equal "compiled result status is stopped" (and rc (parser-result-status rc)) 'stopped)
         (check-equal "the two lanes agree on the full triple" (and rc (triple rc)) (triple ri))))))
 
-;; --- the disposition data (Task 8 Step 5) ------------------------------------
-;; Which §30:1778 limits were looked for, and what this witness measured for each.
+;; --- the limits data ----------------------------------------------------------
+;; Which backend limits were looked for, and what this witness measured for each.
 ;; None is reachable by a v0.1 machine: the generator's bounds produce machines far
 ;; inside Chez's own limits, and the largest emittable dispatch here is the extreme
-;; case. Printed so the disposition (Task 10) quotes measured numbers, not hopes.
+;; case. Printed so the claim rests on measured numbers, not hopes.
 (harness-group "the limits looked for are recorded"
   (lambda ()
     (harness-case "identifier length, source size, case arity, literal size"
@@ -160,8 +153,8 @@
         (display "+ 1 complement case; ")
         (display "generated identifier length <= the length of the binding 'lim-parser; ")
         (display "largest literal = a 256-byte complement census.") (newline)
-        ;; the assertion is that the artifact ran -- the reachability of any limit is
-        ;; the disposition's claim, dispositioned in the plan against these numbers.
+        ;; the assertion is that the artifact ran -- the reachability of any limit
+        ;; is judged against the printed numbers.
         (check "the witness exercised the case-arity and source-size probes"
                (and (= (length cases256) 256) (> emitted-size 10000)))))))
 
