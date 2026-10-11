@@ -120,6 +120,11 @@ byte_machine_mutation(
 - Name branches by kind: `fix/<slug>`, `feat/<slug>`, `docs/<slug>`.
 - Keep one concern per pull request. Pull requests are squash-merged.
 
+## Security
+
+Please do not open public issues for suspected vulnerabilities; see
+[SECURITY.md](SECURITY.md).
+
 ## Licence
 
 byte-machine is licensed under the BSD 3-Clause License (see
