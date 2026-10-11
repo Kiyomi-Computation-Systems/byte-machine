@@ -4,6 +4,12 @@ Date: 2026-09-13
 Status: accepted
 Milestone: 11, Gate 0 (milestone-11-design.md §4.3)
 
+> **Amendments** — a dated note in this file reaches back into its text. Nothing
+> it amends is rewritten.
+>
+> - **2026-09-13 (Slice ①)** — **amends the first Consequences bullet**. The
+>   note is the section directly below this block.
+
 ## Amendment 2026-09-13 (Slice ①): the fold ships in Slice ①, not Slice ②
 
 At the top of Slice ① the owner folded the executor half of this decision
@@ -76,6 +82,10 @@ same keywords are not the same machine.
   census pin, and a differential lane over the brief §2b header shape —
   `Content-Length` / `content-length` / `cOnTeNt-LeNgTh` recognized to one target,
   a case-sensitive table refusing the mixed case, both lanes.
+
+  > **Amended 2026-09-13 (Slice ①)**. See the dated note at the top of this
+  > record; the bullet above is left as decided.
+
 - **The collision rejection is a new diagnostic code**, so
   `.reference/verifier-diagnostic-catalog.md` and `diagnostic-census-tests.sps`
   gain it and their code-count literals move (the diagnostic-census totality row is
