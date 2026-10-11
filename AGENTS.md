@@ -619,18 +619,24 @@
   against the tree. Status lines are instructions too, and this project states
   its status in more places than any one step remembers: a slice that closes a
   milestone is not done until the milestone plan, the parent plan,
-  `CHANGELOG.md`'s `[Unreleased]` preamble, that milestone's own design
-  document, **and `README.org`'s status paragraph** all say it closed. The
-  README is the one no step names, so its drift is unbounded rather than one
-  slice deep. It still read "No public API exists yet. The repository currently
-  holds the project plans and the build and discovery layer that the
-  implementation will be developed against" — accurate at Milestone 0 — after
+  `CHANGELOG.md`'s `[Unreleased]` section, and that milestone's own design
+  document all say it closed. The changelog ships with every release, so its
+  entry says what changed for a user of the library, never which milestone,
+  slice or decision record produced it. `README.org` carries **no** status
+  section (removed in PR #156, 2026-10-11, for the public release) and must not
+  grow one back: a surface no step names drifts without bound, which is the
+  record below. Until #156 this list had five entries, the fifth being the
+  README's status paragraph. The README was the one no step named, so its
+  drift was unbounded rather than one slice deep. It still read "No public API
+  exists yet. The repository currently holds the project plans and the build
+  and discovery layer that the implementation will be developed against" —
+  accurate at Milestone 0 — after
   Milestones 0, 1 and 2 had all closed, while the other four surfaces were
   current, each brought up to date by the slice that closed the work. A document
   no step names is a document nobody updates. Corrected in PR #24, whose sweep
   found two more stale claims sitting beside it: a CMake-version parenthetical
   written before CI existed, and a documentation list pointing only at the
-  Milestone 0 plan. When a status line is the subject of the work, read all five
+  Milestone 0 plan. When a status line is the subject of the work, read all four
   before mirroring any one of them — that sweep found the parent plan's Status
   line stale on every ref (`git for-each-ref`) and the CHANGELOG preamble
   current only on an unmerged branch, both contrary to how they had been
