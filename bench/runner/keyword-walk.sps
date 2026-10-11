@@ -1,15 +1,15 @@
-;;; Issue #139 / decision 0054: the keyword walk, timed and weighed alone.
+;;; The keyword walk, timed and weighed alone.
 ;;;
 ;;; Drives `byte-machine-keyword-step/v1` over the five header names
 ;;; chez-httparse reads by name (case-insensitive), on a 17-byte field name whose
-;;; first k bytes are `Transfer-Encoding` and whose rest is `x` -- the issue's k
-;;; table -- beside the pre-0054 walk that copied its prefix on every byte. It
-;;; prints Chez's `time` report per (k, walk): cpu time and bytes allocated.
+;;; first k bytes are `Transfer-Encoding` and whose rest is `x`, for k in
+;;; (0 4 10 17) -- beside a control walk that copies its prefix on every byte.
+;;; It prints Chez's `time` report per (k, walk): cpu time and bytes allocated.
 ;;;
-;;; Not a gating lane and not §23 instrument output: single runs, for the
-;;; figures decision 0054 cites. The gated property -- allocation flat in k --
-;;; is asserted by test/common/allocation-audit-tests.sps, which carries the
-;;; same control walk. Run from the repository root:
+;;; Not a gating lane and not benchmark-baseline output: single runs, for
+;;; comparing the two walks. The gated property -- allocation flat in k -- is
+;;; asserted by test/common/allocation-audit-tests.sps, which carries the same
+;;; control walk. Run from the repository root:
 ;;;   chez --libdirs src --script bench/runner/keyword-walk.sps
 ;;; optionally with BYTE_MACHINE_BENCH_INNER (walks per cell, default 200000).
 (import (rnrs) (only (chezscheme) time collect getenv) (byte-machine runtime))
@@ -27,7 +27,8 @@
    (bytes (string-append (substring "Transfer-Encoding" 0 k)
                          (make-string (- 17 k) #\x) ":"))))
 
-;; The walk as it stood before issue #139 (kept verbatim in the allocation lane).
+;; The control: a walk that copies its matched prefix on every byte, so its
+;; allocation grows with k (the allocation lane carries the same walk).
 (define (copying-keyword-step entries no-match ci? path bv pos end)
   (define (fold b) (if (and ci? (>= b 65) (<= b 90)) (+ b 32) b))
   (define (prefix? p bs)

@@ -4,11 +4,9 @@ Declaring unsigned fields, the operations and predicates that read and write
 them, integer accumulation, and counted consumption — with fixed widths and
 explicit overflow edges throughout.
 
-This is `§27:1695` of
-[the implementation plan](../.plans/byte-machine-implementation-plan.md). Every
-claim was checked against the code: `(byte-machine graph)` /
-`(byte-machine private ir)` for the constructors, `(byte-machine verify)` for
-the operand schemas, `(byte-machine interpret)` for the semantics. Both
+The constructors live in `(byte-machine graph)` / `(byte-machine private ir)`,
+the operand schemas in `(byte-machine verify)`, and the reference semantics in
+`(byte-machine interpret)`. Both
 executors — the reference interpreter and a generated parser — behave
 identically here.
 
@@ -18,7 +16,7 @@ identically here.
 
 ```scheme
 (make-uint-field name width initial source-label)
-(make-uint-field name width initial settable? source-label)   ; Milestone 13
+(make-uint-field name width initial settable? source-label)
 ```
 
 - `name` — a symbol in the portable grammar `[a-z][a-z0-9-]*`.
@@ -38,7 +36,7 @@ identically here.
 - `source-label` — an optional diagnostic label (`#f`, a symbol, or a string).
 
 A field's value ranges over `0 .. 2^width - 1`. There is exactly **one** field
-type in v0.1 — an unsigned integer; more are deferred (`§29:1754`). Because only
+type — an unsigned integer. Because only
 one type exists, the verifier's "incompatible field" checks reduce to "the named
 field is not declared" (§6).
 
@@ -115,7 +113,7 @@ multiply-add `next = current * base + digit`:
 
 The check is made *before* the arithmetic — conceptually
 `current <= floor((maximum - digit) / base)` — so it never relies on host word
-size or silent wrapping (`§15:856-868`).
+size or silent wrapping.
 
 ## 5. Counted consumption
 
@@ -134,7 +132,7 @@ subtracting exactly the number of bytes it commits:
   remaining input.
 
 There is **no `error` slot**: the subtraction cannot underflow, because the
-committed count never exceeds the field's value (`§15:872`).
+committed count never exceeds the field's value.
 
 ## 6. What the verifier checks
 

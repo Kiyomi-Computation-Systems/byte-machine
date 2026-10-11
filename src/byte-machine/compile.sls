@@ -47,8 +47,8 @@
   ;; The hand-maintained mirror of (byte-machine runtime)'s exports: it must list
   ;; exactly the runtime's live exports, because a new runtime export not added
   ;; here would let the emitter accept an output binding that collides with it.
-  ;; Checked by set-equality against the runtime's live exports, so it reddens in
-  ;; BOTH directions and must move in the same commit the exports do.
+  ;; Checked by set-equality against the runtime's live exports, so it fails in
+  ;; BOTH directions and must change whenever the exports do.
   ;; reserved-member-2 : (Listof Symbol)
   (define reserved-member-2
     '(make-compiled-machine compiled-machine?
@@ -154,17 +154,17 @@
   ;; Byte classes lower to one transition per byte, so a token set renders ~90
   ;; of them and a complement up to 256. Emitted as sibling `(case b ...)` arms
   ;; that cost what Chez charges for a large `case`, which is a LINEAR SCAN:
-  ;; measured against 10.4.1 on 2026-09-17 over a 94-byte set, the first arm
-  ;; dispatches in 0.95ns and a byte in the middle -- a lowercase letter, which
-  ;; is what HTTP is mostly made of -- in 21.60ns.
+  ;; measured on Chez 10.4.1 over a 94-byte set, the first arm dispatches in
+  ;; 0.95ns and a byte in the middle -- a lowercase letter, which is what HTTP
+  ;; is mostly made of -- in 21.60ns.
   ;;
-  ;; The transitions arrive sorted ascending by byte (decision 0014), so a
-  ;; maximal run of consecutive bytes sharing a target and a mode is exactly
-  ;; what the source byte class said before lowering flattened it. Rendered
-  ;; back as one range test per run, the same dispatch costs **1.25ns**.
+  ;; The transitions arrive sorted ascending by byte, so a maximal run of
+  ;; consecutive bytes sharing a target and a mode is exactly what the source
+  ;; byte class said before lowering flattened it. Rendered back as one range
+  ;; test per run, the same dispatch costs **1.25ns**.
   ;;
-  ;; The two candidates the old comment here named were measured, and one of
-  ;; them is worse than what it would have replaced: a grouped datum list
+  ;; Two other shapes were measured and rejected, and one of them is worse
+  ;; than the plain `case`: a grouped datum list
   ;; (`((97 98 99 ...) target)`) costs 57.40ns, because `memv` over 94 elements
   ;; loses to the nested-if expansion `case` already gets. A 256-entry
   ;; membership bytevector is 1.75ns -- fine, but it answers only "is b in the
@@ -232,8 +232,8 @@
   ;; table here and from `machine-fields` there, so a lowering bug in overflow
   ;; checking stays visible to the differential.
   ;;
-  ;; `render-state-arm` could not see the declarations at all, so `fields` is
-  ;; threaded in: the normalized (name width initial slot) table.
+  ;; `render-state-arm` does not see the declarations, so `fields` is threaded
+  ;; in: the normalized (name width initial slot) table.
   (define (field-slot-width fields name)
     (let loop ((fs fields))
       (cond ((null? fs)
@@ -252,13 +252,11 @@
 
   ;; A GOTO TARGET IS CHOSEN AT RUN TIME FROM A SET FIXED AT EMIT TIME.
   ;;
-  ;; `%dispatch` below is the linear `case` over every state id, and the three
-  ;; arms that call application code -- callback, span fragment, span completion
-  ;; -- used to answer `goto` through it. At 0.31ns per arm skipped that is
-  ;; about 34ns per crossing on a 217-state machine, and an HTTP grammar crosses
-  ;; one about four times per header. The comment beside `%dispatch` argued the
-  ;; cost away on the grounds that these happen once per callback and never once
-  ;; per byte: true, and it does not follow.
+  ;; The three arms that call application code -- callback, span fragment, span
+  ;; completion -- could answer `goto` through `%dispatch`, the search over
+  ;; every state id, but that search would then run on every crossing, and an
+  ;; HTTP grammar crosses one about four times per header. "Once per callback,
+  ;; never once per byte" does not make that cost invisible.
   ;;
   ;; What the arm knows is stronger than the target. The runtime's classifier can
   ;; answer only the node's continue target, one of its declared branch targets,
@@ -281,8 +279,8 @@
   ;; absent (`#f`, a required callback's default), so the walk dedupes and skips.
   ;; The clauses ALONE: each arm opens the `cond`, puts its pause and failure
   ;; clauses after these, and closes with `render-dispatch-else`. The order is
-  ;; that and not the reverse because the outcome cases are disjoint by type
-  ;; (decision 0052) and the target clauses are the ones that run.
+  ;; that and not the reverse because the outcome cases are disjoint by type and
+  ;; the target clauses are the ones that run.
   ;; render-goto-clauses : String (Listof (U ExactInteger #f)) -> String
   (define (render-goto-clauses expr targets)
     (let loop ((ts targets) (seen '()) (acc ""))
@@ -310,14 +308,14 @@
   ;; A balanced binary search over the ids is ceil(log2 N) comparisons -- ten
   ;; where the scan averaged 265 -- and costs nothing structurally: the leaves
   ;; are the same tail calls, so the state procedures still never escape and
-  ;; decision 0049's direct jumps are untouched.
+  ;; the direct jumps between states are untouched.
   ;;
   ;; A JUMP TABLE WAS REJECTED, and not on taste. A vector of the state
   ;; procedures indexed by id is O(1), but storing them makes every one of them
   ;; ESCAPE, and they close over `exec`'s `bv`, `end`, `finish?`, `fieldv`,
   ;; `psr` and `cbv` -- so Chez would have to build N closures on every `exec`
-  ;; entry, which is the per-feed path. That is the same reason 0050 rejected
-  ;; bucketing: the fast shape is the one that keeps them local.
+  ;; entry, which is the per-feed path. The fast shape is the one that keeps
+  ;; them local.
   ;;
   ;; The leaves carry no test of their own, which requires the ids to be
   ;; exactly 0..N-1 -- checked in `render-machine` rather than assumed, because
@@ -378,7 +376,7 @@
   ;; The keyword-table entries as a quoted datum: ((byte-list . target-id) ...),
   ;; the same list the encoder folds into the fingerprint. Rendering it inline (a
   ;; handful of short byte lists) rather than as hundreds of dispatch state arms is
-  ;; the compact lowering decision 0044 exists for.
+  ;; what makes the keyword-table lowering compact.
   (define (render-kw-entries es)
     (string-append
      "("
@@ -395,7 +393,7 @@
      ")"))
 
   ;; EVERY RUNTIME NAME AN ARM WRITES IS A CENSUS ENTRY. The allocation audit
-  ;; (test/common/allocation-audit-tests.sps, decision 0055) derives the set of
+  ;; (test/common/allocation-audit-tests.sps) derives the set of
   ;; `(byte-machine runtime)` procedures emitted code can call from this file's
   ;; string literals, and fails until an input whose allocation it asserts runs
   ;; each one. An arm that calls a runtime op no arm called before therefore
@@ -430,12 +428,11 @@
                         (nm (normal-state-id s)) ") " id " off pk) " id " off))\n"))
         ((finish)
          (string-append "      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote finished) pos #f " id " off))\n"))
-        ;; A pause with an OPTIONAL reason (M12) builds a parser-error-shaped
-        ;; record into the outcome's error slot -- the SAME construction the error
-        ;; arm above makes, over the same errs table and the loop's `pk`. The
+        ;; A pause with an OPTIONAL reason builds a parser-error-shaped record
+        ;; into the outcome's error slot -- the SAME construction the error arm
+        ;; above makes, over the same errs table and the loop's `pk`. The
         ;; feed-outcome→result boundary routes it to the result's PAUSE slot for a
-        ;; paused status, never the error slot (the §6 guarantee). A reason-less
-        ;; pause keeps `#f`, byte-identical to before.
+        ;; paused status, never the error slot. A reason-less pause renders `#f`.
         ((pause)
          (string-append "      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos "
                         (let ((code (normal-error-code s)))
@@ -479,13 +476,14 @@
             "                              (%s" (num digit) " (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))\n"
             "                       (%s" (num over) " pos " (num over) " off (quote byte))))))))\n")))
         ;; KNOWN LIMITATION: the machine-action half of the zero-width
-        ;; position-kind rule is not yet correct. The rule wants `boundary` at the
-        ;; current stream offset for a zero-width machine action or callback
-        ;; failure; the callback half is correct, but a field-action operation
-        ;; that fails -- e.g. an increment that overflows a `u8` -- reached over a
-        ;; reexecute edge answers position-kind `byte` where it should answer
-        ;; `boundary`. The accumulate OVERFLOW render two lines above emits
-        ;; `(quote byte)` for the same reason (this is distinct from the non-digit
+        ;; position-kind rule is not implemented correctly. The rule wants
+        ;; `boundary` at the current stream offset for a zero-width machine
+        ;; action or callback failure; the callback half is correct, but a
+        ;; field-action operation that fails -- e.g. an increment that
+        ;; overflows a `u8` -- reached over a reexecute edge answers
+        ;; position-kind `byte` where it should answer `boundary`. The
+        ;; accumulate OVERFLOW render two lines above emits `(quote byte)` for
+        ;; the same reason (this is distinct from the non-digit
         ;; reexecute render ten lines above it, which is a different rule). Fixing
         ;; it is a one-line change in this lane and more in the interpreted one --
         ;; see the matching note at `interpret.sls`'s `field-step`, the other end
@@ -532,9 +530,9 @@
             "             " (zero-width-jump (cdr tg)) ")))\n")))
         ;; This arm calls APPLICATION code. Three arms do: this one, the
         ;; span-completion arm (which renders this very procedure), and the
-        ;; span-end arm (which renders `byte-machine-span-fragment-step/v1`,
+        ;; span-end arm (which renders `byte-machine-span-fragment-step/v2`,
         ;; applying the caller's data callback). The invocation and the outcome
-        ;; vocabulary are the RUNTIME's -- `byte-machine-callback-step/v1`, the
+        ;; vocabulary are the RUNTIME's -- `byte-machine-callback-step/v2`, the
         ;; same procedure `parser-feed-op!` calls -- so this arm renders only the
         ;; literals the node carries and the routing they select, keeping the
         ;; classification out of the emitted lane so both lanes classify from the
@@ -548,10 +546,11 @@
         ;;
         ;; The error arm renders the LITERAL `boundary`, not `pk`: a callback
         ;; failure is on the `boundary at the current stream offset` row
-        ;; unconditionally. Rendering `pk` gave `byte` whenever the invoking node
-        ;; was reached over a reexecute edge, in BOTH lanes, so the differential
-        ;; agreed on the wrong value. The runtime's own arms carry the same
-        ;; correction under the name `callback-failure-position`.
+        ;; unconditionally. Rendering `pk` would give `byte` whenever the
+        ;; invoking node was reached over a reexecute edge -- and if both lanes
+        ;; did that, the differential would agree on the wrong value. The
+        ;; runtime's own arms apply the same rule under the name
+        ;; `callback-failure-position`.
         ((callback)
          (let ((tg (normal-field-targets s)))
            (string-append
@@ -571,11 +570,11 @@
                               (cons (car tg)
                                     (append (map cdr (normal-field-arguments s))
                                             (list (caddr tg))))) "\n"
-            ;; The OPTIONAL callback-pause reason (M12) rides the outcome's error
-            ;; slot, built like the pause node arm but with `boundary` -- a
-            ;; callback outcome reports boundary, as its error arm below does
+            ;; The OPTIONAL callback-pause reason rides the outcome's error slot,
+            ;; built like the pause node arm but with `boundary` -- a callback
+            ;; outcome reports boundary, as its error arm below does
             ;; (callback-failure-position). The boundary routes it to the pause
-            ;; slot. A reason-less callback keeps `#f`, byte-identical to before.
+            ;; slot. A reason-less callback renders `#f`.
             "               ((eq? o callback-pause) (byte-machine-make-feed-outcome/v1 (quote paused) pos "
             (let ((code (normal-error-code s)))
               (if code
@@ -595,7 +594,7 @@
         ;; above does.
         ;;
         ;; None of them binds a local beyond `o`, and that is deliberate: the mark
-        ;; lives in the parser and `byte-machine-span-fragment-step/v1` reads it,
+        ;; lives in the parser and `byte-machine-span-fragment-step/v2` reads it,
         ;; so no rendered `let` introduces a name `reserved-member-3` would have to
         ;; grow to cover.
         ((span-start)
@@ -688,15 +687,15 @@
             "             (cond\n"
             (render-byte-clauses (normal-dispatch-transitions s))
             "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
-        ;; Keyword table (decision 0044). ONE arm: it reads the parked prefix from
-        ;; a compound `st` (empty on fresh entry), calls the runtime walk over its
-        ;; embedded entries, and either loops to the decision's target, parks the
+        ;; Keyword table. ONE arm: it reads the parked prefix from a compound
+        ;; `st` (empty on fresh entry), calls the runtime walk over its embedded
+        ;; entries, and either jumps to the walk's chosen target, parks the
         ;; grown prefix as the compound (id . path) and yields need-input, or --
         ;; under finish? -- takes the eof route. `off` advances by the bytes THIS
         ;; feed consumed, `(- (caddr r) pos)`; the delimiter is left unread (a jump
-        ;; carries `pk` `byte` for a taken keyword). The exec loop's `case` key
-        ;; extracts the id from the compound (render-machine emits that only when a
-        ;; machine has a keyword table, so every other machine's text is unchanged).
+        ;; carries `pk` `byte` for a taken keyword). `%dispatch` extracts the id
+        ;; from the compound (render-machine emits that extraction only when a
+        ;; machine has a keyword table).
         ((keyword-table)
          (let ((kwid (number->string (normal-state-id s)))
                (nomatch (normal-keyword-no-match s)))
@@ -715,7 +714,7 @@
                                                   (normal-error-reason s) index-of) "\n"
             "                 (byte-machine-make-feed-outcome/v1 (quote need-input) (caddr r) #f (cons "
             kwid " (cadr r)) (+ off (- (caddr r) pos)))))))\n")))
-        ;; Unreachable today -- this case already covers every kind
+        ;; Unreachable -- this case covers every kind
         ;; normal-state-kind can produce: dispatch, keyword-table, stop, error,
         ;; finish, pause, field-action, field-branch, accumulate, callback,
         ;; span-start, span-end, span-completion, and counted-consume -- FOURTEEN.
@@ -760,10 +759,10 @@
            ;; writes a reason at exactly two sites -- an error state's, and a
            ;; dispatch state's default-eof routing -- so a declaration no node
            ;; names and that is not the machine default-eof never reaches the IR
-           ;; fingerprint. Emitting it anyway made two machines the fingerprint
-           ;; calls identical emit DIFFERENT bytes. Narrowing here rather than
-           ;; widening the encoding is what keeps every shipped fingerprint
-           ;; stable.
+           ;; fingerprint. Emitting it anyway would make two machines the
+           ;; fingerprint calls identical emit DIFFERENT bytes. Narrowing here,
+           ;; rather than widening the encoding, leaves the fingerprint encoding
+           ;; as it is.
            (reached (let walk ((i 0) (acc '()))
                       (if (>= i (vector-length states)) (reverse acc)
                           (let* ((st (vector-ref states i))
@@ -793,14 +792,14 @@
                                                 (eq? (car (normal-dispatch-eof st)) 'default))
                                            (cdr (normal-dispatch-eof st)))
                                           ;; A pause/callback state's OPTIONAL
-                                          ;; reason (M12) carries its code in slot
-                                          ;; 5 and reason in slot 7 -- the error
+                                          ;; reason carries its code in slot 5
+                                          ;; and reason in slot 7 -- the error
                                           ;; state's slots -- so a pause-only code
                                           ;; (named by no error node) reaches the
                                           ;; errs table and index-of finds it
                                           ;; instead of raising at emit time. #f
-                                          ;; slot 5 means no reason, contributing
-                                          ;; nothing, exactly as before.
+                                          ;; in slot 5 means no reason and
+                                          ;; contributes nothing.
                                           ((and (memq (normal-state-kind st)
                                                       '(pause callback))
                                                 (normal-error-code st))
@@ -820,14 +819,13 @@
            ;; the membership test and be emitted, giving two machines with the
            ;; same IR fingerprint different emitted bytes.
            ;;
-           ;; Dropping the later duplicate rather than keeping it is what leaves
-           ;; every shipped golden where it is: a machine with no duplicate pair
-           ;; emits exactly what it emitted before, and the surviving entry keeps
-           ;; its declaration-order POSITION, so no index moves either. The two
-           ;; entries would have been textually identical in any case -- an errs
-           ;; entry is (code, reason) and nothing else -- so no site loses a
-           ;; reason it could have rendered, which is what makes the drop safe
-           ;; rather than merely convenient.
+           ;; The LATER duplicate is dropped, so the surviving entry keeps its
+           ;; declaration-order POSITION and a machine with no duplicate pair
+           ;; gets the same table and indices as an unfiltered walk. The two
+           ;; entries would be textually identical in any case -- an errs entry
+           ;; is (code, reason) and nothing else -- so no site loses a reason it
+           ;; could have rendered, which is what makes the drop safe rather than
+           ;; merely convenient.
            (decls (let keep ((ds (machine-errors (compilation-machine compilation))) (acc '()))
                     (if (null? ds) (reverse acc)
                         (let ((pair (cons (error-declaration-code (car ds))
@@ -845,12 +843,11 @@
            ;; nothing rejects duplicate codes, and nothing requires uniqueness --
            ;; and the normalizer has already collapsed the node's declaration name
            ;; to its resolved code by the time the emitter sees it. Keying on the
-           ;; code alone therefore returned the FIRST declaration carrying it, so a
-           ;; generated parser reported a different declaration's reason than the
-           ;; interpreter, on a machine the verifier accepts with zero
-           ;; diagnostics. The normalized state has carried the right reason in its
-           ;; own slot since format 2, which is what makes this recoverable without
-           ;; a new slot: (code, reason) selects the entry the SITE produced, and
+           ;; code alone would return the FIRST declaration carrying it, so a
+           ;; generated parser would report a different declaration's reason than
+           ;; the interpreter, on a machine the verifier accepts with zero
+           ;; diagnostics. The normalized state carries the right reason in its
+           ;; own slot, so (code, reason) selects the entry the SITE produced, and
            ;; when two declarations agree on both, their errs entries are identical
            ;; and either index yields the same record -- so this is total.
            (index-of (lambda (code reason)
@@ -906,14 +903,13 @@
                                 acc (if (string=? acc "") "" " ")
                                 "(" (symbol->string (car (car fs)))
                                 " . " (number->string (caddr (car fs))) ")")))))
-           ;; ABI payload member 3 (Milestone 13): the settable table, `(name
-           ;; width)` per SETTABLE field. Member 0 carries `(name . initial)` with
-           ;; no width, so the generated `make-parser` cannot range-check an
-           ;; embedder override without this. It is an OPTIONAL member, emitted
-           ;; only when some field is settable (`settable?` is the field record's
-           ;; 5th element, `list-ref 4`; `cadr` is the width) -- a machine with
-           ;; none emits the three members it always has, byte-identical but for
-           ;; the ABI literal.
+           ;; ABI payload member 3: the settable table, `(name width)` per
+           ;; SETTABLE field. Member 0 carries `(name . initial)` with no width,
+           ;; so the generated `make-parser` cannot range-check an embedder
+           ;; override without this. It is an OPTIONAL member, emitted only when
+           ;; some field is settable (`settable?` is the field record's 5th
+           ;; element, `list-ref 4`; `cadr` is the width) -- a machine with none
+           ;; emits members 0-2 only.
            (settable (let loop ((fs (normal-machine-fields normal)) (acc ""))
                        (if (null? fs) acc
                            (loop (cdr fs)
@@ -932,8 +928,8 @@
            ;; emitted library exports ONE name and the compiled-machine
            ;; constructor's five arguments are the only channel to the runtime, so
            ;; a top-level definition would still have to be passed in. It is a
-           ;; rendering choice, not a third transport, and the payload grows either
-           ;; way -- an ABI bump.
+           ;; rendering choice, not a third transport: the payload carries the
+           ;; table either way.
            ;;
            ;; Total over internal prefix states, so a lowered sequence position
            ;; answers with its DECLARING node's public name.
@@ -949,10 +945,10 @@
                                        'render-machine
                                        "no source name for normalized state" i))
                                     (cdr hit))))))))
-           ;; True when any state is a keyword table. Only then does the exec loop
-           ;; need to extract the state id from a compound `st` (decision 0044's
-           ;; cross-feed resume) -- so a machine without one emits the identical
-           ;; `(case st ...)` it always has, and no golden but the ABI literal moves.
+           ;; True when any state is a keyword table. Only then does `%dispatch`
+           ;; need to extract the state id from a compound `st` (a keyword
+           ;; table's cross-feed resume) -- a machine without one dispatches on
+           ;; `st` directly.
            (has-kw (let hk ((i 0))
                      (cond ((>= i (vector-length states)) #f)
                            ((eq? (normal-state-kind (vector-ref states i)) 'keyword-table) #t)
@@ -969,44 +965,39 @@
         ;; key: nothing has been consumed since either kind of call began, so an
         ;; error state reached with no jump taken reports a boundary at the
         ;; current stream offset regardless of which call observes it. Keying this
-        ;; on finish? made both lanes report `eof` at the default-EOF arm and made
-        ;; that arm's own literal observationally identical to the inherited
-        ;; variable -- agreement bought by making the difference unobservable.
+        ;; on finish? would make both lanes report `eof` at the default-EOF arm
+        ;; and make that arm's own literal observationally identical to the
+        ;; inherited variable -- agreement bought by making the difference
+        ;; unobservable.
         ;; EVERY STATE IS A PROCEDURE, AND A TRANSITION IS A DIRECT TAIL CALL.
-        ;; These arms were one `(case st ...)` re-entered per transition, which
-        ;; Chez compiles as a LINEAR SCAN: measured against 10.4.1 on a 530-arm
-        ;; case, the arm at index 5 dispatches in 1.90ns and the arm at index 295
-        ;; in 93.15ns -- about 0.31ns per arm skipped, the total arm count
-        ;; irrelevant, identical at optimize-level 0, 2 and 3. A machine's cost
-        ;; therefore depended on where decision 0016 happened to number its hot
-        ;; states, which is not a property anyone chose. As mutually tail-calling
+        ;; One `(case st ...)` re-entered per transition is what Chez compiles
+        ;; as a LINEAR SCAN: measured on Chez 10.4.1 over a 530-arm case, the arm
+        ;; at index 5 dispatches in 1.90ns and the arm at index 295 in 93.15ns --
+        ;; about 0.31ns per arm skipped, the total arm count irrelevant,
+        ;; identical at optimize-level 0, 2 and 3. A machine's cost would then
+        ;; depend on where normalization happened to number its hot states,
+        ;; which is not a property anyone chose. As mutually tail-calling
         ;; procedures that never escape, a transition to a target known at emit
         ;; time is a direct jump: 0.80ns against 185.85ns for the same arm, and
         ;; independent of the state's id. Bucketing the case into nested range
-        ;; tests was measured too and plateaus near 11.65ns, so it is not what
-        ;; this emits.
+        ;; tests plateaus near 11.65ns, so it is not what this emits.
         (let loop ((i 0) (acc ""))
           (if (>= i (vector-length states)) acc
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i)
                                                                  names index-of
                                                                  (normal-machine-fields normal)
                                                                  (normal-machine-span-decls normal))))))
-        ;; The one dispatch that survives, and the two places that still enter it:
-        ;; the entry into a feed, and a keyword table's jump. A callback answering
-        ;; `goto` used to be the third, and the sentence that stood here --
-        ;; "these happen once per callback and never once per byte, so a linear
-        ;; case costs nothing the per-byte path can see" -- was true in its
-        ;; premise and wrong in its conclusion: at 0.31ns per arm skipped, four
-        ;; callback crossings per header on a 217-state machine is about 136ns of
-        ;; header, and `many-small-headers` lost 36% of its time to it.
-        ;; `render-goto-clauses` above now tests the literals that arm already
-        ;; wrote, and reaches this only on a target no construction produces.
+        ;; The one search over state ids, and the two places that enter it: the
+        ;; entry into a feed, and a keyword table's jump. A callback answering
+        ;; `goto` does not: `render-goto-clauses` above tests the literals that
+        ;; arm already wrote, and reaches this only on a target no construction
+        ;; produces.
         ;;
         ;; The feed entry is once per `parser-feed!` call and genuinely cannot be
         ;; a literal -- the state comes from the parser. The keyword jump's target
         ;; set IS known here (the table's entries and its no-match edge), so the
-        ;; same treatment applies and is not yet measured; it is left alone rather
-        ;; than assumed, which is the rule the sentence above broke.
+        ;; literal-clause treatment could apply to it too; it is not used, and
+        ;; the jump pays the ceil(log2 N) search below instead.
         "      (define (%dispatch pos st off pk)\n"
         ;; A machine with no keyword table binds nothing: its key IS `st`, and
         ;; the `let` would be a name in the emitted text for no reason. The
@@ -1029,10 +1020,10 @@
         (number->string entry) " exec (quote #(#(" fields ") #(" cbs ") #("
         snames ")"
         ;; The optional fourth member: emitted only when a field is settable, so
-        ;; a machine with none renders the identical three-member metadata it did
-        ;; at ABI 8 -- the present guard, matching the fingerprint's tag-10
-        ;; trailing section. The runtime decoder length-guards it (absent => no
-        ;; settable field => every override refused).
+        ;; a machine with none renders three-member metadata -- the same
+        ;; present-only rule as the fingerprint's tag-10 trailing section. The
+        ;; runtime decoder length-guards it (absent => no settable field =>
+        ;; every override refused).
         (if (string=? settable "") "" (string-append " #(" settable ")"))
         ")))))\n"))))
 

@@ -6,7 +6,7 @@
 # below is therefore enforced at configure time, where it is a build failure,
 # rather than at run time, where it would be a test that quietly never ran.
 #
-# Split per AGENTS.md's functional core / imperative shell rule:
+# Split into a functional core and an imperative shell:
 #
 #   functional core   byte_machine_test_name_parse, _validate_labels,
 #                     _reserve_name, _require_timeout -- pure decisions with no
@@ -22,7 +22,7 @@ include_guard(GLOBAL)
 
 # --- Vocabulary ------------------------------------------------------------
 #
-# Layers follow the parent plan's testing strategy (section 22) rather than a
+# Layers name the kind of evidence a test provides rather than following a
 # generic unit/integration split, so a preset can select exactly the evidence a
 # given CI stage needs.
 
@@ -40,11 +40,11 @@ set(BYTE_MACHINE_TEST_LAYERS
 
 set(BYTE_MACHINE_TEST_BACKENDS chez cmake)
 
-# o1 outlives the backend that owned it: no BYTE_MACHINE_TEST_MODES_<backend>
-# below claims it, so a lane naming it for a backend that does not is caught
-# as an incompatible backend/mode pairing rather than an unrecognized mode --
-# the distinction ByteMachineTestingSpec.cmake's chez.o1 case exists to prove,
-# and removing the token here would collapse it into the wrong error.
+# o1 is a recognized mode that no backend supports: no
+# BYTE_MACHINE_TEST_MODES_<backend> below claims it, so a lane naming it is
+# caught as an incompatible backend/mode pairing rather than an unrecognized
+# mode -- the distinction ByteMachineTestingSpec.cmake's chez.o1 case exists to
+# prove, and removing the token here would collapse it into the wrong error.
 set(BYTE_MACHINE_TEST_MODES source aot o1 direct)
 
 # A backend may only be registered in a mode it can actually execute. Chez has
@@ -160,14 +160,13 @@ endfunction()
 # byte_machine_test_run_directory(<name> <override> <out_dir>)
 #
 # Where a lane launches from. Empty override means the derived private
-# directory, which is the default precisely because Chez once resolved includes
-# against the process working directory: a test allowed to run from the
-# repository could load a body the build never staged, and would keep passing
-# after that body stopped being staged correctly.
+# directory under the build tree. A test allowed to run from the repository
+# could resolve a relative path against it and load a file the build never
+# staged, and would keep passing after that file stopped being staged
+# correctly.
 #
 # A lane that overrides this is making a claim about where it must launch
-# from; none currently does (the include-era working-directory matrix retired
-# with decision 0006), and the never-from-the-repository default stays
+# from; none currently does, and the never-from-the-repository default stays
 # because it costs nothing and forecloses a class of accident. Pure, so that
 # the choice can be specified without registering a test or creating a
 # directory.
@@ -191,8 +190,7 @@ endfunction()
 # The working directory is inside the build tree, never the repository, unless
 # WORKING_DIRECTORY names an existing directory of the caller's choosing. That is
 # not tidiness: it is what keeps a test's outcome independent of where the
-# developer happened to stand, and it predates -- and outlives -- the include
-# mechanism whose working-directory hazards first forced it (decision 0006).
+# developer happened to stand.
 function(byte_machine_add_test)
   cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT")
 

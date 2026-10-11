@@ -98,10 +98,9 @@
   ;; fingerprint can.
   ;; normal-machine-fields : NormalMachine -> FieldSlotTable
   (define (normal-machine-fields m) (vector-ref m 5))
-  ;; The callback and span slot assignment, appended after fields for the same
-  ;; reason fields were appended after the debug map: normal-machine-fingerprint
-  ;; is slot 3 and the emitter reads it by index, so nothing may be inserted
-  ;; ahead of it. Each is a list of (name slot) with slot ascending from 0 and
+  ;; The callback and span slot assignment, placed after the fields for the same
+  ;; reason the fields follow the debug map: normal-machine-fingerprint is slot
+  ;; 3 and the emitter reads it by index, so nothing may be inserted ahead of it. Each is a list of (name slot) with slot ascending from 0 and
   ;; equal to the list position -- redundant by construction, and carried for the
   ;; same reason the field table carries it.
   ;; normal-machine-callbacks : NormalMachine -> NameSlotTable
@@ -137,10 +136,10 @@
   ;; successor list -- (next . error-or-#f) for a field action, (true . false)
   ;; for a field branch. Accumulate reuses slot 6's (node . id) /
   ;; (default . code) convention for its EOF routing rather than adding another.
-  ;; `reason` (slot 7) is the error declaration's static reason STRING, added as
-  ;; its own slot rather than by widening slot 5 or the eof pair: both of those
-  ;; are read by compile.sls through symbol->string, so a reason STRING could not
-  ;; ride either. An error state carries its own declaration's reason; a dispatch
+  ;; `reason` (slot 7) is the error declaration's static reason STRING, in its
+  ;; own slot rather than in slot 5 or the eof pair: both of those are read by
+  ;; compile.sls through symbol->string, so a reason STRING could not ride
+  ;; either. An error state carries its own declaration's reason; a dispatch
   ;; state carries the machine default-eof declaration's when its eof routing is
   ;; (default . code), and #f when it routes to a node.
   ;; eof (slot 6) is a dispatch state's resolved eof routing:
@@ -236,13 +235,12 @@
                       (else (put-u8 p 1) (put-u64be p a))))
               args))
 
-  ;; The `else` guards below are unreachable-today safety for the kind AFTER the
-  ;; ones this file handles. Thirteen node kinds lower here -- the closed set,
-  ;; complete with counted consume -- and THIRTEEN normalized state kinds come
-  ;; out: the same thirteen less `sequence`, which lowers to ordinary dispatch
-  ;; states (so it adds no case of its own), plus `span-completion`, which has no
-  ;; source node at all. So the guards protect against a FOURTEENTH node kind,
-  ;; not a seventh.
+  ;; Every node kind ir.sls defines lowers here. The normalized state kinds are
+  ;; the node kinds less `sequence`, which lowers to ordinary dispatch states
+  ;; (so it adds no state kind of its own), plus `span-completion`, which has no
+  ;; source node at all. The `else` guards below are unreachable for every kind
+  ;; ir.sls defines; they make a node or state kind with no arm here fail loudly
+  ;; rather than lower or encode to nothing.
 
   ;; --- sequence prefix trie ---
   ;; A trie node is (children . terminal); children is an alist (byte . node)
@@ -262,7 +260,7 @@
   ;; The two guards below are internal invariants, not user diagnostics. A prefix
   ;; state has no "accept here" slot, so a trie node that is both terminal and
   ;; interior is UNREPRESENTABLE rather than merely unwanted. pass-sequence-
-  ;; ambiguity now rejects both shapes at verify-machine, so a verified machine
+  ;; ambiguity rejects both shapes at verify-machine, so a verified machine
   ;; cannot reach them. They are KEPT as defense-in-depth because
   ;; normalize-machine is a public entry point that does not itself verify: a
   ;; caller who skips verification must fail loudly here rather than silently
@@ -383,8 +381,8 @@
            (declared-count (length nodes))
            ;; Declared nodes keep their declaration index; every internal prefix
            ;; state appends after the whole declared block, in declaring-node
-           ;; order. Interleaving would renumber every later node and move the
-           ;; fingerprint of every machine containing a sequence.
+           ;; order. Interleaving would renumber every later declared node, so
+           ;; its id would no longer be its declaration index.
            ;; An accumulate node's own EOF edge, a separate lambda rather than a
            ;; widened `eof-of`: `eof-of` reads `byte-dispatch-node-eof-target`, a
            ;; bare slot read with no tag guard, so handing it another kind would
@@ -421,8 +419,8 @@
            ;; continuation sits ahead of a LATER sequence node's prefix states
            ;; rather than in a family block of its own.
            ;;
-           ;; Phase one is untouched -- every declared node keeps its
-           ;; declaration index -- and this is phase two, which begins at
+           ;; Phase one gives every declared node its declaration index; this
+           ;; is phase two, which begins at
            ;; `declared-count`. Internal states never interleave with declared
            ;; ones.
            ;;
@@ -528,7 +526,7 @@
                               (let ((blk (block-of n)))
                                 (seq-state n (caddr blk) (cadddr blk) i)))
                              ;; Keyword table: ONE normalized state carrying the
-                             ;; keyword list as data (decision 0044) -- NOT a trie
+                             ;; keyword list as data -- NOT a trie
                              ;; of per-prefix dispatch states, which is what makes
                              ;; 47 keywords a table rather than 242 states. It
                              ;; allocates no internal state, so prefix-blocks skips
@@ -552,7 +550,7 @@
                                       (errreason (error-node-error-name n)) #f #f #f))
                              ((finish-node? n) (vector ns-tag 'finish i #f #f #f #f #f #f #f #f))
                              ((pause-node? n)
-                              ;; The OPTIONAL reason (M12) rides slots 5 (code) and
+                              ;; The OPTIONAL reason rides slots 5 (code) and
                               ;; 7 (reason) -- the same slots an error state uses --
                               ;; so the emitter reads it through `normal-error-code`
                               ;; / `normal-error-reason`, and the reached-walk finds
@@ -602,9 +600,8 @@
                                         (list (id-of (integer-accumulate-node-digit-target n))
                                               (cons (id-of (edge-target nd)) (edge-mode nd))
                                               (id-of (integer-accumulate-node-overflow-error n))))))
-                             ;; Counted consume, the fourth INPUT-READING kind
-                             ;; with an EOF route of its own (after both dispatch
-                             ;; kinds and accumulate), and 1:1 like accumulate:
+                             ;; Counted consume, an INPUT-READING kind with an
+                             ;; EOF route of its own, and 1:1 like accumulate:
                              ;; `arguments` the field NAME (the emitter resolves
                              ;; name to slot), `targets` the one successor id,
                              ;; slot 6 the EOF routing in the usual convention
@@ -617,10 +614,10 @@
                                         #f
                                         (list (counted-consume-node-field n))
                                         (list (id-of (counted-consume-node-next n))))))
-                             ;; Callback invocation, the first kind that reaches
-                             ;; OUT of the machine. 1:1 like the three zero-width
-                             ;; kinds above, so it allocates no internal state and
-                             ;; prefix-blocks correctly skips it.
+                             ;; Callback invocation, the kind that reaches OUT of
+                             ;; the machine. 1:1 like the field kinds above, so it
+                             ;; allocates no internal state and prefix-blocks
+                             ;; correctly skips it.
                              ;;
                              ;; Its five payload values ride the three payload
                              ;; slots rather than widening the vector: `selector`
@@ -635,7 +632,7 @@
                              ;; only in order are two machines, and the encoder
                              ;; below writes the order.
                              ((callback-node? n)
-                              ;; slots 5/7 carry the OPTIONAL pause reason (M12),
+                              ;; slots 5/7 carry the OPTIONAL pause reason,
                               ;; reported when this callback returns callback-pause.
                               (let ((r (callback-node-reason n)))
                                 (vector ns-tag 'callback i #f #f
@@ -652,7 +649,7 @@
                              ;; resolved span SLOT and `targets` the single
                              ;; successor -- the same three payload slots the
                              ;; other zero-width kinds ride, so the vector is not
-                             ;; widened again.
+                             ;; widened.
                              ;;
                              ;; A span END also carries its continuation id,
                              ;; because the declared node is only the FIRST of its
@@ -668,7 +665,7 @@
                                       (span-slot-of (span-end-node-span n))
                                       (completion-id-of n)
                                       (id-of (span-end-node-next n))))
-                             ;; The repertoire is now these THIRTEEN kinds. A future
+                             ;; Every node kind ir.sls defines has an arm above. A
                              ;; kind reaching here must fail loudly, not lower to
                              ;; nothing.
                              (else (assertion-violation 'normalize-machine "unknown node kind" n)))
@@ -740,14 +737,12 @@
        ;;
        ;; The callback and span tables are OPTIONAL TRAILING SECTIONS at the foot
        ;; of this procedure, present only when nonempty, with the header
-       ;; unchanged. A trailing section that writes ZERO bytes for a machine
-       ;; declaring neither leaves the stream, and therefore the fingerprint,
-       ;; byte-identical to a machine that has no such declarations -- so it costs
-       ;; nothing on machines that do not use it. The full shape is:
+       ;; unchanged. A machine declaring none of them writes ZERO bytes for these
+       ;; sections, so they cost nothing on machines that do not use them. The
+       ;; full shape is:
        ;;   [... state records...][callback table?][span table?][settable table?]
        ;; each table wholly inside its own emptiness guard, the count included,
-       ;; because an unconditional count would be two bytes on every machine in
-       ;; the tree.
+       ;; because an unconditional count would be two bytes on every machine.
        (put-u8 p 2)
        (put-u32be p entry)
        (put-u32be p (vector-length states))
@@ -777,12 +772,10 @@
                         (put-reason p (normal-error-reason s)))
                ((finish) (put-u8 p 3))
                ;; pause: tag 4 + u32be continuation state id, then the OPTIONAL
-               ;; reason (M12) -- code + reason string -- written ONLY when
-               ;; declared. A reason-less pause writes zero extra bytes, so its
-               ;; fingerprint is byte-identical to before this milestone
-               ;; (criterion 1); a reason changes the fingerprint exactly as an
-               ;; error reason does, so two machines emitting different libraries
-               ;; differ in fingerprint.
+               ;; reason -- code + reason string -- written ONLY when declared.
+               ;; A reason-less pause writes zero extra bytes; a reason changes
+               ;; the fingerprint exactly as an error reason does, so two
+               ;; machines emitting different libraries differ in fingerprint.
                ((pause) (put-u8 p 4) (put-u32be p (normal-pause-target s))
                 (let ((code (normal-error-code s)))
                   (when code (put-symbol p code) (put-reason p (normal-error-reason s)))))
@@ -816,7 +809,7 @@
                 (put-eof-routing p (normal-dispatch-eof s) (normal-error-reason s)))
                ;; counted consume: tag, field name, successor id, eof routing --
                ;; every part, because each is observable to a generated parser.
-               ;; The tag is the next free literal above the earlier kinds.
+               ;; Tag 14, the next free literal after tags 0-13.
                ((counted-consume)
                 (put-u8 p 14)
                 (put-symbol p (car (normal-field-arguments s)))
@@ -832,9 +825,8 @@
                ;; the continue target, the pause continuation, and the branch
                ;; map as a count followed by (key, target) records.
                ;;
-               ;; THE TAG IS TEN, not the eight the state-kind run would reach
-               ;; next: tags eight and nine are the two trailing slot-table
-               ;; sections below, and a reader walking this stream linearly
+               ;; THE TAG IS TEN, not eight: tags eight and nine are the two
+               ;; trailing slot-table sections below, and a reader walking this stream linearly
                ;; could not tell a state record from a section by position alone
                ;; once a machine carried both.
                ;;
@@ -861,14 +853,14 @@
                               (put-symbol p (car b))
                               (put-u32be p (cdr b)))
                             bs))
-                ;; The OPTIONAL callback-pause reason (M12), guarded exactly as
-                ;; the pause arm's: written only when declared, so a reason-less
-                ;; callback's fingerprint is byte-identical to before.
+                ;; The OPTIONAL callback-pause reason, guarded exactly as the
+                ;; pause arm's: written only when declared, so a reason-less
+                ;; callback writes no reason bytes.
                 (let ((code (normal-error-code s)))
                   (when code (put-symbol p code) (put-reason p (normal-error-reason s)))))
                ;; The two span kinds and the internal substep. Tags ELEVEN,
-               ;; TWELVE and THIRTEEN: the state-kind run holds 0-7 and 10, and
-               ;; 8 and 9 are the trailing slot-table SECTION discriminators, so
+               ;; TWELVE and THIRTEEN, skipping 8 and 9, which are the trailing
+               ;; slot-table SECTION discriminators, so
                ;; a reader walking this stream linearly could not tell a state
                ;; record from a section by position alone once a machine carried
                ;; both.
@@ -894,8 +886,7 @@
                ;; tags 0-7,10-14 and the section discriminators 8,9. EVERY PART IS
                ;; ENCODED -- a different keyword, target, no-match route, case
                ;; sensitivity or eof route is a different machine, so all enter the
-               ;; fingerprint. A machine with no keyword table writes none of this,
-               ;; so its fingerprint is byte-identical to before (decision 0044).
+               ;; fingerprint. A machine with no keyword table writes none of this.
                ((keyword-table)
                 (put-u8 p 15)
                 (let ((es (normal-keyword-entries s)))
@@ -916,18 +907,16 @@
        ;; --- the optional trailing slot-table sections -------------------------
        ;;
        ;; EVERY BYTE BELOW IS INSIDE A GUARD, THE COUNT AND THE TAG INCLUDED. A
-       ;; machine declaring neither a callback nor a span writes ZERO bytes here
-       ;; and therefore encodes byte-identically to one with no such
-       ;; declarations, which is what keeps every pinned fingerprint still. An
-       ;; unconditional count would be two bytes on every machine in the tree and
-       ;; would move all of them.
+       ;; machine declaring no callback, span or settable field writes ZERO
+       ;; bytes here, so its fingerprint does not depend on these sections. An
+       ;; unconditional count would be two bytes on every machine.
        ;;
        ;; THE TAG IS WHY THERE IS A TAG. Two guarded tables with no discriminator
        ;; are ambiguous: one callback and no spans, versus no callbacks and one
        ;; span, both emit [count][one record]. Both record kinds are
        ;; symbol-shaped, so they can collide, and a collision would falsify the
-       ;; claim that declaration identity is fingerprint-visible. Tags 8, 9 and
-       ;; 10: the state-kind tags run 0-7.
+       ;; claim that declaration identity is fingerprint-visible. The section
+       ;; tags are 8 (callbacks), 9 (spans) and 10 (settable fields).
        ;;
        ;; EVERY PART THAT REACHES THE ABI IS ENCODED. A datum must enter the
        ;; ENCODING, not merely be read from the source machine: two machines
@@ -963,13 +952,13 @@
                            (begin (put-u8 p 1) (put-symbol p c))
                            (put-u8 p 0))))
                    spans))
-       ;; Tag 10: the settable-field slots (Milestone 13). Settability is a datum
-       ;; the ABI carries -- the emitted payload gains a settable table so the
-       ;; generated `make-parser` range-checks an override -- so two machines
-       ;; differing only in one field's settability must differ in fingerprint.
-       ;; It rides as the same kind of optional trailing section the callback and
-       ;; span tables do: present only when some field is settable, so a machine
-       ;; with none is byte-identical (only the initial + width already in the
+       ;; Tag 10: the settable-field slots. Settability is a datum the ABI
+       ;; carries -- the emitted payload has a settable table so the generated
+       ;; `make-parser` range-checks an override -- so two machines differing
+       ;; only in one field's settability must differ in fingerprint. It rides
+       ;; as the same kind of optional trailing section the callback and span
+       ;; tables do: present only when some field is settable, so a machine with
+       ;; none writes nothing here (only the initial + width already in the
        ;; header field record identify the field, and the slot fixes WHICH one is
        ;; settable). The width is not re-written here -- it is in the field record
        ;; at that slot -- so this section is a sparse slot marker, and the slot
@@ -988,10 +977,9 @@
   ;; Slot = declaration index. `machine-fields` is the declaration list in
   ;; declaration order, so the slot is the position and this is a numbering, not
   ;; a choice.
-  ;; A field record is (name width initial slot settable?). The first four are
-  ;; the original table; `settable?` (Milestone 13) is appended, so the emitter's
-  ;; and encoder's `(car ...)` / `(caddr ...)` / `(cadddr ...)` reads of name,
-  ;; initial and slot are unmoved -- only the new 5th position carries the flag.
+  ;; A field record is (name width initial slot settable?). The emitter and
+  ;; encoder read it positionally -- `(car ...)` / `(cadr ...)` / `(caddr ...)`
+  ;; / `(cadddr ...)` / `(list-ref ... 4)` -- so the order is fixed.
   (define (field-table machine)
     (let loop ((fs (machine-fields machine)) (slot 0) (out '()))
       (if (null? fs) (reverse out)

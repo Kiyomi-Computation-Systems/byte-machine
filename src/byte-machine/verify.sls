@@ -9,6 +9,13 @@
 ;;; pass-sequence-ambiguity, not by pass-overlap (which compares canonical byte
 ;;; sets within one byte-dispatch node); see pass-overlap's own filter.
 ;;; Diagnostics are compared by code, never by text.
+;;;
+;;; Layout constraint: the mutation suite
+;;; (test/support/cmake/SchemeMutationSuite.cmake) locates each mutation of
+;;; this file by exact source text that must occur a declared number of times.
+;;; So same-shaped loops here use distinct binding names, and some passes and
+;;; bindings are placed so that anchored lines are neither duplicated nor
+;;; re-indented. Comments below that refer to "the layout constraint" mean this.
 (library (byte-machine verify)
   (export verify-machine verification-ok? verification-diagnostics
           verification-machine
@@ -27,8 +34,8 @@
   ;; being the identical record. `severity`, `machine`, `declarations` and
   ;; `path` fill the remaining slots.
   (define diagnostic-tag (vector 'byte-machine-diagnostic))
-  ;; ONE builder for all four constructors and `stamp-diagnostic`, folding four
-  ;; near-identical nine-slot literals into one. Its name deliberately does NOT
+  ;; ONE builder for all four constructors and `stamp-diagnostic`. Its name
+  ;; deliberately does NOT
   ;; begin `make-diagnostic`: the diagnostic-census test collects every
   ;; `(define (make-diagnostic...) ...)` header as an emission site, so a shared
   ;; builder in that family would be miscounted. None of the four constructors
@@ -72,9 +79,9 @@
   ;; diagnostic-path : Diagnostic -> (Option (Listof Symbol))
   (define (diagnostic-path d) (vector-ref d 8))
   ;; Stamp severity and machine name onto a diagnostic, ONCE, in
-  ;; `verify-machine`. Severity is the constant `error` -- warnings are deferred,
-  ;; and a record that carries the field is what makes adding one a change to one
-  ;; constant. The machine name is a single value `(and (machine? machine)
+  ;; `verify-machine`. Severity is the constant `error` -- no check emits a
+  ;; warning, and because the record carries the field, adding one is a change
+  ;; to one constant. The machine name is a single value `(and (machine? machine)
   ;; (machine-name machine))`, applied to the whole list: `#f` exactly for
   ;; `pass-schema`'s not-a-machine arm, because `verify-machine` runs every other
   ;; pass only under `(machine? machine)`, so a diagnostic with no machine name
@@ -128,14 +135,14 @@
   ;; and `pass-fields`' field arm -- beside the two declaration arms in
   ;; `pass-declarations`. It is a second CALL SITE of `valid-reason?` rather than
   ;; a second predicate: labels and reasons share one repertoire, and a
-  ;; duplicated `reason-char?` would be two textually identical bodies (the
-  ;; twinned-FIND trap this file already records).
+  ;; duplicated `reason-char?` would be two textually identical bodies (see the
+  ;; layout constraint in the header).
   ;;
-  ;; A label is embedded in no generated output today -- compile.sls reads no
+  ;; A label is embedded in no generated output -- compile.sls reads no
   ;; source-label -- so unlike a nonportable reason (which renders an unparseable
-  ;; generated library) a nonportable label cannot corrupt emission. What it
-  ;; could corrupt is the diagnostic report, which does not consume the field
-  ;; yet; the rejection is required either way.
+  ;; generated library) a nonportable label cannot corrupt emission. It is
+  ;; rejected anyway, so that a consumer of the field, such as a diagnostic
+  ;; report, can rely on its repertoire.
   ;;
   ;; THREE VALUE SHAPES. The field type is unspecified and no constructor
   ;; validates it. `#f` is absence and passes. A symbol or a string is checked
@@ -156,11 +163,10 @@
   (define (error-names m) (map error-declaration-name (machine-errors m)))
   ;; The successors of a ZERO-WIDTH node -- one fact, three consumers
   ;; (`node-out-targets`, `reexec-targets` and `eof-successors`), defined once.
-  ;; Triplicating it is not an option: the arms are textually identical, so a
-  ;; mutation pinning one would resolve to three sites and the suite would
-  ;; hard-fail at declaration (the SITES-fails-both-directions trap). Factoring
-  ;; it does NOT collapse three decisions into one: each caller's arm -- whether
-  ;; it consults this at all -- stays its own line, and only the shared fact,
+  ;; Triplicating it would put three textually identical arms in the file (see
+  ;; the layout constraint in the header). Factoring it does NOT collapse three
+  ;; decisions into one: each caller's arm -- whether it consults this at all --
+  ;; stays its own line, and only the shared fact,
   ;; "what does a zero-width node continue to", lives here.
   ;; Each target carries its edge ROLE alongside it. `zero-width-edges` is the
   ;; fact, and both `zero-width-successors` and `node-out-edges` are views of it;
@@ -265,8 +271,8 @@
   (define (node-out-targets n) (map cdr (node-out-edges n)))
   ;; A dispatch/sequence node's stored eof-target (a symbol, or #f meaning
   ;; "the machine default eof error"), or #f for any other node kind. The single
-  ;; source of "node kind -> eof-target accessor" for the sites below that were
-  ;; previously independent copies of the same cond. eof-terminal's two parallel
+  ;; source of "node kind -> eof-target accessor" for the sites below.
+  ;; eof-terminal's two parallel
   ;; cond arms (below) are left as their own arms, not routed through this helper
   ;; -- see the comment there for why.
   (define (node-eof-target n)
@@ -301,8 +307,7 @@
   ;; The path from the entry to `name` over `reach-from`'s alist, entry first.
   ;; `name` is a key by construction -- the byte-into-finish block passes only
   ;; `br908` members, which are exactly `reach-from`'s keys -- so the walk
-  ;; terminates at the entry (parent `#f`); a guard for a non-member would be a
-  ;; guard that cannot guard, which this file deletes rather than documents.
+  ;; terminates at the entry (parent `#f`) and needs no guard for a non-member.
   (define (parent-path parents name)
     (let loop ((name name) (acc '()))
       (let ((parent (cond ((assq name parents) => cdr) (else #f))))
@@ -353,7 +358,7 @@
                                                 "error node names an undeclared error" (list (error-node-error-name n))))
                          '()))
                    nodes))
-       ;; A pause or callback node's OPTIONAL reason (Milestone 12) names an error
+       ;; A pause or callback node's OPTIONAL reason names an error
        ;; declaration, resolved exactly as an error node's error name is above --
        ;; the reason IS an error-declaration, so an undeclared one is
        ;; `missing-error-declaration` (no new code). #f means no reason. The reason
@@ -371,7 +376,7 @@
                    nodes)))))
 
   ;; PASS 6a (DECLARATION HALF ONLY): field declarations, carrying exactly the
-  ;; checks assigned to the verifier. A field's WIDTH and its INITIAL's range are
+  ;; checks that belong to the verifier. A field's WIDTH and its INITIAL's range are
   ;; constructor contracts, rejected at `make-uint-field` and unrepresentable
   ;; thereafter, so an arm here for either would be unreachable code that no test
   ;; could redden. What is left is RELATIONAL and therefore cannot live in a
@@ -383,8 +388,9 @@
   ;; diagnostic is about, which for a field diagnostic is the field.
   ;;
   ;; This is a pass of its own rather than two more arms on `pass-names` and
-  ;; `pass-names-valid`, so that those two keep the pin-visible shape they were
-  ;; measured with, and so the operand half has one place to live. `valid-name?`
+  ;; `pass-names-valid`, so that those two keep their shape (the layout
+  ;; constraint in the header) and the operand half has one place to live.
+  ;; `valid-name?`
   ;; is reused exactly as `pass-names-valid` uses it: fields sit in the same
   ;; generated namespace as nodes and errors and get the same grammar, not a
   ;; parallel one that could drift.
@@ -394,8 +400,7 @@
        ;; The loop variables are named apart from `pass-names`' node-duplicate
        ;; loop on purpose: the two walks are the same shape, and cloning its
        ;; identifiers would give this file two textually identical `(memq nm
-       ;; seen)` lines -- one FIND the mutation suite resolves to TWO sites, which
-       ;; silently mutates the node check too.
+       ;; seen)` lines (the layout constraint in the header).
        (let scan ((rest fs) (fseen '()) (out '()))
          (if (null? rest) (reverse out)
              (let ((fname (uint-field-name (car rest))))
@@ -423,14 +428,12 @@
   ;; operation and predicate sets, and `arguments` being a proper list.
   ;; Everything below is relational.
   ;;
-  ;; It lives INSIDE pass-fields rather than in a pass of its own: a sibling pass
-  ;; would duplicate an indentation-anchored line that `verify: pass-fields is
-  ;; never run` pins at SITES=1, and would leave the accumulate share two
-  ;; candidate homes.
+  ;; It lives INSIDE pass-fields rather than in a pass of its own (see also the
+  ;; layout constraint in the header), so every field-reference check --
+  ;; operations, predicates, accumulate and counted consume -- has one home.
   ;;
-  ;; ONE code, `invalid-field-operand`. The accumulate share reuses it with NO
-  ;; NEW CODE and extends THIS pass -- there is deliberately one candidate home,
-  ;; not two, and `field-operand-schemas` below is where its rows go.
+  ;; ONE code, `invalid-field-operand`, which the accumulate and counted-consume
+  ;; field references below reuse.
   (define field-operand-schemas
     ;; (name arity . operand-kinds-after-the-field). Position 0 is the `field`
     ;; in every one of the fourteen, which is why it is not repeated per row.
@@ -445,7 +448,7 @@
             ((eq? (uint-field-name (car fs)) name) (uint-field-width (car fs)))
             (else (loop (cdr fs))))))
 
-  ;; Whether the declared field `name` is settable (Milestone 13). #f for an
+  ;; Whether the declared field `name` is settable. #f for an
   ;; undeclared name too, so the caller checks declaredness (width) first.
   (define (field-settable-of fs name)
     (let loop ((fs fs))
@@ -497,13 +500,12 @@
                                         "range low exceeds high" (list (car args))))
                  '())))))))))
 
-  ;; The accumulate share is a SIBLING ARM, not a `field-operand-schemas` row:
+  ;; The accumulate check is a SIBLING ARM, not a `field-operand-schemas` row:
   ;; that table is keyed on a SELECTOR and an ARITY, and an accumulate node has
-  ;; `field` and `base` and neither. It lives in `pass-fields` and reuses
-  ;; `invalid-field-operand`, keeping the one-home promise.
+  ;; `field` and `base` and neither. It reuses `invalid-field-operand`.
   ;;
   ;; Only the FIELD REFERENCE: the base is closed at construction, so an arm for
-  ;; it here would be dead code whose permissive mutation survives. Reported
+  ;; it here would be dead code. Reported
   ;; under the NODE's name, matching the convention the operand walk above states
   ;; -- prescribing the field name instead would put two conventions under one
   ;; code.
@@ -514,24 +516,22 @@
                                "accumulate names no declared field" (list (integer-accumulate-node-field n))))))
 
   ;; "Counted consume using an incompatible field". Its own arm beside
-  ;; accumulate's and not folded into it -- each construct arrives with its own
-  ;; check and inherits nothing -- reusing the CODE, the precedent accumulate
-  ;; set. Only the field reference: one field type exists and more is deferred,
-  ;; so every declared field is a count a consume can draw from and
-  ;; "incompatible" reduces to "undeclared". When a second field type arrives,
-  ;; this arm is where the incompatibility check gains content. Reported under
-  ;; the NODE's name, on the operand walk's convention.
-  ;; Two diagnostics, in order. First the shared "no declared field". Then, for a
-  ;; declared field, the Milestone 13 rule: the counter may NOT be settable. A
-  ;; settable field's initial is embedder-chosen at `make-parser`, but
-  ;; `parked-eof-start` (PASS EOF-execution) reasons that a counted-consume node
-  ;; reachable at ENTRY holds "the field's initial and may be zero, so it starts
-  ;; at itself" -- a claim about the DECLARED initial that an embedder override
-  ;; would falsify. A count's whole meaning is a known start that decreases, so a
-  ;; settable counter is refused outright (decision 0047 item 4), which keeps that
-  ;; entry reasoning sound for every real machine (a settable field is a
-  ;; mode/bitset selector, never a counter). Reported under the NODE's name, on
-  ;; the operand walk's convention.
+  ;; accumulate's and not folded into it, reusing the CODE as accumulate does.
+  ;; Only one field type exists, so every declared field is a count a consume
+  ;; can draw from and "incompatible" reduces to "undeclared" plus the settable
+  ;; rule below; a second field type would add its incompatibility check here.
+  ;; Reported under the NODE's name, on the operand walk's convention.
+  ;;
+  ;; Two diagnostics, in order. First the shared "no declared field". Then, for
+  ;; a declared field: the counter may NOT be settable. A settable field's
+  ;; initial is embedder-chosen at `make-parser`, but `parked-eof-start` (PASS
+  ;; EOF-execution) reasons that a counted-consume node reachable at ENTRY holds
+  ;; "the field's initial and may be zero, so it starts at itself" -- a claim
+  ;; about the DECLARED initial that an embedder override would falsify. A
+  ;; count's whole meaning is a known start that decreases, so a settable
+  ;; counter is refused outright, which keeps that entry reasoning sound for
+  ;; every real machine (a settable field is a mode/bitset selector, never a
+  ;; counter).
   (define (counted-operand-diagnostics fs n)
     (let ((fname (counted-consume-node-field n)))
       (cond ((not (field-width-of fs fname))
@@ -590,22 +590,20 @@
                                                            "two cases match the same byte or bytes")
                                           out)
                                     out)))))))))
-  ;; NOT extended to sequence-dispatch-node?, and not deferred either: whether
+  ;; NOT extended to sequence-dispatch-node?: whether
   ;; two sequence ALTERNATIVES collide is ambiguity, which pass-sequence-ambiguity
   ;; below owns. Overlap and ambiguity stay two checks with two codes, and the
   ;; predicates genuinely differ -- this pass compares canonical matcher byte
   ;; SETS within one byte-dispatch node; that one compares the prefix relation
-  ;; between byte STRINGS. A sequence node is invisible to this pass permanently.
+  ;; between byte STRINGS. A sequence node is invisible to this pass by design.
   (define (pass-overlap m)
     (apply append
            (map (lambda (n) (if (byte-dispatch-node? n) (node-overlaps n) '()))
                 (machine-nodes m))))
 
-  ;; Sequence ambiguity, an unnumbered pass beside PASS 3 because renumbering
-  ;; PASS 4-7 would stale every existing reference to those numbers for nothing.
-  ;; pass-eof-execution below is the precedent for an unnumbered pass.
+  ;; Sequence ambiguity, an unnumbered pass beside PASS 3.
   ;;
-  ;; "After prefix analysis" is what the pairwise test below IS: one alternative
+  ;; The pairwise prefix test below is the whole analysis: one alternative
   ;; being a terminal prefix of another is decidable from the source byte lists
   ;; alone, so this pass never inspects the lowered graph and the
   ;; verify-before-normalize ordering is preserved. It is equivalent to the
@@ -628,9 +626,8 @@
   ;; two diagnostics from one node is not promised.
   ;;
   ;; The bindings are deliberately NOT node-overlaps' (`ss`/`outer`/`rest`/
-  ;; `inner`/`out`): three shipped mutations pin single lines of that skeleton,
-  ;; and a structural clone takes each from one occurrence to two, failing the
-  ;; suite with "pattern occurs 2 times ... expected 1".
+  ;; `inner`/`out`): a structural clone would duplicate single lines of that
+  ;; skeleton (the layout constraint in the header).
   (define (node-ambiguities n)
     (let ((alts (map sequence-case-bytes (sequence-dispatch-node-cases n))))
       (let scan ((as alts) (found '()))
@@ -654,29 +651,26 @@
 
   ;; Keyword-table validity, an unnumbered pass beside pass-sequence-ambiguity and
   ;; the INVERSE of it. Proper prefixes are the whole point of a keyword table
-  ;; (GET vs GET-PARAMETER), so they are permitted; the only cross-entry defect
-  ;; this slice rejects is an EXACT duplicate -- two entries with identical bytes,
-  ;; which would make the trie's terminal choice at that keyword ambiguous. A
-  ;; case-insensitive table's FOLD collision (two entries equal after folding) is
-  ;; the same defect one fold up and is Slice ②'s (decision 0045).
+  ;; (GET vs GET-PARAMETER), so they are permitted. Two cross-entry defects are
+  ;; rejected, both of which would make the trie's terminal choice at a keyword
+  ;; ambiguous:
+  ;;
+  ;; - an EXACT duplicate, two entries with identical bytes:
+  ;;   `duplicate-keyword`, in either table mode;
+  ;; - for a case-insensitive table, two entries equal AFTER ASCII case-folding
+  ;;   but not byte-identical (`Content-Length` and `content-length`) -- the
+  ;;   same defect one fold up: `case-insensitive-keyword-collision`.
+  ;;
+  ;; The two codes are disjoint by construction: an exact `equal?` pair is always
+  ;; `duplicate-keyword`. `ci` is the SOLE per-table control (the outer guard
+  ;; below); `kw-fold` is an unconditional ASCII letter fold, not itself guarded
+  ;; on `ci`, so the guard lives in exactly one place. `kw-fold` is this pass's
+  ;; own, shared with no executor: the verifier is outside the
+  ;; interpreter≡generated differential, so it is under no obligation either to
+  ;; share or to avoid sharing the executors' fold.
   ;;
   ;; The bindings are this pass's own (`kws`/`rest`/`others`/`dups`), never
-  ;; node-overlaps' or node-ambiguities', so no shipped mutation's single-line
-  ;; FIND doubles (AGENTS.md, "SITES fails in BOTH directions").
-  ;;
-  ;; Slice ② adds the fold-up analogue for a case-insensitive table: two entries
-  ;; equal AFTER ASCII case-folding but not byte-identical (`Content-Length` and
-  ;; `content-length`) collide -- the same terminal ambiguity, one fold up -- and
-  ;; are refused with `case-insensitive-keyword-collision` (decision 0045 item 3).
-  ;; The two codes are disjoint by construction: an exact `equal?` pair is always
-  ;; `duplicate-keyword` (either table mode); the collision fires only for a
-  ;; case-insensitive table on a fold-equal-but-not-byte-equal pair. `ci` is the
-  ;; SOLE per-table control (the outer guard below); `kw-fold` is an unconditional
-  ;; ASCII letter fold -- not itself guarded on `ci`, so the guard lives in exactly
-  ;; one place and dropping it makes a case-sensitive table wrongly collide (the
-  ;; per-table mutation pin). `kw-fold` is this pass's own, shared with no executor
-  ;; -- the verifier is not in the interpreter=generated differential, so decision
-  ;; 0015's independence rule does not compel a shared helper.
+  ;; node-overlaps' or node-ambiguities' (the layout constraint in the header).
   (define (node-keyword-defects n)
     (define ci (keyword-table-node-case-insensitive? n))
     (define (kw-fold b) (if (and (>= b 65) (<= b 90)) (+ b 32) b))
@@ -823,9 +817,9 @@
               ;; against that. Its target's kind is unconstrained -- overflow
               ;; names a target NODE, not necessarily an error terminal.
               ;;
-              ;; The overflow and nondigit self-cycles need SEPARATE fixtures --
-              ;; neither distinguishes the other's mutant, and the REPORT guard
-              ;; below has the same blind spot.
+              ;; The overflow and nondigit self-cycles need SEPARATE test
+              ;; fixtures: a fixture exercising one edge cannot detect the other
+              ;; edge being dropped from this walk.
               ((integer-accumulate-node? n)
                (append
                 (if (eq? (edge-mode (integer-accumulate-node-nondigit-edge n)) 'reexecute)
@@ -918,9 +912,9 @@
   ;; `cycle`, and `cycle` means "a cycle is reachable from here" -- true from
   ;; every path that reaches this node, not just the one that found it.
   ;;
-  ;; `'unknown` is DELETED, not ranked least: a residual arm may not reintroduce
-  ;; an answer that has left the answer set. Every kind `ir.sls` can construct
-  ;; has its own arm, so the residual `else` is unreachable and raises, matching
+  ;; There is no `unknown` verdict, and a residual arm may not introduce one.
+  ;; Every kind `ir.sls` can construct has its own arm in `classify`, so the
+  ;; residual `else` is unreachable and raises, matching
   ;; the loud-else convention in normal-ir.sls, compile.sls and runtime.sls.
   ;; THREE TIERS, not a flat six.
   ;;
@@ -932,9 +926,8 @@
   ;; `cycle`, a field-branch machine verifies with zero diagnostics and
   ;; `parser-finish!` never returns.
   ;;
-  ;; Tiers make the 24-permutation survivor unwritable, and turn each tier
-  ;; assignment into a single-token mutation caught by a failed comparison rather
-  ;; than by a raise.
+  ;; Tiers state only the order a machine can observe, so no unobservable
+  ;; ordering can be written down.
   ;;
   ;; All six symbols are KEPT. The span check needs `finish` distinguished from
   ;; `error` at `classify`, and the loud-else discipline forbids merging arms.
@@ -944,7 +937,7 @@
   ;; dispatch's dangling eof-target, and a zero-width arm naming nothing). So
   ;; `unresolved`'s tier is load-bearing: a machine whose EOF chain reaches a
   ;; dangling name AND a stop must still report the stop, which happens only
-  ;; because `unresolved` loses the join. That is a fixture and a pin.
+  ;; because `unresolved` loses the join; a test fixture covers that case.
   (define eof-verdict-tiers
     ;; Verdict tiers, worst first: the finish chain terminates; a stop is
     ;; EOF-reachable; a cycle outranks a reachable stop.
@@ -956,7 +949,7 @@
       (cond ((null? ts) (assertion-violation 'eof-terminal "unranked verdict" v))
             ((memq v (car ts)) i)
             (else (loop (cdr ts) (+ i 1))))))
-  ;; Sibling answers join by max. Only `cycle > eof-reachable-stop` is pinned --
+  ;; Sibling answers join by max. Only `cycle > eof-reachable-stop` is required --
   ;; a cycle is the non-termination neither runtime loop guards against, so it
   ;; must survive a join -- and the rest of the order is a free choice within
   ;; that constraint.
@@ -964,20 +957,21 @@
   ;; Each operand is a `(verdict path)` pair, so the rank reads its `car` and the
   ;; whole surviving pair is returned -- keeping the path beside its verdict. The
   ;; pair handling lives HERE, not at the call sites, so `join-over` and the
-  ;; counted-consume join keep their FINDs. `>=` keeps the LEFT operand on a tie.
+  ;; counted-consume join pass pairs through untouched. `>=` keeps the LEFT
+  ;; operand on a tie.
   ;; `>=` vs `>` matters only because tier 0 has four members (`finish`
   ;; `unresolved` `error` `default-error`), so a rank-0 tie can hold two
   ;; DIFFERENT symbols -- yet every rank-0 verdict is silent, since
   ;; `pass-eof-execution`'s `case` acts only on `eof-reachable-stop` and `cycle`.
   ;; A tie inside a SINGLETON tier -- two `eof-reachable-stop`s via distinct
-  ;; nodes -- returns the same symbol with a different PATH, which a comparison
-  ;; over the widened pair catches.
+  ;; nodes -- returns the same symbol with a different PATH, which is visible in
+  ;; the diagnostic's path.
   (define (eof-verdict-join a b)
     (if (>= (eof-verdict-rank (car a)) (eof-verdict-rank (car b))) a b))
 
   ;; The nodes an EOF walk continues to. Empty at a terminal; one for a pause or
   ;; a dispatch with a symbolic eof-target; TWO for the zero-width field kinds,
-  ;; which is the whole reason this walk became multi-successor. A field action's
+  ;; which is why this walk is multi-successor. A field action's
   ;; `error` is a successor exactly when it has one -- the constructor makes that
   ;; `#f` precisely when the operation cannot fail.
   ;;
@@ -985,8 +979,7 @@
   ;; own: a zero count takes `next` at EOF, and at a node the walk ARRIVES at the
   ;; count is unknown, so `next` is a successor unconditionally. One fact, two
   ;; consumers -- `classify`'s counted arm and pass 7's `eof-step` both read this
-  ;; and cannot disagree -- which is `zero-width-edges`' rule applied a kind
-  ;; later.
+  ;; and cannot disagree -- the same one-fact rule as `zero-width-edges`.
   (define (eof-successors n)
     (cond ((counted-consume-node? n) (list (counted-consume-node-next n)))
           (else (zero-width-successors n))))
@@ -995,10 +988,9 @@
     (let ((nodes (machine-nodes m)) (done '()))
       ;; Every verdict travels beside its path as a two-element `list` -- never a
       ;; `(cons 'verdict …)` pair, which `edge-roles-in-source` would collect as
-      ;; a role and redden the kind x position matrix on its baseline. The path
+      ;; a role, failing the kind x position census test. The path
       ;; runs from the walk's `start` (its tail) to the verdict's node.
-      ;; `(reverse path)` occurs ONCE, here, so the "the path is not reversed"
-      ;; mutation is a single site (SITES=1): all six verdict-producing sites --
+      ;; `(reverse path)` occurs ONCE, here: all six verdict-producing sites --
       ;; this walk's `cycle`, `dispatch-arm`'s `default-error`, and `classify`'s
       ;; `unresolved`/`finish`/`error`/`eof-reachable-stop` -- route through it.
       (define (verdict v path) (list v (reverse path)))
@@ -1087,9 +1079,10 @@
   (define (byte-reached m) (map car (reach-from m node-out-targets)))
 
   ;; "A state an execution can be parked on" and "the name the EOF walk starts
-  ;; at" are two different questions, and the callback node is the first kind
-  ;; where they come apart. For all nine older kinds they coincide, so the parked
-  ;; block below classifies the parked node itself and lets `classify` hop: a
+  ;; at" are two different questions, and for the callback and counted-consume
+  ;; kinds they come apart. For every kind without an arm here they coincide, so
+  ;; the parked block below classifies the parked node itself and lets
+  ;; `classify` hop: a
   ;; dispatch follows its eof-target, a pause joins over its continuation.
   ;;
   ;; A parser parked at a callback node is parked because that callback RETURNED
@@ -1117,7 +1110,8 @@
   ;; starting the walk at the node gives the same answer, because a span end is
   ;; pure flow-through -- it is no terminal, so `classify` above joins over its
   ;; `next` and nothing else. An explicit arm answering `(span-end-node-next n)`
-  ;; would be inert. The whole of the change is the MEMBERSHIP below.
+  ;; would be inert. A span end is handled entirely by its MEMBERSHIP in
+  ;; `parked?` below.
   ;;
   ;; A span START stays out of that membership: it calls nothing, so nothing can
   ;; pause there, and it is flow-through like a field action.
@@ -1134,10 +1128,9 @@
           ;; ENTRY falls through: a fresh parser is parked there without having
           ;; executed it, its count is the field's initial and may be zero, so it
           ;; starts at itself and takes `classify`'s join. "The field's initial"
-          ;; is the DECLARED initial: a settable field (Milestone 13) has an
-          ;; embedder-chosen one, which would falsify this -- so
-          ;; `counted-operand-diagnostics` refuses a settable counter outright
-          ;; (decision 0047 item 4), keeping this reasoning sound.
+          ;; is the DECLARED initial: a settable field has an embedder-chosen
+          ;; one, which would falsify this -- so `counted-operand-diagnostics`
+          ;; refuses a settable counter outright, keeping this reasoning sound.
           ((and (counted-consume-node? n) (not (eq? (node-name n) (machine-entry m))))
            (counted-consume-node-eof-target n))
           (else (node-name n))))
@@ -1147,24 +1140,17 @@
   (define (pass-eof-execution m)
     (let ((nodes (machine-nodes m)))
       (append
-       ;; The byte-into-finish half — ONE derived block, replacing three
-       ;; hand-written ones.
+       ;; The byte-into-finish half -- ONE block, derived from the edge census.
        ;;
        ;; The rule forbids "non-EOF control flow into a finish terminal", stated
        ;; over REACHING. So the question is not what KIND the source node is; it
-       ;; is whether the source is byte-reachable. The three earlier blocks
-       ;; answered it three ways -- one unconditional and kind-filtered, two
-       ;; gated on byte-reachability -- and therefore disagreed: a node reachable
-       ;; ONLY as an eof-target was accepted when it was a pause, a field-action
-       ;; or a field-branch, and rejected when it was a byte-dispatch, a
-       ;; sequence-dispatch or an accumulate. The byte edge is untakeable in all
-       ;; six.
+       ;; is whether the source is byte-reachable. A node reachable ONLY as an
+       ;; eof-target can never take a byte edge, whatever its kind.
        ;;
-       ;; The gated reading is correct, in both directions. Applying the
-       ;; unconditional reading uniformly breaks legal programs, the canonical
-       ;; one being `make-pause-machine`: an EOF-only pause continuing into a
-       ;; finish node, a legal shape. All three input-reading kinds can be
-       ;; EOF-only-reachable.
+       ;; The gated reading is correct, in both directions. An ungated reading
+       ;; rejects legal programs, the canonical one being `make-pause-machine`:
+       ;; an EOF-only pause continuing into a finish node, a legal shape. All
+       ;; three input-reading kinds can be EOF-only-reachable too.
        ;;
        ;; The gate is SOUND, not merely convenient: once an execution takes an
        ;; eof-target it can never feed again (`parser-feed!` prohibits the
@@ -1176,10 +1162,10 @@
        ;; but merges findings from two different sources into one, and the source
        ;; is the half that says which edge to fix.
        ;;
-       ;; `node-out-targets` is now the single census this rule consults, and it
-       ;; already owns that job -- the direct antidote to the failure mode of a
-       ;; kind taught to the accessors and not to the hand-written filters
-       ;; reading them.
+       ;; `node-out-edges` is the single census this rule consults, so a node
+       ;; kind taught to that accessor is covered here with no hand-written
+       ;; per-kind filter to update.
+       ;;
        ;; The ZERO-HOP case: the entry itself being a finish terminal. The rule
        ;; is stated over REACHING, and the entry is reached by `parser-feed!`.
        ;; Without this clause such a machine verifies clean and `parser-feed!`
@@ -1199,8 +1185,8 @@
        ;; `reach-from` is called ONCE and both halves are derived from its parent
        ;; alist: `br908` is its key set (`byte-reached`), and the offending edge's
        ;; path is entry → source → target over the same alist. `rp` binds as a
-       ;; `let*` sibling of `br908`, adding no nesting level, so the body's
-       ;; indentation -- and the two byte-into-finish gate pins -- do not move.
+       ;; `let*` sibling of `br908`, adding no nesting level (the layout
+       ;; constraint in the header).
        (let* ((rp (reach-from m node-out-targets)) (br908 (map car rp)))
          (apply append
                 (map (lambda (n)
@@ -1226,31 +1212,24 @@
        ;; one whose EOF chain reaches a stop terminal would be accepted although
        ;; `eof-reachable-stop` exists to reject exactly that.
        ;;
-       ;; The start set is the PARKED set, derived. An earlier shape enumerated
-       ;; source KINDS and classified each one's eof-TARGET, and `machine-entry`
-       ;; was in no kind's list -- so the EOF path that begins at the entry was
-       ;; never classified, though `parser-finish!` on a fresh or reset parser
-       ;; starts precisely there (`entry = a stop node` verified with ZERO
-       ;; diagnostics and returned `stopped`, while the identical property one hop
-       ;; away was correctly rejected).
+       ;; The start set is the PARKED set, derived rather than enumerated by
+       ;; source kind. It includes the entry, where `parser-finish!` on a fresh
+       ;; or reset parser starts, so a machine whose entry is a stop node is
+       ;; rejected exactly as one whose stop is a hop away.
        ;;
-       ;; The set below is the states an execution can be parked on: the entry,
-       ;; every byte-reachable pause (whose continuation `current` is left on),
-       ;; and every byte-reachable node carrying its own EOF route. Because it is
-       ;; a SET, the entry appears exactly once -- so a machine whose entry is
-       ;; also a dispatch with an eof-target reports ONE finding, not two. The
-       ;; naive fix, a second walk start bolted onto the entry, double-reports
-       ;; there, and the only filter that suppresses it is a per-kind census of
-       ;; the entry.
+       ;; The set is the states an execution can be parked on (see `parked?`):
+       ;; the entry, every byte-reachable pause (whose continuation `current` is
+       ;; left on), and every byte-reachable node carrying its own EOF route.
+       ;; Because it is a SET, the entry appears exactly once -- so a machine
+       ;; whose entry is also a dispatch with an eof-target reports ONE finding,
+       ;; not two, which a separate walk started at the entry would not.
        ;;
-       ;; Each node is classified as ITSELF rather than by its eof-target, which
-       ;; unifies the two old blocks -- `classify` on a dispatch already follows
-       ;; its eof-target and on a pause already joins over its continuation -- so
-       ;; the reported node stays where it was and no shipped `diagnostic-node`
-       ;; assertion moves.
+       ;; Each node is classified as ITSELF rather than by its eof-target --
+       ;; `classify` on a dispatch follows its eof-target and on a pause joins
+       ;; over its continuation -- so the diagnostic names the parked node.
        ;;
-       ;; This NARROWS the literal "reachable from any state": a graph node no
-       ;; execution can occupy is not a state that originates a traversal.
+       ;; A graph node no execution can occupy is not a state, so it originates
+       ;; no walk.
        (let ((br909 (byte-reached m)))
          (apply append
                 (map (lambda (n)
@@ -1296,9 +1275,8 @@
   ;; The label clause is folded into each arm's `and`: the machine's label,
   ;; every node's own label and its case labels through `node-source-label` and
   ;; `node-case-labels`, and every error declaration's label. One finding per
-  ;; carrier however many ways it is bad -- the shape the error-declaration arm
-  ;; already had -- and no new emission site, so the diagnostic census reads the
-  ;; same six `invalid-name` sites as before.
+  ;; carrier however many ways it is bad, from one `invalid-name` emission site
+  ;; per carrier.
   (define (pass-names-valid m)
     (append
      (if (and (valid-name? (machine-name m))
@@ -1328,26 +1306,19 @@
 
   ;; --- PASS 6b: callback and span DECLARATIONS --------------------------------
   ;;
-  ;; A PASS OF ITS OWN, and the reason is mechanical rather than aesthetic.
-  ;; `pass-fields`' tail line -- seven leading spaces, four trailing parens --
-  ;; is the verbatim FIND of the mutation that pins `pass-field-operands` being
-  ;; run at all, at exactly one site. Appending a declaration arm inside that
-  ;; `append` moves the line and takes the pin to zero occurrences, which fails
-  ;; at CMake CONFIGURE time and does not look like a test failure.
+  ;; A PASS OF ITS OWN rather than more arms inside `pass-fields`' `append`, so
+  ;; that pass's lines stay unchanged (the layout constraint in the header).
   ;;
   ;; NO `(cons 'SYMBOL ...)` FORM APPEARS BELOW, and that is a constraint, not a
-  ;; coincidence. `edge-roles-in-source` in the kind x position census collects
-  ;; the quoted symbol from EVERY such form in this file -- not only edge-role
-  ;; ones, despite what its own comment says -- and compares the result against a
-  ;; declared mapping. A `(cons 'callback name)` here would add a spurious
-  ;; "role", fail `derived roles equal the mapped roles`, and take that pass's
-  ;; BASELINE red. Count with `read`, or exclude comment lines -- the two
-  ;; mentions in this very comment are why a bare textual count answers more, the
-  ;; same class of mistake as the substring sweep that once undercounted a pin.
+  ;; coincidence. `edge-roles-in-source` in the kind x position census test
+  ;; reads this file as a datum, collects the quoted symbol from EVERY such form
+  ;; -- not only edge-role ones -- and compares the result against a declared
+  ;; mapping. A `(cons 'callback name)` here would add a spurious "role" and
+  ;; fail that test.
   ;;
-  ;; Every loop variable is named apart from `pass-names`' and `pass-fields`'.
-  ;; Three of those loops' inner lines are each a one-site FIND, so a copied
-  ;; duplicate-scan would twin a pin and fail configure in the other direction.
+  ;; Every loop variable is named apart from `pass-names`' and `pass-fields`'
+  ;; (the layout constraint in the header).
+  ;;
   ;; The symbols `continue` and `pause` are reserved and may not be callback
   ;; decision branch keys; this list is a transcription of that rule.
   (define reserved-outcomes '(continue pause))
@@ -1382,14 +1353,14 @@
        ;; THE LABEL CLAUSE IS FOLDED INTO THE NAME CLAUSE'S `and`, not added as
        ;; its own arm. That matches `pass-names-valid`'s error-declaration arm,
        ;; which tests name, code AND reason in one `and` so a declaration bad in
-       ;; three ways reports ONCE. Folding also leaves the diagnostic census
-       ;; unmoved: `(invalid-name 6)` stays 6.
+       ;; three ways reports ONCE.
        ;;
-       ;; The counter-argument, declined: reusing `missing-callback-declaration`
-       ;; for spans was refused elsewhere because a reader tracing a report back
-       ;; would look in the callback table for a name that was never there. Here
-       ;; the subject does not move: the diagnostic names the DECLARATION, which
-       ;; is in the right table either way, and that alone is the disanalogy.
+       ;; Why one code for both families here, when a span node naming no span
+       ;; gets its own `missing-span-declaration` rather than reusing
+       ;; `missing-callback-declaration`: that reuse would send a reader tracing
+       ;; the report to the callback table for a name that was never there.
+       ;; Here the diagnostic names the DECLARATION, which is in the right table
+       ;; either way.
        ;;
        ;; It does NOT name which field failed. The message is a static
        ;; disjunction, so a label-only failure reports a node slot holding a
@@ -1659,18 +1630,17 @@
   ;; So the edge relation here is the one whose transitive closure IS the
   ;; occupiable relation: byte edges while input can still arrive, then eof
   ;; routes and zero-width continuations, and never a byte edge after an
-  ;; eof-target. It is deliberately not the retired walk that crossed an
-  ;; eof-target and then kept taking byte edges. `pass-reachability` reads this
-  ;; relation too, through `eof-visited` and `occupiable`.
+  ;; eof-target. `pass-reachability` reads this relation too, through
+  ;; `eof-visited` and `occupiable`.
   ;;
-  ;; A node's EOF successors: its own eof route when it has one (the four
+  ;; A node's EOF successors: its own eof route when it has one (the
   ;; input-reading kinds), and its zero-width continuations otherwise. Both
-  ;; halves in one expression. They were disjoint by construction -- `node-eof-target`
-  ;; answers #f for every zero-width kind and `eof-successors` answered '() for
-  ;; every input-reading one -- and counted consume is where they meet: its
-  ;; `next` is an EOF successor too, so a counted consume with a symbolic route
-  ;; contributes BOTH, which is exactly the join `classify` computes for it. The
-  ;; `append` stays right.
+  ;; halves in one expression. For most kinds they are disjoint --
+  ;; `node-eof-target` answers #f for every zero-width kind and `eof-successors`
+  ;; answers '() for every other input-reading one -- but counted consume
+  ;; contributes BOTH: its `next` is an EOF successor too, so one with a
+  ;; symbolic route yields both, which is exactly the join `classify` computes
+  ;; for it. Hence `append`.
   (define (eof-step n)
     (let ((t (node-eof-target n)))
       (append (if (symbol? t) (list t) '()) (eof-successors n))))
@@ -1687,7 +1657,7 @@
   ;; satisfies.
   ;; The next kind that can pause joins the SET here and nowhere else -- but if
   ;; its walk starts somewhere other than its own name, `parked-eof-start` above
-  ;; needs an arm too, as the callback and the counted consume each did.
+  ;; needs an arm too, as the callback and the counted consume have.
   (define (parked? m n br)
     (and (memq (node-name n) br)
          (or (eq? (node-name n) (machine-entry m))
@@ -1751,8 +1721,8 @@
   ;; `(list 'active s)` and NOT `(cons 'active s)`, and the reason is this
   ;; file's own rule: `edge-roles-in-source` collects the quoted symbol from
   ;; EVERY `(cons 'SYM ...)` form here, so a pair built that way would enter the
-  ;; edge-role vocabulary as a spurious "role" and take the kind x position
-  ;; matrix's A' row red on its BASELINE.
+  ;; edge-role vocabulary as a spurious "role" and fail the kind x position
+  ;; census test.
   (define (span-transfer n state)
     (cond ((span-start-node? n) (list 'active (span-start-node-span n)))
           ((span-end-node? n) 'none)
@@ -1810,8 +1780,7 @@
   ;; `pass-spans` seeds its in-state at the entry and propagates only along
   ;; `edges`, so a node that carries any state is reachable from the entry over
   ;; exactly this relation -- it is therefore a key, and a node with no path here
-  ;; can produce no span finding. `span-flow` is not touched: this reads the edge
-  ;; list it already returns.
+  ;; can produce no span finding. It reads the edge list `span-flow` returns.
   (define (edge-parents entry edges)
     (let loop ((frontier (list entry)) (parents (list (cons entry #f))))
       (if (null? frontier) parents
@@ -1832,10 +1801,10 @@
            ;; node no execution can occupy contributes no state to a join and
            ;; receives none, so it never appears here at all.
            (initial (list (cons (machine-entry m) 'none))))
-      ;; Fixpoint. The domain has height two and `live` is finite, so a value
-      ;; can rise at most twice per node and this terminates. The round counter
-      ;; is a guard against a transfer function that is not monotone -- a
-      ;; defect, not an input -- and raises rather than looping forever.
+      ;; Fixpoint. The domain has height two and the node set is finite, so a
+      ;; value can rise at most twice per node and this terminates. The round
+      ;; counter is a guard against a transfer function that is not monotone --
+      ;; a defect, not an input -- and raises rather than looping forever.
       (let round ((in initial) (fuel (* 3 (+ 1 (length nodes)))))
         (when (< fuel 0)
           (assertion-violation 'pass-spans "span dataflow did not converge" fuel))
@@ -1847,16 +1816,12 @@
                             (fs (cond ((assq from acc) => cdr) (else #f)))
                             (fn (lookup nodes from)))
                        (step (cdr es)
-                             ;; No `live` filter here, and its absence is the
-                             ;; point: `live` is the CLOSURE of this very edge
-                             ;; relation, so every edge's target is in it by
-                             ;; construction and a filter would never fire. It is
-                             ;; satisfied by the relation, not by a guard -- and a
-                             ;; guard that cannot guard is what this project
-                             ;; deletes rather than documents. `(not fn)` stood
-                             ;; here as a third disjunct and was DELETED: every
-                             ;; edge's `from` is some node's own name, so `lookup`
-                             ;; cannot miss.
+                             ;; No occupiability filter here: the occupiable set
+                             ;; is the CLOSURE of this very edge relation, so
+                             ;; every edge's target is in it by construction and
+                             ;; a filter would never fire. Nor is `fn` checked:
+                             ;; every edge's `from` is some node's own name, so
+                             ;; `lookup` cannot miss.
                              (if (or (not fs) (eq? fs 'top))
                                  ;; `top` does not flow onward.
                                  acc
@@ -1892,8 +1857,8 @@
                           nodes))
               (round next (- fuel 1)))))))
 
-  ;; Helpers, deliberately not named `lookup`: that one is over NODES and is
-  ;; itself pin-visible.
+  ;; Lookups over the callback and span tables, deliberately not named `lookup`,
+  ;; which is over NODES (the layout constraint in the header).
   (define (find-callback cbs nm)
     (let floop ((cs cbs))
       (cond ((null? cs) #f)
@@ -1908,9 +1873,8 @@
             (else (sloop (cdr ps))))))
 
   ;; `nm` binds as a SIBLING of `ds`, not a `let*` step above it: reading only
-  ;; `machine`, it re-indents no line of the `append`, so the four
-  ;; `verify: pass-X is never run` pins that anchor on `(pass-fields machine)`
-  ;; and its siblings keep their single-line FINDs. `(null? ds)` is computed on
+  ;; `machine`, it re-indents no line of the `append` (the layout constraint in
+  ;; the header). `(null? ds)` is computed on
   ;; the UNSTAMPED list -- stamping fills severity/machine and cannot change
   ;; emptiness -- and the one `map` stamps every diagnostic with the machine
   ;; name.

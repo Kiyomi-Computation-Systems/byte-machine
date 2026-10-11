@@ -1,25 +1,20 @@
 # Verifier diagnostic catalog
 
-The diagnostic codes `(byte-machine verify)` can raise, what each means, and the
-`§16.2` rule it enforces. A source machine that fails verification carries one or
-more diagnostics, each with a `code` (the symbol below), the node or subject it
-concerns, and a message.
+The diagnostic codes `(byte-machine verify)` can report and what each means. A
+source machine that fails verification carries one or more diagnostics, each
+with a `code` (the symbol below), the node or subject it concerns, and a
+message.
 
-**This catalog is derived, not hand-maintained.** The authoritative code set is
+**This catalog is checked against the verifier.** The authoritative code set is
 computed by `test/common/diagnostic-census-tests.sps`, which reads `verify.sls`
-as a datum and walks every `(make-diagnostic … )` site — thirty codes over
-fifty-six sites at v0.1, thirty-two over fifty-eight since Milestone 11
-added the `duplicate-keyword` (Slice ①) and `case-insensitive-keyword-collision`
-(Slice ②) codes, fifty-nine sites since Milestone 12 added a pause-reason
-resolution site (same code set), and **thirty-three over sixty** since Milestone
-13 added `settable-consume-counter`. That lane also asserts the code set here matches the
-census, so a code added to `verify.sls` (or dropped from it) fails until this list
-is updated; the catalog cannot silently drift from the verifier. Per-site counts
-live in that lane, the single place they are pinned.
+as a datum and walks every diagnostic-constructor site. That test also asserts
+that the code set listed here equals the census, so a code added to
+`verify.sls` (or dropped from it) fails until this list is updated; the catalog
+cannot silently drift from the verifier. Per-site counts live in that test.
 
-The codes are grouped by the verifier pass that raises them.
+The codes are grouped by the property they check.
 
-## Shape and references (pass-schema)
+## Shape and references
 
 - `invalid-shape` — the argument is not a machine, or a node/field/declaration is
   structurally malformed.
@@ -40,7 +35,7 @@ The codes are grouped by the verifier pass that raises them.
   `content-length`). Byte-distinct case variants are legal in a case-sensitive
   table; the fold makes their terminal choice ambiguous.
 
-## Fields (pass-schema)
+## Fields
 
 - `invalid-field-declaration` — a field declaration is malformed or two fields
   share a name.
@@ -51,28 +46,29 @@ The codes are grouped by the verifier pass that raises them.
   field. A settable field's initial is chosen by the embedder at `make-parser`,
   but the EOF-execution pass reasons that a counted-consume at the entry state
   holds its declared initial (and may be zero); an embedder override would
-  falsify that, so a settable field may not be a count (Milestone 13, decision
-  0047).
+  falsify that, so a settable field may not be a count.
 
-## Reachability and EOF (pass-reachability)
+## Reachability and EOF
 
 - `unreachable-node` — a node no execution can reach.
-- `zero-progress-cycle` — a cycle of `reexecute` edges that consumes no byte.
+- `zero-progress-cycle` — a cycle that consumes no byte: one made only of
+  `reexecute` edges and zero-width steps (pause continuations, field actions and
+  branches, accumulate overflow edges).
 - `invalid-eof-target` — an EOF target (a node's or the machine default) names no
   declared error / valid node.
 - `non-eof-into-finish` — a finish terminal is reached over a byte edge; a finish
   is reachable only over an EOF route.
-- `eof-reachable-stop` — a stop node a parser can be parked on at end of input
-  where the EOF walk requires a finish.
-- `eof-zero-progress-cycle` — an EOF-driven cycle that makes no progress.
+- `eof-reachable-stop` — from a state a parser can be parked on, the EOF path
+  reaches a stop terminal; end of input must end in a finish or an error.
+- `eof-zero-progress-cycle` — an EOF path cycles without reaching a terminal.
 
-## Callback and span declarations (pass-declarations)
+## Callback and span declarations
 
 - `duplicate-callback-declaration` — two callback declarations share a name.
 - `duplicate-span-declaration` — two span declarations share a name.
 - `duplicate-branch-key` — a decision callback lists a branch key twice.
 - `reserved-branch-key` — a branch key is `continue` or `pause`, which are
-  reserved (`§9.3`).
+  reserved for the callback outcomes of the same names.
 - `invalid-callback-declaration` — a callback declaration is inconsistent (for
   example an optional decision callback with no valid default branch).
 - `missing-callback-declaration` — a span or node names a callback that was not
@@ -82,21 +78,24 @@ The codes are grouped by the verifier pass that raises them.
   so nothing can ever invoke it.
 - `missing-span-declaration` — a span node names a span that was not declared.
 
-## Callback invocation (pass-callback-nodes)
+## Callback invocation
 
 - `invalid-callback-invocation` — a callback node names an undeclared branch key,
   omits a target for a declared key, or invokes a span-kind callback.
 
-## Span-state lattice (pass-spans)
+## Span-state lattice
 
-- `invalid-span-state` — the span state at a node is wrong for what the node does
-  (one of §16.2:899's transfer faults).
+- `invalid-span-state` — the span state at a node is wrong for what the node
+  does: a span start re-opens the span already open or opens one while another
+  is open, or a span end closes a span that is not the open one or finds none
+  open.
 - `inconsistent-span-state` — two control paths into a node disagree on the span
-  state (the merge disagreement, decision 0029).
-- `span-active-at-pause` — a span is still open at a pause node.
+  state; it is reported at the node where the paths merge.
+- `span-active-at-pause` — a pause node or a callback node is reachable with a
+  span open.
 - `span-active-at-exit` — a span is still open at a stop/finish terminal.
 
 ---
 
-*Thirty-two codes. If this list and `verify.sls` disagree, `diagnostic-census-tests`
+*Thirty-three codes. If this list and `verify.sls` disagree, `diagnostic-census-tests`
 fails by name — see the [grammar-author testing guide](grammar-author-testing-guide.md).*

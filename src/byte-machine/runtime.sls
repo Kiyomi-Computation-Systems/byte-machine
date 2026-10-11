@@ -67,8 +67,6 @@
   ;;      unified `exec` closure carrying a finish? flag. Built by the ONE
   ;;      unversioned constructor below; the variant tag is an internal shape
   ;;      label, not an ABI version.
-  ;; The 'v1 feed-only variant is gone: once /v1 refuses every version nothing
-  ;; can construct one, and an arm no public API can reach is dead code.
   (define compiled-machine-tag (tag 'byte-machine-compiled-machine))
   ;; make-compiled-machine : Procedure -> CompiledMachine
   (define (make-compiled-machine op)
@@ -90,34 +88,30 @@
   ;; answerable in the generated lane at all, and there is no other transport for
   ;; it: the emitted library exports one name and the constructor's arguments are
   ;; the only channel.
-  ;; 6 since Milestone 11 (decision 0044): the keyword-table node lowers to a new
-  ;; normalized state whose emitted arm calls `byte-machine-keyword-step` here, a
-  ;; runtime binding generated code did not depend on at ABI 5. A generated
-  ;; library that calls it must be refused by an older runtime with the clean
-  ;; ABI-mismatch condition rather than an unbound-identifier error, so the
-  ;; contract change is a version bump -- §9.5:444.
-  ;; 7 since Milestone 12 (decision 0046): a paused outcome's error slot may now
-  ;; carry a reason record where it was always #f, so a consumer decoding a v7
-  ;; generated parser must know the moved payload contract -- another version bump.
-  ;; 9 since Milestone 14 (decision 0052): the callback seam answers the OUTCOME
-  ;; OBJECT rather than a list tagged with the outcome's name, so the two step
-  ;; entry points emitted code calls changed their return contract and are now
-  ;; spelled /v2. An ABI-8 generated library decodes the answer with `car`, which
-  ;; a target -- a fixnum -- does not answer, so the mismatch must be caught at
-  ;; construction rather than at the first callback. That is exactly what the
-  ;; strict equality below does, and it is the direction this repository's own
-  ;; build actually produces (a stale object meeting a newer runtime).
+  ;;
+  ;; Any change to the contract between generated code and this runtime is a
+  ;; version bump, so that a generated library depending on it is refused by an
+  ;; older runtime with the clean ABI-mismatch condition rather than an
+  ;; unbound-identifier error or a wrong answer. What versions 6-9 added:
+  ;;   6 -- the keyword-table node's emitted arm calls `byte-machine-keyword-step`.
+  ;;   7 -- a paused feed outcome's error slot may carry a reason record, where
+  ;;        it was always #f.
+  ;;   8 -- the optional settable-field table, payload member 3.
+  ;;   9 -- the callback seam answers the OUTCOME OBJECT rather than a list
+  ;;        tagged with the outcome's name, so the two step entry points emitted
+  ;;        code calls are spelled /v2. An ABI-8 library decodes the answer with
+  ;;        `car`, which a target -- a fixnum -- does not answer, so the mismatch
+  ;;        must be caught at construction rather than at the first callback,
+  ;;        which is what the strict equality below does.
   (define current-abi-version 9)
   ;; How many payload members the current ABI defines AS REQUIRED: field
   ;; declarations, the callback declaration table, and the state-id to
   ;; source-name table. The keyword-table op adds no payload member -- its table
   ;; rides the emitted state datum, not the compiled-machine metadata. The
-  ;; Milestone 13 settable table is an OPTIONAL fourth member (read below only
-  ;; when present), so this REQUIRED minimum stays 3 while the version moves to 8
-  ;; -- a machine with no settable field emits exactly three members and is
-  ;; byte-identical to its ABI-7 self but for the version literal. Named beside
-  ;; the version because the two move together -- growing the payload is a
-  ;; version bump -- and read by the single length guard below.
+  ;; settable table is an OPTIONAL fourth member (read below only when present),
+  ;; so a machine with no settable field emits exactly three members. Named
+  ;; beside the version because the two move together -- growing the payload is
+  ;; a version bump -- and read by the single length guard below.
   (define current-abi-members 3)
   ;; ABI payload member 1: the callback declaration table the generated lane
   ;; resolves bindings against. `#()` for a machine declaring none.
@@ -161,8 +155,8 @@
             (vector-ref metadata 0) (vector-ref metadata 1)
             (vector-ref metadata 2)
             ;; The OPTIONAL fourth member: the settable table `#((name width) ...)`
-            ;; a generated `make-parser` range-checks an override against
-            ;; (Milestone 13). Present only when some field is settable, so absent
+            ;; a generated `make-parser` range-checks an override against.
+            ;; Present only when some field is settable, so absent
             ;; here means no field is settable and every override is refused; read
             ;; behind the length guard, not the required-member minimum above, so
             ;; a three-member payload stays legal.
@@ -185,7 +179,7 @@
   (define (compiled-machine-v2-entry-state cm) (vector-ref cm 3))
   (define (compiled-machine-v2-fields cm) (vector-ref cm 5))
   ;; The optional fourth payload member: `#((name width) ...)` for the settable
-  ;; fields, or `#()` when none (Milestone 13). What the generated lane's
+  ;; fields, or `#()` when none. What the generated lane's
   ;; make-parser resolves an embedder override against.
   (define (compiled-machine-v2-settable cm) (vector-ref cm 8))
   (define empty-bv (make-bytevector 0))
@@ -207,15 +201,12 @@
   ;; feed-originated results only, and nothing enforces that: `parser-finish!`'s
   ;; paths call this constructor with `next` repeating the absolute stream offset
   ;; and `consumed` exactly 0. The record is opaque, so an internal origin slot
-  ;; would not be a public change; distinguishing finish-originated results was
-  ;; deferred on cost, since enforcing it re-baselines a tuple in most of the
-  ;; differential programs.
-  ;; The OPTIONAL `pause` slot (Milestone 12) carries a parser-error-shaped reason
-  ;; for a paused result, and is #f otherwise; the error slot stays #f for a pause,
-  ;; so a consumer that checks only the error slot still reads "not failed" (brief
-  ;; §6). `case-lambda` keeps the 5-arg arity, so the many non-pause construction
-  ;; sites -- including the span-callback pause arms and the flush -- are unchanged
-  ;; and get `#f`.
+  ;; telling the two apart would not be a public change.
+  ;; The OPTIONAL `pause` slot carries a parser-error-shaped reason for a paused
+  ;; result, and is #f otherwise; the error slot stays #f for a pause, so a
+  ;; consumer that checks only the error slot still reads "not failed". The
+  ;; 5-arg form leaves it #f, so non-pause construction sites -- including the
+  ;; span-callback pause arms and the flush -- do not pass it.
   (define make-parser-result
     (case-lambda
       ((status next consumed stream-offset error)
@@ -235,15 +226,15 @@
   ;; parser-result-error : ParserResult -> (Option ParserError)
   (define (parser-result-error r) (vector-ref r 5))
   ;; parser-result-pause : ParserResult -> (Option ParserError) -- the pause
-  ;; reason (Milestone 12), #f for a non-pause result or a pause declaring none.
-  ;; Length-guarded: a 6-element result predates the pause slot and has none, so
-  ;; a value built before this ABI reads back #f rather than raising.
+  ;; reason, #f for a non-pause result or a pause declaring none.
+  ;; Length-guarded: a 6-element result vector has no pause slot and reads back
+  ;; #f rather than raising.
   (define (parser-result-pause r)
     (if (> (vector-length r) 6) (vector-ref r 6) #f))
 
   ;; --- parser error ---
   ;; Ten members, opaque. The last two -- the span the error abandoned and the
-  ;; stream offset where that span's withheld bytes begin (decision 0056) -- are
+  ;; stream offset where that span's withheld bytes begin -- are
   ;; never a constructor's: both constructors below leave them #f, and
   ;; `abandon-span!` fills them where both executors hand an error back.
   (define parser-error-tag (tag 'byte-machine-parser-error))
@@ -319,15 +310,15 @@
   (define (parser-error-offset e) (vector-ref e 7))
   ;; parser-error-position-kind : ParserError -> PositionKind
   (define (parser-error-position-kind e) (vector-ref e 8))
-  ;; The span the error abandoned (§14:839), or #f when none was open. A pause
+  ;; The span the error abandoned, or #f when none was open. A pause
   ;; reason answers #f: a pause abandons nothing, and the parser it came from can
   ;; still be asked `parser-active-span`.
   ;; parser-error-span : ParserError -> (Option Symbol)
   (define (parser-error-span e) (vector-ref e 9))
   ;; Where that span's WITHHELD bytes begin, as a stream offset, or #f when no
-  ;; span was open. `[span-offset, parser-error-offset)` is exactly what §14:839
-  ;; withholds -- bytes the parser took for the span and neither flushed nor
-  ;; delivered -- and every byte the span took before `span-offset` went out in
+  ;; span was open. `[span-offset, parser-error-offset)` is exactly what the
+  ;; error withholds -- bytes the parser took for the span and neither flushed
+  ;; nor delivered -- and every byte the span took before `span-offset` went out in
   ;; an earlier fragment. It is empty whenever the span took nothing since its
   ;; last fragment: always at finish, where the last feed's boundary flush handed
   ;; every byte over; when a data callback FAILS, because it was handed its
@@ -350,7 +341,7 @@
   ;;
   ;; field-values (slot 8) is a MUTABLE vector of exact integers indexed by slot;
   ;; field-decls (slot 9) is the IMMUTABLE (name . initial) vector the compiled
-  ;; machine carries, in slot order; field-initials (slot 17, Milestone 13) is
+  ;; machine carries, in slot order; field-initials (slot 17) is
   ;; the IMMUTABLE canonical merged initials -- the declared initials with the
   ;; make-parser embedder overrides applied, the source parser-reset! restores
   ;; slot 8 FROM. Three slots rather than one: they have different lifetimes and
@@ -430,7 +421,7 @@
                     (else #t))
               (rloop (+ i 1)))))))
 
-  ;; --- embedder-chosen field initials (Milestone 13) ------------------------
+  ;; --- embedder-chosen field initials ---------------------------------------
   ;; A fresh copy of an integer vector. R6RS base has no `vector-copy`; the field
   ;; VALUES vector (slot 8) must be a copy of the canonical merged initials (slot
   ;; 17) so a parser's field writes never reach the restore source
@@ -461,8 +452,9 @@
   ;; its slot. An override naming an UNKNOWN field, a KNOWN-BUT-NOT-SETTABLE
   ;; field, a DUPLICATE name, or a value OUTSIDE the field's declared width is a
   ;; caller error -- each with a distinct code -- refused at CONSTRUCTION, so it
-  ;; can never apply mid-parse (decision 0047 item 2, the reason a general
-  ;; `parser-field-set!` is refused).
+  ;; can never apply mid-parse. That is also why there is no general
+  ;; `parser-field-set!`: it would let a caller change a field (a body length,
+  ;; say) between feeds.
   (define (resolve-field-initials decls settable overrides)
     (unless (list? overrides)
       (byte-machine-contract-violation 'make-parser 'invalid-argument 'field-initials))
@@ -496,12 +488,12 @@
 
   ;; make-parser : CompiledMachine (Listof (List Symbol Procedure)) Any [(Listof (Pair Symbol ExactInteger))] -> Parser
   ;; The OPTIONAL fourth argument overrides the DECLARED initials of SETTABLE
-  ;; fields (Milestone 13), so two parsers from one machine can start in two
-  ;; modes. `case-lambda` keeps the 3-arg arity, so no existing caller changes.
+  ;; fields, so two parsers from one machine can start in two modes; the 3-arg
+  ;; form passes no overrides.
   ;; The merged initials are stored canonically in slot 17, a COPY is the working
   ;; field-values (slot 8), and `parser-reset!` restores slot 8 from slot 17 --
   ;; so a reset returns the parser to its just-constructed state INCLUDING the
-  ;; embedder's mode (decision 0047 item 3).
+  ;; embedder's mode.
   (define make-parser
     (case-lambda
       ((compiled-machine callback-bindings user-context)
@@ -511,7 +503,7 @@
          (assertion-violation 'make-parser "not a compiled machine" compiled-machine))
        (cond
          ;; The two arms reach the declarations AND the settable table by the
-         ;; SHIPPED per-lane asymmetry: the interpreter holds the verified source
+         ;; per-lane asymmetry: the interpreter holds the verified source
          ;; machine and is asked (`field-initials`, `settable-fields`); the
          ;; generated lane holds only what the ABI payload carried and reads
          ;; member 0 and the optional member 3. There is nothing both could
@@ -593,15 +585,15 @@
   ;; delivered ANY fragment yet. Inited #f by make-parser, reset #f by
   ;; span-close beside slots 12/14/15, set on every delivery. A span END reads it to decide whether an
   ;; empty final fragment is the span's ONLY fragment (deliver once) or the empty
-  ;; tail of a span whose bytes already went (suppress) -- decision 0042.
+  ;; tail of a span whose bytes already went (suppress).
   (define (parser-span-delivered? p) (vector-ref p 16))
   (define (parser-set-span-delivered?! p v) (vector-set! p 16 v))
-  ;; Slot 17 (Milestone 13): the CANONICAL merged field initials -- the declared
+  ;; Slot 17: the CANONICAL merged field initials -- the declared
   ;; initials with the `make-parser` embedder overrides applied. Immutable: the
   ;; working field-values (slot 8) is a COPY of it, and `parser-reset!` restores
   ;; slot 8 from it, so a reset returns the parser to its just-constructed state
   ;; INCLUDING the embedder's mode. Equals the declared initials when no override
-  ;; was given, so a reset with no override is exactly the pre-M13 behaviour.
+  ;; was given.
   (define (parser-field-initials p) (vector-ref p 17))
   ;; The absolute offset, which the parser already tracks; this is the public
   ;; name for it, and it is one of the values committed before a callback sees
@@ -622,7 +614,7 @@
     (case (parser-variant parser)
       ((op) ((parser-executor parser) 'state-name (parser-current parser)))
       ;; `current` is a state id, or the compound (state-id . path) while a parser
-      ;; is parked mid keyword-table (decision 0044); index by the id either way,
+      ;; is parked mid keyword-table; index by the id either way,
       ;; as the interpreter's own `state-name` message unwraps the pair.
       ((v2) (let ((c (parser-current parser)))
               (vector-ref (parser-state-names parser) (if (pair? c) (car c) c))))
@@ -688,14 +680,12 @@
   ;; gap: a state id is not a vector and `portable-name?` keeps a node name from
   ;; being one either.
   ;;
-  ;; It used to cons `(goto TARGET)`, `(pause)` and `(failure CODE DETAIL)`, and
-  ;; the tag was pure overhead -- 32 bytes per crossing, four crossings per HTTP
-  ;; header, 128 B/header of garbage that the allocation audit's per-byte slope
-  ;; could not see because it holds the header count fixed. The tag told a
-  ;; consumer nothing the object did not already say about itself. What is NOT
-  ;; given up is the single producer: this procedure is still the only thing that
-  ;; decides which of the three an application's return value is, so neither lane
-  ;; can invent its own vocabulary.
+  ;; Answering the object itself allocates nothing per crossing. A tagged list
+  ;; such as `(goto TARGET)` would cost 32 bytes per crossing -- four crossings
+  ;; per HTTP header -- and tell a consumer nothing the object does not already
+  ;; say about itself. The single producer is kept: this procedure is the only
+  ;; thing that decides which of the three an application's return value is, so
+  ;; neither lane can invent its own vocabulary.
   ;;
   ;; A span-data callback takes five arguments where every other kind takes two,
   ;; so the invocation cannot be shared -- but the CLASSIFICATION can and must,
@@ -774,29 +764,26 @@
     (parser-set-span-data-slot! parser #f)
     ;; The delivered? flag resets to #f beside the other three span slots, so a
     ;; prior span's "has delivered" state cannot leak into the next span opened on
-    ;; the same parser (decision 0042). This is the flag's ONLY reset -- span-open
-    ;; does not touch it, so a mutation deleting this line leaves the flag stale
-    ;; across spans, caught where two spans run on one parser (the property
-    ;; coverage machine's covx→covy). make-parser inits the slot to #f, so the
-    ;; first span needs no reset; and it transitively covers parser-reset! and both
-    ;; completion arms exactly as slots 12/14/15 are covered.
+    ;; the same parser. This is the flag's ONLY reset -- span-open does not touch
+    ;; it. make-parser inits the slot to #f, so the first span needs no reset;
+    ;; parser-reset! and both completion arms reach this reset through this
+    ;; procedure, exactly as they reach slots 12/14/15.
     (parser-set-span-delivered?! parser #f))
 
-  ;; TWO ENTRY POINTS DELIVER EVERY SPAN FRAGMENT, over ONE delivery helper, and
-  ;; the difference between them is the whole of Milestone 10 (decision 0042).
+  ;; TWO ENTRY POINTS DELIVER EVERY SPAN FRAGMENT, over ONE delivery helper.
   ;; Every span END goes through `byte-machine-span-fragment-step/v1` -- the
   ;; feed-loop span-end, the emitted arm, AND the EOF-side span end. The generated
   ;; lane reaches all three through that one emitted arm, because
   ;; `parser-finish-v2!` runs `exec` with `finish?` at cursor 0, so the
   ;; interpreter matches by routing its EOF span-end here too rather than to a
-  ;; suppress-only path -- keeping the emitted text unchanged. The feed-boundary
+  ;; suppress-only path. The feed-boundary
   ;; FLUSH, and only it, goes through `span-fragment-suppress-empty`. Both deliver
   ;; a NONEMPTY `[from,to)` identically; they differ only on an EMPTY one.
   ;;
   ;; A span END delivers an empty fragment ONCE, when the span has delivered
   ;; nothing at all (`from == to`, flag clear) -- so a span that opens and closes
   ;; having produced no bytes is observable, its data callback firing once with an
-  ;; empty range (§14:831 as amended by decision 0042). It SUPPRESSES an empty
+  ;; empty range. It SUPPRESSES an empty
   ;; fragment in two shapes. `from == to` with the flag SET: the empty FINAL
   ;; fragment of a span that already delivered -- a span split across feeds, whose
   ;; bytes were flushed and whose mark was re-anchored to the next slice's `start`,
@@ -804,8 +791,8 @@
   ;; lie. (`from > to` is not reachable: a feed span end has mark <= cursor, and an
   ;; EOF span end has mark 0 because `parser-finish!` re-anchors it there -- so
   ;; EVERY empty span, whether it opens on the EOF chain or is carried from a feed,
-  ;; ends with `from == to` and is announced once, uniformly (decision 0042
-  ;; item 4). The `else` still guards `from > to` as defence.) Emptiness is a
+  ;; ends with `from == to` and is announced once, uniformly. The `else` still
+  ;; guards `from > to` as defence.) Emptiness is a
   ;; property of the SPAN, not the fragment; `parser-span-delivered?` (slot 16,
   ;; inited #f and reset by
   ;; span-close, set on every delivery) is the per-span state that tells the deliver-once case
@@ -817,18 +804,13 @@
   ;; so a delivery there would announce empty for a span still being built.
   ;;
   ;; EVERY DELIVERY ADVANCES THE MARK TO THE FRAGMENT'S END, before the callback
-  ;; runs -- §13:822's "with the delivered mark already advanced to the fragment
-  ;; end". Through Milestone 14 this line was absent, and on purpose: an advance
-  ;; written here first was measured to fail nothing in either lane, because
-  ;; every path out of a delivery either CLOSES the span (the completion substep
-  ;; sets the mark to 0) or crosses a feed boundary, where the re-anchor
-  ;; overwrites the mark with the next slice's `start`, and no accessor read the
-  ;; mark between the two. That count missed a third path, which already
-  ;; existed: a data callback that FAILS leaves the span open with no feed
-  ;; boundary after it. What decision 0056 adds is the reader --
-  ;; `parser-error-span-offset` reads the mark at that error. Without the advance
-  ;; it would report as withheld the very bytes the callback was just handed, so
-  ;; an embedder counting them would count them twice.
+  ;; runs. Most paths out of a delivery would not notice its absence -- the
+  ;; completion substep sets the mark to 0, and a feed boundary re-anchors it to
+  ;; the next slice's `start` -- but a data callback that FAILS leaves the span
+  ;; open with no feed boundary after it, and `parser-error-span-offset` reads
+  ;; the mark at that error. Without the advance it would report as withheld the
+  ;; very bytes the callback was just handed, so an embedder counting them would
+  ;; count them twice. The flush's absent `paused` arm also relies on it.
   ;;
   ;; The five-argument application is the ONLY thing `span-fragment-deliver!` does
   ;; differently from the two-argument entry point above. `branches` is '() because
@@ -857,7 +839,7 @@
             ;; the empty FINAL fragment of a span that already delivered (a span
             ;; split across feeds, its bytes flushed and the mark re-anchored). The
             ;; `from > to` case is not reachable -- feed marks are <= the cursor and
-            ;; `parser-finish!` re-anchors EOF marks to 0 (decision 0042 item 4) --
+            ;; `parser-finish!` re-anchors EOF marks to 0 --
             ;; so this arm suppresses only the flag-set final fragment; guarding the
             ;; backwards range is defence, not a live path.
             (else continue))))
@@ -879,7 +861,7 @@
     (assertion-violation 'byte-machine-span-fragment-step/v1
                          "retired generated-runtime ABI" 8))
 
-  ;; The resumable keyword-table walk (decision 0044). The keyword-table node
+  ;; The resumable keyword-table walk. The keyword-table node
   ;; lowers to ONE emitted arm that embeds its entries as data and calls this,
   ;; rather than to a trie of dispatch states -- which is what makes 47 keywords a
   ;; table, not 242 states, and is the whole point of the construct.
@@ -895,20 +877,20 @@
   ;;   (need new-path new-pos)   -- the feed ran out mid-table; the arm parks the
   ;;                                compound (state-id . new-path) and returns
   ;;                                need-input, or takes the eof route under finish?.
-  ;; `ci?` folds ASCII case per table (decision 0045). Written twice on purpose --
+  ;; `ci?` folds ASCII case per table. Written twice on purpose --
   ;; the interpreter's own fold is separate, so a fold defect is a differential
   ;; result rather than a hidden agreement.
   ;;
   ;; The walk allocates its answer and nothing else, and reads each byte once per
-  ;; entry (issue #139, decision 0054). Greedy consumption stops exactly where the
+  ;; entry. Greedy consumption stops exactly where the
   ;; LONGEST prefix any keyword shares with `path ++ bv[pos,end)` ends: the walk
   ;; goes on while some keyword agrees one byte further. So one pass over the
   ;; entries, each compared in place against the parked path and then bv, finds
   ;; that length and the terminal together. A list is made only for a `need`
   ;; answer, whose parked prefix must be one, and not even then when this call
-  ;; consumed nothing. It once appended each consumed byte to a copy of the
-  ;; prefix and re-tested every entry against it, so a k-byte match cost about
-  ;; k²/2 pairs -- measured downstream at 138 times a request's own size.
+  ;; consumed nothing. Appending each consumed byte to a copy of the prefix and
+  ;; re-testing every entry against it would cost about k²/2 pairs for a k-byte
+  ;; match.
   ;; `test/common/allocation-audit-tests.sps` holds the shape: what one walk
   ;; allocates does not depend on how much of a keyword it matched.
   (define (kw-fold b ci?) (if (and ci? (>= b 65) (<= b 90)) (+ b 32) b))
@@ -964,20 +946,18 @@
   ;; omission. ***
   ;;   error     -- a final partial fragment is forbidden outright. What it
   ;;                would have carried is recorded on the error instead, by
-  ;;                `abandon-span!` below (decision 0056).
+  ;;                `abandon-span!` below.
   ;;   stopped   -- reaching either with a span active is a VERIFIER rejection
   ;;   finished     (`span-active-at-exit`), so neither is reachable.
   ;;   paused    -- a feed that exits `paused` leaves the span active with the
   ;;                fragment the span end has just delivered, and the delivery
-  ;;                advanced the mark to the cursor (decision 0056), so an arm
-  ;;                here would find `[cursor,cursor)` and suppress it: it would
-  ;;                be INERT, and is not written for that reason. Before 0056 it
-  ;;                would have been WRONG -- the mark stayed at the fragment's
-  ;;                start, so the arm would have delivered that fragment a second
-  ;;                time, against "it is never delivered twice". Measured by
-  ;;                adding `paused` to the guard: at 719e055 two span cases and
-  ;;                one counted-span case fail; here every span, counted-span,
-  ;;                pause, callback and abandoned-span case passes.
+  ;;                advanced the mark to the cursor, so an arm here would find
+  ;;                `[cursor,cursor)` and suppress it: it would be INERT, and is
+  ;;                not written for that reason. It is inert only because of
+  ;;                that advance: without it the mark would stay at the
+  ;;                fragment's start and the arm would be WRONG, delivering the
+  ;;                fragment a second time, against "it is never delivered
+  ;;                twice".
   (define (span-boundary-flush! parser bv r)
     (if (and (eq? (parser-result-status r) 'need-input)
              (parser-active-span parser))
@@ -1023,10 +1003,10 @@
             (else r)))
         r))
 
-  ;; The span an error abandons (decision 0056). It runs at the same seam as the
-  ;; flush, after it -- the flush can itself produce the error -- and it is the
-  ;; reason the error row of the flush needs no fragment: §14:839 withholds the
-  ;; bytes, and this records where they begin.
+  ;; The span an error abandons. It runs at the same seam as the flush, after
+  ;; it -- the flush can itself produce the error -- and it is the reason the
+  ;; error row of the flush needs no fragment: an error withholds the span's
+  ;; undelivered bytes, and this records where they begin.
   ;;
   ;; An error leaves span state alone (`parser-active-span` still names the span
   ;; afterwards), so at this seam the parser holds the span's name and its MARK:
@@ -1055,10 +1035,8 @@
   ;; has returned it yet. In place is also what
   ;; keeps ONE record per error. Both finish paths STORE their error before this
   ;; seam sees it, so the record they stored and the one this call returns are
-  ;; the same object and gain the span together. A copy was tried first: it
-  ;; needed the finish seam to store the copy again, which made every finish
-  ;; path's own store redundant -- three shipped mutation pins on those stores
-  ;; went UNCAUGHT, measured.
+  ;; the same object and gain the span together. A copy would need the finish
+  ;; seam to store it again, making each finish path's own store redundant.
   (define (abandon-span! parser r cursor)
     (let ((e (parser-result-error r)) (s (parser-active-span parser)))
       (when (and e s)
@@ -1105,9 +1083,8 @@
                                         (list (parser-lifecycle parser) 'feed)))
       ;; `ready` is an explicit arm and the else is LOUD. If `ready` were the
       ;; `else`, every lifecycle value this case did not name would execute input
-      ;; -- so a lifecycle value added later (a poisoned parser, say) would
-      ;; silently RE-EXECUTE instead of raising, with no exhaustiveness check to
-      ;; catch it.
+      ;; -- so a new lifecycle value would silently RE-EXECUTE instead of
+      ;; raising, with no exhaustiveness check to catch it.
       ((ready)
        ;; `busy` is an internal guard while feed, finish, or a callback is
        ;; executing. Set BEFORE the executor runs, which is what makes the
@@ -1162,7 +1139,7 @@
                                  (parser-lifecycle parser)))))
 
   ;; The interpreter path. Sticky rows short-circuit one level up in
-  ;; parser-feed!, so this loop no longer serves repeat feeds on a terminal
+  ;; parser-feed!, so this loop never serves repeat feeds on a terminal
   ;; parser -- it is reached only while the lifecycle is 'ready, and runs a
   ;; single live dispatch walk from `current` to its next stop/error/finish/
   ;; pause.
@@ -1203,7 +1180,7 @@
             ((pause)
              ;; Commit current PAST the pause -- the resumed feed re-enters at the
              ;; continuation, mirroring the generated next-state.
-             ;; The OPTIONAL reason (M12) rides the PAUSE slot, built from the same
+             ;; The OPTIONAL reason rides the PAUSE slot, built from the same
              ;; parts (code reason node-name state-id) an error node produces, over
              ;; the loop's `pk`; the error slot stays #f. #f when the pause declares
              ;; no reason.
@@ -1251,7 +1228,7 @@
                  ;; parked PAST the invocation, on the declared pause continuation.
                  ((eq? o callback-pause)
                   (parser-set-current! parser (cadddr parts))
-                  ;; The OPTIONAL callback-pause reason (M12), the SECOND
+                  ;; The OPTIONAL callback-pause reason, the SECOND
                   ;; author-facing pause path. Built with `callback-failure-position`
                   ;; (boundary) -- a callback outcome reports boundary, as the
                   ;; failure arm below does -- and routed to the PAUSE slot, not the
@@ -1403,9 +1380,9 @@
       (parser-set-current! parser (feed-outcome-next-state o))
       (parser-set-offset! parser (feed-outcome-offset o))
       ;; The generated outcome carries its reason record in slot 3 for BOTH an
-      ;; error and a (M12) pause; route it by status -- error slot for 'error, the
-      ;; new pause slot for 'paused, #f otherwise -- so the error slot stays #f for
-      ;; a pause (brief §6). One outcome has one status, and slot 3 is #f for every
+      ;; error and a pause; route it by status -- error slot for 'error, the
+      ;; pause slot for 'paused, #f otherwise -- so the error slot stays #f for
+      ;; a pause. One outcome has one status, and slot 3 is #f for every
       ;; non-error/non-pause status, so this is total and cannot leak.
       (let ((st (feed-outcome-status o)) (e (feed-outcome-error o)))
         (make-parser-result st (feed-outcome-next o)
@@ -1423,7 +1400,7 @@
   ;; stop node reached this way is verifier-rejected so it never occurs. No slice,
   ;; so next/consumed mirror the stream offset / 0. The generated finish path
   ;; runs the same `exec` with finish? #t; the else arm is unreachable through
-  ;; the public API now that only 'op and 'v2 can be constructed, and stays an
+  ;; the public API, since only 'op and 'v2 can be constructed, and stays an
   ;; assertion violation for that reason.
   ;; parser-finish! : Parser -> ParserResult
   (define (parser-finish! parser)
@@ -1461,14 +1438,13 @@
        ;; EOF chain (its mark is already 0) or was CARRIED from a feed (its mark
        ;; still held that feed's `start`). So every empty span closing at EOF
        ;; delivers its one empty fragment exactly once, uniformly; a NON-empty span
-       ;; carried here suppresses because its `delivered?` flag is set (decision
-       ;; 0042 item 4). Without this line the carried empty case would deliver only
-       ;; when the last feed happened to start at 0 -- a slicing-dependent
-       ;; inconsistency the whole-branch review found. `from > to` is therefore no
-       ;; longer reachable at any span end (feed marks are <= the cursor, EOF marks
-       ;; are 0), so the step's guard suppresses only the flag-set final fragment;
-       ;; the `from > to` arm is kept as defence. The EOF side still needs no
-       ;; bytevector and there is no boundary flush after EOF.
+       ;; carried here suppresses because its `delivered?` flag is set. Without
+       ;; this line the carried empty case would deliver only when the last feed
+       ;; happened to start at 0 -- a slicing-dependent inconsistency. `from > to`
+       ;; is therefore not reachable at any span end (feed marks are <= the
+       ;; cursor, EOF marks are 0), so the step's guard suppresses only the
+       ;; flag-set final fragment; the `from > to` arm is kept as defence. The
+       ;; EOF side needs no bytevector and there is no boundary flush after EOF.
        (when (parser-active-span parser)
          (parser-set-span-mark! parser 0))
        (let ((completed #f))
@@ -1624,8 +1600,7 @@
           ;; this same behaviour through the emitted arm. The `ready` arm above
           ;; re-anchored the mark to 0, so EVERY active span here has `from == to`:
           ;; an empty span (flag clear) delivers its one empty fragment, a carried
-          ;; non-empty span (flag set) suppresses -- both lanes identically
-          ;; (decision 0042 item 4).
+          ;; non-empty span (flag set) suppresses -- both lanes identically.
           ;;
           ;; THE CURSOR IS WHY NO BYTEVECTOR IS NEEDED HERE: the cursor passed
           ;; below is the literal 0, and the mark is 0 (re-anchored), so `from ==
@@ -1757,11 +1732,10 @@
   ;; is restored here, to the CANONICAL merged initials (slot 17) rather than to
   ;; zero OR the declared initials: reset returns the parser to its
   ;; just-constructed state, and a just-constructed parser holds the declared
-  ;; initials WITH the `make-parser` embedder overrides applied (Milestone 13).
-  ;; Restoring the declared initials would silently drop the embedder's mode on
-  ;; the first reset -- the same bug as a wrong default arriving later (decision
-  ;; 0047 item 3); with no override slot 17 equals the declared initials, so this
-  ;; is exactly the pre-M13 behaviour. Zeroing would silently make `u8 count = 3`
+  ;; initials WITH the `make-parser` embedder overrides applied. Restoring the
+  ;; declared initials would silently drop the embedder's mode on the first
+  ;; reset; with no override slot 17 equals the declared initials. Zeroing
+  ;; would silently make `u8 count = 3`
   ;; mean 3 before the first reset and 0 after it. SPAN state is cleared through
   ;; the same procedure the span-end arms call, so "inactive" has exactly one
   ;; definition. `busy` and `poisoned` are not reset state at all: the guard

@@ -3,8 +3,8 @@
 The construction API of `(byte-machine graph)`: the constructors a grammar author
 calls to build a **source machine**, which `(byte-machine verify)` then checks and
 `(byte-machine compile)` lowers and emits. Everything here is public and
-procedural; the private tagged-vector representation is never constructed directly
-(§27:1703). Every constructor takes a final `source-label` argument — an
+procedural; the private tagged-vector representation is never constructed directly.
+Every constructor takes a final `source-label` argument — an
 author-supplied datum (or `#f`) carried through diagnostics for provenance; it is
 shown as `label` below.
 
@@ -100,9 +100,7 @@ byte has closed it. When `case-insensitive?` is true the match folds ASCII
 letters (`A`–`Z` ↔ `a`–`z`) and nothing else, per table; the verifier rejects two
 entries that are identical bytes (`duplicate-keyword`) and, in a case-insensitive
 table, two entries that are equal after folding (`case-insensitive-keyword-collision`
-— byte-distinct case variants are legal only in a case-sensitive table). See
-[decisions 0043–0045](../.decisions/) for the node kind, its compact-table
-lowering, and the fold.
+— byte-distinct case variants are legal only in a case-sensitive table).
 
 **Terminals and control.**
 
@@ -118,7 +116,7 @@ lowering, and the fold.
 
 ```
 (make-uint-field name width initial label)   an unsigned integer field, `width` bits
-(make-uint-field name width initial settable? label)   settable? (M13): the embedder
+(make-uint-field name width initial settable? label)   settable?: the embedder
     may override this field's initial at make-parser (a mode field); default #f
 (make-field-action-node name operation arguments next error label)
     operation ∈ { store , clear , increment , decrement , add , set-mask , clear-mask }
@@ -159,13 +157,16 @@ declared `span-data` / `span-complete` callbacks. See the
 ```scheme
 (import (byte-machine graph) (byte-machine verify) (byte-machine compile))
 (define m (make-machine ...))              ; construct
-(verify-machine m)                          ; check (raises on a defect)
+(define v (verify-machine m))               ; check: a verification result
+(verification-ok? v)                        ; => #t, else see (verification-diagnostics v)
 (define c (compile-machine m '()))          ; verify + lower + compile
-(compilation-ok? c)                         ; => #t
+(compilation-ok? c)                         ; => #t, else see (compilation-diagnostics c)
 ```
 
-`compile-machine` verifies internally, so emission cannot bypass verification
-through the public API (§26:1672). To emit the generated library, and to run it,
+`verify-machine` does not raise on a defective machine; it returns a result
+carrying the diagnostics. `compile-machine` verifies internally and produces no
+lowered machine when verification fails, so emission cannot bypass verification
+through the public API. To emit the generated library, and to run it,
 see the [generated-code integration guide](generated-code-integration-chez.md).
 A worked end-to-end program is in
 [`examples/generate-simple-machine/`](../examples/generate-simple-machine/).

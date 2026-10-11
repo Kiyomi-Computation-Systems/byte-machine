@@ -3,7 +3,7 @@
 # Development and CI both use these targets and the checked-in CMake presets.
 # Windows has no make in the base install, so these are a convenience over the
 # presets, never the only way in: `cmake --preset dev` and `ctest --preset pr`
-# work identically everywhere (parent plan section 24.1).
+# work identically everywhere.
 #
 # An empty selection is a failure, never a silent pass. That rule lives in the
 # test presets themselves (execution.noTestsAction), not only here, or the
