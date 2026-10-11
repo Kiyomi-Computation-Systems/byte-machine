@@ -632,6 +632,16 @@
                 (census (list-sort string<?
                           (map symbol->string (distinct (census-codes the-census))))))
             (check "the catalog lists codes" (pair? doc))
-            (check-equal "catalog code set = census code set" doc census)))))))
+            (check-equal "catalog code set = census code set" doc census))))
+      ;; The public documentation lists the same codes for users, in the same
+      ;; bullet form, so it is checked the same way.
+      (harness-case "docs/verifier.md lists exactly the census codes"
+        (lambda ()
+          (let ((doc (list-sort string<?
+                       (catalog-codes (string-append catalog-repo "/docs/verifier.md"))))
+                (census (list-sort string<?
+                          (map symbol->string (distinct (census-codes the-census))))))
+            (check "the docs page lists codes" (pair? doc))
+            (check-equal "docs page code set = census code set" doc census)))))))
 
 (harness-finish)
