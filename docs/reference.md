@@ -757,10 +757,9 @@ The verifier's diagnostics; `'()` when ok.
 
 The generated library, as UTF-8 source with LF line endings. It is named
 `(generated <machine-name>)` and exports `binding`. Raises if the compilation
-is not ok, or if `binding` is not a valid name, is a core keyword such as
-`define` or `lambda`, a runtime export, or an internal name of the generated
-code. Other `(rnrs)` names, such as `list`, are not refused but produce a
-library that fails to load.
+is not ok, or if `binding` is not a valid name, is `library`, `import` or
+`export`, is a name `(rnrs)` exports (such as `define` or `list`), a runtime
+export, or an internal name of the generated code.
 
 **Available from:** `(byte-machine compile)`\
 **Details:** [What the library looks like](generating.md#what-the-library-looks-like)
@@ -790,6 +789,16 @@ byte-machine's own tests; not for applications.
 The identifiers generated code binds internally, which no generated
 binding may use. Exported for byte-machine's own tests; not for
 applications.
+
+**Available from:** `(byte-machine compile)`
+
+### `reserved-member-4` (constant)
+
+`reserved-member-4 : list-of-symbols`
+
+The `(rnrs)` exports that are valid names, which no generated binding may
+use, because the generated library imports all of `(rnrs)`. Exported for
+byte-machine's own tests; not for applications.
 
 **Available from:** `(byte-machine compile)`
 

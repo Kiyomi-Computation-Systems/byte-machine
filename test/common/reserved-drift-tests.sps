@@ -18,8 +18,15 @@
 ;;; (byte-machine runtime) not found" under aot only. The static import forces
 ;;; chez-compile.ss to include it, and does not change what environment-symbols
 ;;; measures.
+;;;
+;;; The member-4 (rnrs) drift guard is here too. The generated library imports
+;;; all of (rnrs), so reserved-member-4 must list exactly the (rnrs) exports the
+;;; name grammar admits: one missing lets a binding such as `list` render a
+;;; library that cannot be loaded, and one extra refuses a binding that would
+;;; have loaded. Its RED is the mutation that drops an entry (Pass 40 again).
 (import (rnrs) (rnrs eval)
         (only (chezscheme) environment-symbols)
+        (only (byte-machine private names) portable-name?)
         (byte-machine test harness)
         (byte-machine compile)
         (byte-machine runtime))
@@ -30,6 +37,8 @@
   (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) syms))
 (define declared (sorted reserved-member-2))
 (define live (sorted (environment-symbols (environment '(byte-machine runtime)))))
+(define declared-rnrs (sorted reserved-member-4))
+(define live-rnrs (sorted (filter portable-name? (environment-symbols (environment '(rnrs))))))
 
 (harness-group "reserved member 2 mirrors the runtime exports"
   (lambda ()
@@ -37,5 +46,14 @@
       (lambda ()
         (check-equal "no drift between reserved-member-2 and (byte-machine runtime)"
                      declared live)))))
+
+(harness-group "reserved member 4 mirrors the (rnrs) exports the grammar admits"
+  (lambda ()
+    (harness-case "the declared set equals the live (rnrs) exports the grammar admits"
+      (lambda ()
+        ;; A found-it guard first: two empty lists are equal.
+        (check "the live (rnrs) set includes list" (memq 'list live-rnrs))
+        (check-equal "no drift between reserved-member-4 and (rnrs)"
+                     declared-rnrs live-rnrs)))))
 
 (harness-finish)
