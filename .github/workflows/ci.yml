@@ -15,8 +15,8 @@ name: CI
 #
 # A newer run on the same PR (or ref) cancels the one in flight (`concurrency`).
 #
-# The Chez build is CACHED between runs -- about ten of the job's twelve
-# minutes. The steps say how the key is formed and when to discard a cache.
+# The Chez build is CACHED between runs. The steps say how the key is formed
+# and when to discard a cache.
 #
 # Docs-only changes are skipped on push and pull_request. `paths-ignore` fires
 # only when EVERY changed file matches, so a commit touching one source file and
@@ -128,10 +128,14 @@ jobs:
         run: |
           cmake --preset dev
           cmake --build --preset dev
-      - name: Test (pr, then full)
+      # `pr` then `mutation` is `release` split in two, so the mutation suites
+      # (most of the job's time) run once. The partition check fails if a test
+      # would fall outside both.
+      - name: Test (pr, then the mutation suites)
         run: |
+          scripts/check-test-partition
           ctest --preset pr --output-on-failure
-          ctest --preset release --output-on-failure
+          ctest --preset mutation --output-on-failure
       - name: Build-layer specs without a Scheme runtime
         run: |
           cmake --preset no-scheme

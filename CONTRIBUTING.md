@@ -16,7 +16,7 @@ You need Chez Scheme 10.4.1 or newer (the full system, not Petite) and CMake
 git clone https://github.com/Kiyomi-Computation-Systems/byte-machine.git
 cd byte-machine
 make doctor    # find Chez and report what was found
-make test      # build, then run the everyday selection
+make test      # build, then run everything but the mutation suites
 ```
 
 `make help` lists every target. [docs/building.md](docs/building.md) covers

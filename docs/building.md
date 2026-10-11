@@ -24,9 +24,10 @@ request must pass and how to add a mutation.
 | `make doctor`          | Find Chez and report what was found, then stop.                     |
 | `make build`           | Configure and build the development preset.                         |
 | `make dev`             | Build, then run the harness and build-layer self-tests.             |
-| `make test`            | Build, then run the everyday test selection.                        |
-| `make test-all`        | Build, then run everything, including the mutation suite.           |
-| `make test-mutation`   | Run only the mutation suite, printing its progress as it goes.      |
+| `make test`            | Build, then run everything except the mutation suites.              |
+| `make test-all`        | Build, then run everything, including the mutation suites.          |
+| `make test-mutation`   | Run only the mutation suites, printing their progress as they go.   |
+| `make check-test-partition` | Check that `pr` and `mutation` together select exactly `release`. |
 | `make prod`            | Configure and build the release preset.                             |
 | `make clean`           | Remove every build tree.                                            |
 | `make site`            | Render this documentation into `build/site/`.                       |
@@ -51,8 +52,11 @@ ctest --preset pr
 ```
 
 The test presets are `harness` (the build layer's self-tests), `pr` (the
-everyday selection) and `release` (everything). An empty selection is a
-failure, never a silent pass.
+everyday selection), `mutation` (the mutation suites) and `release`
+(everything). `harness` and `pr` leave the mutation suites out, so `pr` and
+`mutation` together are exactly `release`; `make check-test-partition` checks
+that, and CI runs the two in turn so the mutation suites run once. An empty
+selection is a failure, never a silent pass.
 
 ## What the tests cover
 

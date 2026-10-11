@@ -36,6 +36,7 @@ set(BYTE_MACHINE_TEST_LAYERS
   fixture       # the private HTTP request fixture
   portability   # values crossing library boundaries; runtime identity
   example       # the documented end-to-end examples
+  mutation      # the mutation suites: every decision broken in turn, on a staged copy
   expected-red) # tests that must fail, proving the harness can fail
 
 set(BYTE_MACHINE_TEST_BACKENDS chez cmake)

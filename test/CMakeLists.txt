@@ -63,7 +63,7 @@ byte_machine_add_test(
   COMMAND "${CMAKE_COMMAND}" -P
           "${CMAKE_CURRENT_LIST_DIR}/support/cmake/MutationSuite.cmake"
   TIMEOUT 600
-  LABELS unit)
+  LABELS mutation)
 
 # The exact-status assertion decides whether every expected-red test below is
 # checking anything at all, so its functional core is specified before any of
@@ -586,7 +586,7 @@ byte_machine_add_scheme_lane(
 # This is one ctest entry that runs the whole mutation suite (~5 min), and ctest
 # buffers a single test's output until it finishes -- so on a plain run this line
 # sits silent for minutes, which is easy to mistake for a hang. To watch it work,
-# run `make test-mutation` (or `ctest --preset release -V -R scheme-mutation`),
+# run `make test-mutation` (or `ctest --preset mutation -V`),
 # which streams SchemeMutationSuite's per-pass progress live. The TIMEOUT below is
 # the whole-lane ceiling; MutationRunner bounds each individual mutation with its
 # own per-command timeout, so one non-terminating mutation fails by name rather
@@ -598,7 +598,7 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
             "-DBYTE_MACHINE_CHEZ_EXECUTABLE=${BYTE_MACHINE_CHEZ_EXECUTABLE}"
             -P "${CMAKE_CURRENT_LIST_DIR}/support/cmake/SchemeMutationSuite.cmake"
     TIMEOUT 900
-    LABELS unit
+    LABELS mutation
     ENVIRONMENT "BYTE_MACHINE_EXECUTION_MODE=source"
                 "BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin"
                 "BYTE_MACHINE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-one-byte.golden.sls"
