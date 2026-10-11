@@ -87,15 +87,22 @@ long counted run, few decisions).
 ## How to run
 
 `BYTE_MACHINE_TEST_TMPDIR` names the directory the emitted generated library is
-written to (default `/tmp`). `BYTE_MACHINE_BENCH_OUT` sets the artefact path (default: stdout). The
-`exact-command` recorded in the artefact:
+written to (default `/tmp`). `BYTE_MACHINE_BENCH_OUT` sets the artefact path (default: stdout).
+Run from the repository root after `make build`, which creates the object guard
+directory. The runner records this command as the artefact's `exact-command`:
 
 ```
 chez --script test/support/launchers/chez-source.ss \
   --library-root test/support/harness --library-root src \
   --object-guard build/dev/chez-object-guard \
-  --program bench/runner/benchmark.sps
+  --program ./bench/runner/benchmark.sps
 ```
+
+The leading `./` is required. The launcher empties Chez's `source-directories`,
+and `load-program` searches them for any relative path that does not begin with
+`./` or `../`, so a bare `bench/runner/benchmark.sps` fails with "not found in
+source directories". An absolute path also works. The committed baseline below
+records the bare form; see its note.
 
 ## Recorded baseline: macOS arm64 (`tarm64osx`)
 
@@ -105,6 +112,15 @@ artefact's `mode` field reads `"unknown"` because `BYTE_MACHINE_EXECUTION_MODE`
 was not set for the run), `executors both`, `compiler-options ()`,
 `deterministic-seed 0` (the workloads are fixed byte sequences; no PRNG).
 Harness version `cdba939871d946b`.
+
+> **Note (2026-10-11): the recorded `exact-command` never ran as written.** The
+> artefact records `--program bench/runner/benchmark.sps`. The launcher already
+> emptied `source-directories` when the runner was added, and the bare path
+> fails there too (re-run on that tree), so this baseline was produced by an
+> invocation the artefact does not record. Only the command string is wrong;
+> no measurement depends on it. The field is left as recorded rather than
+> rewritten to a command that did not produce it. The runner now records the
+> `./` form shown under [How to run](#how-to-run).
 
 **One-time metrics:**
 

@@ -29,14 +29,14 @@ conformance corpus at every chunk size.
 - *No input buffering.* Spans (a header name, a body) are delivered to your
   callbacks as ranges into the bytevector you fed. The runtime keeps no
   reference to it after the feed returns, and the generated per-byte path
-  allocates nothing.
+  allocates nothing, except when reading digits into a 64-bit field.
 - *The pieces protocol parsers need.* Byte dispatch, byte classes, exact
   sequences, keyword tables (prefix-tolerant, optionally case-insensitive),
   unsigned-integer fields with overflow-checked accumulation, counted consumption
   (read N bytes of body), callbacks that can pause the parser, and spans.
 - *Precise errors.* An error record names its code, the node, the stream offset,
-  whether the fault was a byte, a feed boundary or end of input, and any span it
-  cut short.
+  whether the fault was at a byte, between two bytes or at end of input, and any
+  span it cut short.
 - *A machine you can inspect.* The machine is an immutable data structure, not a
   grammar file or a macro expansion, so it can be built, printed and tested like
   any other value.
@@ -46,7 +46,7 @@ conformance corpus at every chunk size.
 - *Verified before it is generated.* Every machine passes a mandatory verifier
   before any code is emitted. It reports unreachable nodes, zero-progress loops
   that would spin forever, end-of-input paths that end in the wrong place,
-  malformed spans and invalid field operations: [[file:.reference/verifier-diagnostic-catalog.md][33 diagnostic codes]], each with
+  malformed spans and invalid field operations: [[file:docs/verifier.md#every-diagnostic-code][33 diagnostic codes]], each with
   the offending path.
 - *A reference interpreter to test against.* An independent interpreter executes
   the same machine. The test harness runs it beside the generated parser and
@@ -88,8 +88,8 @@ is [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=
 chez --libdirs src --program examples/generate-simple-machine/generate.sps
 #+end_src
 
-Next, read the [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] for every constructor, and the
-[[file:.reference/generated-code-integration-chez.md][generated-code integration guide]] for importing and running a generated parser.
+Next, read [[file:docs/usage.md][Usage]], which builds, generates and runs a small parser step by step, and
+[[file:docs/machines.md][Building machines]] for every node kind.
 
 ** Requirements
 
@@ -97,7 +97,7 @@ Next, read the [[file:.reference/source-ir-and-builder.md][source IR and builder
 - CMake 3.26 or newer, to build and run the tests
 
 Verified on macOS arm64. Linux amd64, Windows amd64 and Linux arm64 are
-supported targets that are not CI-verified; see the [[file:.reference/portability-matrix.md][portability matrix]].
+supported targets that are not CI-verified; see [[file:docs/installing.md][Installing]].
 
 ** Building and testing
 
@@ -142,17 +142,21 @@ You can also generate on Chez and deploy only the emitted =.sls= with
 
 ** Documentation
 
-References in [[file:.reference/][=.reference/=]]:
+The documentation is in [[file:docs/][=docs/=]], starting at [[file:docs/README.md][its index]]:
 
-- [[file:.reference/source-ir-and-builder.md][Source IR and builder]]: every =(byte-machine graph)= constructor and node kind
-- [[file:.reference/transition-and-cursor-semantics.md][Transition and cursor semantics]]: edge modes, cursor, offsets, statuses and position kinds
-- [[file:.reference/field-and-overflow.md][Fields and overflow]]: uint fields, actions, predicates, accumulation and counted consumption
-- [[file:.reference/callback-span-lifetime.md][Callback and span lifetime]]: what a callback receives and how long it may hold it
-- [[file:.reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]]: every code the verifier can report
-- [[file:.reference/generated-code-integration-chez.md][Generated-code integration for Chez]]: generating, importing and running a parser
-- [[file:.reference/grammar-author-testing-guide.md][Grammar-author testing guide]]: the harness and differential testing
-- [[file:.reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]]: metrics, workloads and the recorded baseline
-- [[file:.reference/portability-matrix.md][Portability matrix]]: target platforms and the pinned runtime
+- [[file:docs/installing.md][Installing]]: what you need, and how to put the libraries on Chez's path
+- [[file:docs/usage.md][Usage]]: build, check, generate and run a parser, step by step
+- [[file:docs/machines.md][Building machines]]: every node kind, matcher and edge
+- [[file:docs/fields.md][Fields and counts]]: numbers read from the input or set by your application
+- [[file:docs/callbacks.md][Callbacks and spans]]: what a callback receives and how long it may keep it
+- [[file:docs/running.md][Running a parser]]: feeding, finishing, pausing, resetting, and every status
+- [[file:docs/errors.md][Errors]]: input errors, callback failures and programming mistakes
+- [[file:docs/verifier.md][The verifier]]: what it checks, and every diagnostic code
+- [[file:docs/generating.md][Generated code]]: what the generator writes, and how to ship it
+- [[file:docs/testing.md][Testing a grammar]]: compare the generated parser with the interpreter
+- [[file:docs/llparse.md][Why llparse-style parsers]]: the design, and why it suits HTTP and URI parsing in servers
+- [[file:docs/reference.md][API reference]]: every exported binding
+- [[file:docs/building.md][Building]]: build and test byte-machine, and render the docs as a site
 
 See the [[file:CHANGELOG.md][changelog]] for release history.
 

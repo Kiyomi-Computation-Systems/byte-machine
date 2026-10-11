@@ -11,12 +11,38 @@ All notable changes to byte-machine are recorded here. The format follows
 - **An Akku package manifest.** `Akku.manifest` describes byte-machine for
   the [Akku](https://akkuscm.org/) package index. The package installs the
   libraries under `src/byte-machine/` and has no dependencies.
+- **User documentation** in `docs/`: installing, a step-by-step walkthrough,
+  every node kind, fields, callbacks and spans, running a parser, errors, the
+  verifier's diagnostic codes, generated code, testing a grammar, and a page
+  on the llparse design and why it suits HTTP and URI parsing in servers.
+- **An API reference** documenting every binding the five public libraries
+  export. `make check-reference` fails if an export is undocumented or a
+  documented binding does not exist.
+- **A docs site.** `make site` renders `docs/` to HTML with
+  [chez-cmark-gfm](https://github.com/Kiyomi-Computation-Systems/chez-cmark-gfm)
+  (named with `CMARK_GFM_ROOT`), and `make check-site` checks every page,
+  link and anchor. A workflow publishes it to GitHub Pages on each release
+  tag.
+- **A second example**, `examples/words/`, which generates a parser with
+  spans and callbacks and imports it as a library, the way an application
+  does.
 
 ### Changed
 
 - **Every library starts with `#!r6rs`.** Racket's `plt-r6rs` now loads the
   libraries unchanged. Chez Scheme and Guile behave as before, and the
   emitted text, the generated-runtime ABI and every golden are unchanged.
+
+### Fixed
+
+- **The benchmark runner's documented command now runs.** The command given in
+  `bench/runner/benchmark.sps` and in its artefact's `exact-command` failed with
+  "not found in source directories": the source launcher empties
+  `source-directories`, and `load-program` searches them for a relative path
+  that does not begin with `./`. The runner now documents and records
+  `--program ./bench/runner/benchmark.sps`. The committed baseline keeps the
+  string it recorded, with a note in the benchmark reference that it never
+  ran as written; none of its measurements change.
 
 ## [0.7.0] - 2026-10-01
 
