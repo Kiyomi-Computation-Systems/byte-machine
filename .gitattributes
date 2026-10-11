@@ -20,9 +20,11 @@ test/fixtures/** -text
 bench/fixtures/** -text
 *.expected -text
 
-# The development record -- implementation plans and decision records -- stays
-# in the repository but is left out of release archives (`git archive`, and the
-# source archives GitHub attaches to a release). This does not hide it from the
-# repository itself: a clone or a browse of the public repository still shows it.
+# The development record -- implementation plans, decision records, and the
+# contributor process guide -- stays in the repository but is left out of
+# release archives (`git archive`, and the source archives GitHub attaches to a
+# release). This does not hide it from the repository itself: a clone or a
+# browse of the public repository still shows it.
 .plans export-ignore
 .decisions export-ignore
+AGENTS.md export-ignore

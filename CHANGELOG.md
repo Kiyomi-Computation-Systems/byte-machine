@@ -551,8 +551,8 @@ What the release contains, in outline:
   `check-invariants`, the six invariant rows) — read by the property lane, the
   failure-fixture saver and the minimizer.
 - CMake build frontend with checked-in presets and a thin `Makefile` over it.
-- Probe-based Chez and Gambit discovery that interrogates candidates rather
-  than trusting binary names, rejecting Petite and Ghostscript's `gsc`.
+- Probe-based Chez discovery that interrogates candidates rather than trusting
+  binary names, rejecting Petite.
 - CTest registration helper enforcing the test-name grammar, label vocabulary,
   duplicate-name rejection, and mandatory timeouts at configure time.
 - Specifications for the functional core of every build-layer module, runnable
@@ -565,20 +565,15 @@ What the release contains, in outline:
 - `.gitattributes` normalizing the repository to LF and marking fixture trees
   binary, since generated-source comparison and CRLF-framed HTTP fixtures both
   depend on exact bytes.
-- A dependency-free portable test harness: one shared runner body included by a
-  thin `(byte-machine test harness)` library per runtime, with adapters that
-  export identical names and contain no test semantics of their own. Assertions,
-  groups and cases, an isolated self-probe, and a computed exit status.
-- Source execution lanes for both runtimes. Chez runs through a launcher that
-  pairs the library root with an always-empty object directory, so a stale
-  compiled object cannot be loaded by a lane that calls itself source. Each of
-  the launcher's three refusals — a wrong argument count, a guard directory that
-  is missing, and one that has acquired a file — is a lane of its own asserting
-  status 2, because a lane that is set up correctly never reaches a refusal and
-  so cannot notice one being deleted. Gambit gains a `source` mode: both of its
-  compiled modes shell out to a C compiler fixed when Gambit was built, which
-  would have left Scheme lanes unable to run on Gambit at all without that
-  toolchain.
+- A dependency-free test harness, `(byte-machine test harness)`, with a Chez
+  adapter that contains no test semantics of its own. Assertions, groups and
+  cases, an isolated self-probe, and a computed exit status.
+- Source execution lanes. Chez runs through a launcher that pairs the library
+  root with an always-empty object directory, so a stale compiled object cannot
+  be loaded by a lane that calls itself source. Each of the launcher's guard
+  refusals — a guard directory that is missing, and one that has acquired a
+  file — is a lane of its own asserting status 2, because a lane that is set up
+  correctly never reaches a refusal and so cannot notice one being deleted.
 - Exact-exit-status assertions. The harness gives 0, 1, and 2 distinct
   meanings, and reserves 3 for lane provenance. An expectation outside this
   four-value vocabulary is a configure error. A status outside it that is
@@ -589,19 +584,16 @@ What the release contains, in outline:
   witness it: the self-tests for most decisions in the runner, the bootstrap lane
   for the failure counter every assertion reports through, the empty-selection
   lane for the environment read no in-process assertion can reach, and one lane
-  per launcher refusal. Adapter export parity is checked the same way, on each
-  runtime, because Scheme cannot portably reflect on a library's export list.
+  per launcher refusal. The adapter's export list is checked the same way.
 
   Five mutations are declared survivors instead, each with a written reason the
   suite fails if it stops being true. Three are print-only — probe output
   suppression and the two halves of `BYTE_MACHINE_TEST_VERBOSE` — and share one
-  cause: they change what is printed, never a counter or a status, and the
-  portable subset has no string ports for a suite to read its own output back
-  with. One is `harness-summary`, `harness-empty-selection-error`, and
-  `harness-failure-context`, used only inside the shared runner body that
-  `include` splices into each adapter's library, so an internal reference
-  resolves whatever the export list says and dropping one of the three is not
-  detectable. The last is the launcher's `compile-imported-libraries` call:
+  cause: they change what is printed, never a counter or a status. One is
+  `harness-summary`, `harness-empty-selection-error`, and
+  `harness-failure-context`, used only inside the harness library itself, so an
+  internal reference resolves whatever the export list says and dropping one of
+  the three is not detectable. The last is the launcher's `compile-imported-libraries` call:
   deleting it restates Chez's default and changes nothing, and turning it on
   writes an object into the guard directory only *after* that directory's
   emptiness has been asserted, so the pollution is visible to the next process
@@ -616,90 +608,32 @@ What the release contains, in outline:
   sentinel — into a root of its own, beside the pristine source. Paired, the
   object is unreachable and the self-tests pass; unpaired, Chez loads it and the
   sentinel comes out in the banner, the failure context, and the exit status.
-- A portability guard failing the build when a shared test body is missing a
-  wrapper, when two shared bodies share a basename, when any declared directory
-  contributes no body, when no directory is declared at all, when it receives an
-  argument it does not recognize, or when a `SHARED_DIRS` or `WRAPPED_DIRS`
-  entry is not an existing directory. Its glob recurses, so a body in a
-  subdirectory is checked rather than unseen. Every rule past the first two was
-  added after being shown to leave a tree unchecked while still producing a
-  green build.
-- The first product library: one shared body in `src/common/byte-machine/`
-  included by exactly one thin library per runtime. Its type tag and singleton
-  are freshly allocated rather than symbols, because symbols are interned and a
-  symbol tag would make a body included twice indistinguishable from one
-  included once — the defect the one-owner rule exists to prevent.
-- A working-directory matrix. The same body loads through both wrappers from
-  three directories chosen so each catches a different failure: a copy where an
-  include resolved against the working directory would accidentally succeed, a
-  same-named impostor where it would report the wrong answer, and an empty
-  directory where it would find nothing. All three pass under a correct
-  mechanism, so what proves them is a launcher mutation whose expected outcome
-  is asymmetric — the first passes, the other two fail — with the survivor
-  asserted rather than ignored.
-- Mutation coverage that runs on both runtimes for the shared body, inverting
-  the rule the harness runner uses. A wrapper that quietly reimplemented the
-  body is exactly a wrapper whose runtime does not notice the body changing, so
-  the claim that no wrapper duplicates semantics is witnessed rather than
-  reviewed.
-- The Chez launcher takes repeatable `--library-root` and `--source-dir` flags,
-  since a lane now imports from both the harness and the product tree. Each of
-  its parse refusals is a lane asserting status 2, because a correctly set-up
-  lane never reaches one.
-- A Gambit search root containing a comma is refused at configure time.
-  Gambit's `-:` options are comma-separated, so such a root makes `gsi` print
-  its usage banner and run no Scheme at all, on every Gambit lane at once, in
-  output that names nothing this project owns. A relative search root is
-  refused too, for a different reason: `gsi` resolves it against its own
-  working directory, so the lane would find its libraries or not depending on
-  where it was launched — the one thing the working-directory matrix exists
-  to rule out.
+- The Chez launcher takes a repeatable `--library-root` flag, since a lane
+  imports from both the harness and the product tree. Each of its parse
+  refusals is a lane asserting status 2, because a correctly set-up lane never
+  reaches one.
 - `byte_machine_add_test` gains an optional `WORKING_DIRECTORY`, overriding
   its derived per-test run directory; the temporary directory it also creates
   is unaffected. `byte_machine_add_exit_code_test` and
-  `byte_machine_add_scheme_lane` forward it, which is what lets the
-  working-directory matrix launch six lanes from three fixture directories
-  instead of their derived ones.
-- Cross-library identity proof. A second library per runtime,
-  `(byte-machine placeholder-consumer)`, built over its own
-  wrapper-free body whose free identifiers are supplied by the wrapper's import
-  of `(byte-machine placeholder)`. A shared test body importing both libraries
-  asserts that a value built through the owner is recognised through the
-  consumer, and that the allocation-free singleton is one object across both
-  imports.
-- The consumer body additionally proves a mechanism the product libraries depend
-  on and nothing previously exercised: a shared body naming another library's
-  exports as free identifiers, resolved identically by R6RS library-body
-  `include` and R7RS `define-library` `include`.
-- Eight Scheme mutations in four passes (24 to 27), bringing the suite to 27
-  passes and 64 mutations. The decisive two replace each consumer wrapper's
-  import with an include of the owner's body: the mutant answers both
-  identity claims wrongly and raises nothing, but the identity lane still
-  fails it — an ordinary `check`/`check-equal` mismatch, exit 1 on both
-  runtimes — while every lane that imports only the owner stays green.
-- A content fingerprint of the shared test bodies a lane's manifest names,
-  checked in-process against a value the build computed from the same files
-  before the run — proving the declared text is unchanged on disk and read
-  identically by both runtimes, not that the run executed it, so two lanes
-  claiming to run the same text can be shown to disagree rather than merely
-  trusted to agree. `adapter-file-bytes` reads a file through a binary port on
-  both runtimes. The algorithm is a
-  polynomial rolling hash using only exact integer arithmetic, never bitwise
-  operations, since neither R6RS nor R7RS guarantees the latter over the
-  unbounded range the fold needs. Hex renders through an explicit lowercase
-  digit table rather than `number->string` with a radix, because Chez and
-  Gambit render `(number->string 255 16)` as `FF` and `ff` respectively —
-  measured on both runtimes — and a fingerprint whose case depended on that
-  would make the one claim it exists to carry, that both runtimes agree,
-  depend on a detail they already answer differently.
+  `byte_machine_add_scheme_lane` forward it.
+- A content fingerprint of the sources a lane's manifest names, checked
+  in-process against a value the build computed from the same files before the
+  run — proving the declared text is unchanged on disk, not that the run
+  executed it, so two lanes claiming to run the same text can be shown to
+  disagree rather than merely trusted to agree. `adapter-file-bytes` reads a
+  file through a binary port. The algorithm is a polynomial rolling hash using
+  only exact integer arithmetic, never bitwise operations. Hex renders through
+  an explicit lowercase digit table rather than `number->string` with a radix,
+  so the fingerprint's case never depends on `number->string`'s radix output,
+  which Chez renders in upper case.
 - The expectation a lane's fingerprint is checked against is computed once
-  at build time, from the repository sources, by `load`ing the same
-  `fingerprint.scm` the lane itself runs rather than reimplementing the
-  algorithm a second time — a second implementation agreeing with the first
-  would prove nothing, since the two could drift and the drift would look
-  like a passing comparison. A run that cannot show it executed the intended
-  text exits status 3 before any test case runs.
-- `byte_machine_add_scheme_lane` gains a required `SHARED_BODIES` argument:
+  at build time, from the repository sources, by the same fingerprint code
+  the lane itself runs rather than by reimplementing the algorithm a second
+  time — a second implementation agreeing with the first would prove nothing,
+  since the two could drift and the drift would look like a passing
+  comparison. A run that cannot show it executed the intended text exits
+  status 3 before any test case runs.
+- `byte_machine_add_scheme_lane` gains a required `SOURCES` argument:
   a lane cannot be registered without declaring the manifest it will be
   checked against. At run time, an unset or empty manifest means the
   process was not started by a lane registration — a developer running the
@@ -708,19 +642,11 @@ What the release contains, in outline:
   rather than refused, because refusing would fail the mutation suite's own
   baseline before a single mutation ran. The guarantee lives at configure
   time, where it cannot be forged by anything a running process does.
-- Six new lanes prove the check can fail, each exiting exactly 3, for one
-  of four diagnoses: a wrong expectation (reported identically by the Chez
-  and Gambit lanes, which differ only by runtime), a build that never
-  produced one, a manifest naming a body that cannot be read, and a manifest
-  the run never verified at all. The suite grows from 40 to 46 tests and the
-  Scheme mutation suite from 27 to 35 passes (64 to 83 mutations), breaking
-  every decision in the algorithm and in the check itself on a staged copy. One of those mutations — the hex digit table
-  turned uppercase — was predicted to be caught only on Gambit, since the
-  build-time expectation loads the same mutated file a Chez lane runs
-  against; measured, it is caught symmetrically on both runtimes instead, by
-  an unrelated self-test comparison against fixed literal strings, because
-  the passes that carry it set no manifest and provenance never runs there
-  at all.
+- Four lanes prove the check can fail, each exiting exactly 3, one per
+  diagnosis: a wrong expectation, a build that never produced one, a manifest
+  naming a body that cannot be read, and a manifest the run never verified at
+  all. The Scheme mutation suite breaks every decision in the algorithm and in
+  the check itself on a staged copy.
 - A lane that was given a manifest and never verified it now exits 3.
   Requiring the manifest at configure time makes the environment
   unforgeable; it says nothing about whether anything read it, and the check
@@ -732,9 +658,8 @@ What the release contains, in outline:
   guard fires from the summary, so it cannot catch a body that reaches
   neither the summary nor the check — the bootstrap's own shape, a single
   deliberate exception that carries its own call.
-- A Chez ahead-of-time lane for each of three programs the source lanes
-  already run — `bootstrap`, `self`, and `placeholder-identity`. Each
-  pair verifies against the same expectation file as its `chez.source`
+- A Chez ahead-of-time lane for each of two programs the source lanes
+  already run — `bootstrap` and `self`. Each pair verifies against the same expectation file as its `chez.source`
   counterpart, since both declare the same manifest and the expectation is
   keyed by it. The compiled program is loaded with every object directory
   paired against an always-empty source guard, so nothing on the library
@@ -1077,12 +1002,6 @@ What the release contains, in outline:
   false in CMake, so an absent floor accepted every release silently.
 - The Chez version is read from after the banner's `Version` keyword rather than
   from the first dotted number anywhere in it.
-- Gambit's interpreter is interrogated before its compiler is derived, so a
-  Ghostscript `gsi` reports that it is not Gambit instead of complaining about a
-  derived path that was never the problem.
-- An explicitly set `BYTE_MACHINE_GAMBIT_COMPILER` now survives the interpreter
-  changing in the same configure. Provenance is decided by comparing the cached
-  value against the recorded derivation, not by interpreter identity.
 - Test presets declare a configuration and refuse an empty selection, so the
   documented preset entry point behaves like `make` — on Windows' default
   multi-config generator every test previously reported "Not Run".
@@ -1092,8 +1011,7 @@ What the release contains, in outline:
   judged by running a real execution lane rather than only by `cmake -P`;
   gained a reset entry point so a second declaration pass can run under a
   different verify command in the same script; and gained a verify working
-  directory, separate from the staged tree, so a mutation can be judged by
-  launching from several directories. The CMake-layer suite keeps its previous
+  directory, separate from the staged tree. The CMake-layer suite keeps its previous
   behaviour by default on all three axes.
 - `byte_machine_mutation` gained optional `EXPECT_STATUS` and
   `EXPECT_OUTPUT_MATCHES`, narrowing "caught" to "caught for the declared
@@ -1109,16 +1027,12 @@ What the release contains, in outline:
 - `ByteMachineExpectExit`'s comments and specification illustrate the
   out-of-vocabulary case with Chez's measured exit for a `--script` naming a
   file that does not exist (255); the declared vocabulary remains 0/1/2/3.
-- Every library is an ordinary inline R6RS `.sls` and every test program a
-  plain `.sps`; no Scheme file includes another. The fingerprint algorithm is
-  its own library, `(byte-machine test fingerprint)`, imported by the harness
-  and by the build-time expectation alike. A lane's manifest (`SOURCES`,
-  formerly `SHARED_BODIES`) is its program plus every library it loads, so
-  every byte of Scheme a lane runs is fingerprinted — wrapper text never was,
-  before.
-- The `determinism` mutation-suite layer comment now says byte-identical
-  emission is claimed "across runs, lanes, and platform cells" rather than
-  "across runs and runtimes".
+- Every library is an ordinary R6RS `.sls` and every test program a plain
+  `.sps`. The fingerprint algorithm is its own library,
+  `(byte-machine test fingerprint)`, imported by the harness and by the
+  build-time expectation alike. A lane's manifest (`SOURCES`) is its program
+  plus every library it loads, so every byte of Scheme a lane runs is
+  fingerprinted.
 - The comment above the `cmake-mutation` lane, which claimed the lane "runs
   in CI", now says it runs under `ctest`.
 - The harness adapter derives OS and architecture through pure
@@ -1250,39 +1164,6 @@ What the release contains, in outline:
   rejected rather than looping forever in both executors, and an accumulate
   byte edge into a finish terminal is rejected. Every existing golden and IR
   fingerprint is unchanged.
-
-### Removed
-
-- Gambit and R7RS leave the project contract: byte-machine now targets Chez
-  Scheme and R6RS only. The one consumer that required a second runtime,
-  protium, is being replaced by a Chez-only libuv library, so nothing
-  remaining needs Gambit. The test lanes are `chez.source` and `chez.aot`.
-- The portability guard's pairing rule — every wrapped body twinned `.scm` /
-  `.gambit.scm` — goes with nothing left to pair.
-- All 11 Gambit execution lanes and their test halves: the `.gambit.scm`
-  drivers, the `.sld` harness adapter and its wrappers, `src/gambit/`, and
-  `test/gambit/`. The Scheme mutation suite's with/without-Gambit counting
-  delta collapses into a single declared set.
-- The Gambit toolchain layer: the discovery module, the probe script, their
-  specification and spec lane, and every build-frontend reference to
-  Gambit — the `BYTE_MACHINE_REQUIRE_GAMBIT` option, presets, `Makefile`
-  text, and backend vocabulary.
-- The shared-body include mechanism and everything that kept it honest: the
-  launchers' `--source-dir`, the working-directory matrix and its asymmetric
-  mutation, the repository-wide basename guard
-  (`ByteMachinePortabilityGuard.cmake`, its specification, and its twelve
-  mutations — replaced by a per-lane basename check in the registrar), and
-  the one-owner rule with its import-vs-include mutation (replaced by an
-  inline-duplication mutation the identity lane catches). Every library is now
-  a self-contained R6RS `.sls`.
-- The placeholder libraries `src/byte-machine/placeholder.sls` and
-  `src/byte-machine/placeholder-consumer.sls`, along with their test programs
-  (`test/common/placeholder-tests.sps`,
-  `test/common/placeholder-identity-tests.sps`), their lane registrations —
-  including the `placeholder-identity` AOT identity lane — and the
-  mutations that staged them. They were stand-ins for a real
-  cross-library-identity consumer before the emitter existed; the emitter and
-  its end-to-end example now exercise the real public library boundary.
 
 ### Fixed
 
