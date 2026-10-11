@@ -104,7 +104,8 @@ and never has to hold on to bytes the parser has finished with.
 ### Memory is bounded and owned by the server
 
 A byte-machine parser's state doesn't grow with the input. It allocates
-nothing per byte (reading digits into a 64-bit field is the one exception)
+nothing per byte (a 64-bit field value of 2^60 or more, which is a bignum,
+is the one exception)
 and keeps no reference to the buffers you feed it, so a server can reuse one read buffer for every read on a connection.
 Spans arrive as ranges into that buffer, and the server decides what to
 copy and when.

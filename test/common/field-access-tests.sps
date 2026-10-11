@@ -594,11 +594,14 @@
 
 ;; The checked multiply-add, BOTH lanes.
 ;;
-;; The inequality is a check BEFORE the multiply-add --
-;; `current <= floor((maximum - digit) / base)` -- not a compute-then-check,
+;; The inequality is a check BEFORE the multiply-add, not a compute-then-check,
 ;; because field arithmetic must not rely on host fixnum width or silent
 ;; wrapping. Computing the product first is safe under Chez's bignums and would
-;; not be safe under a host that wraps, so both lanes render the pre-check.
+;; not be safe under a host that wraps, so both lanes render the pre-check. They
+;; render it by different arithmetic: the interpreter tests
+;; `current <= floor((maximum - digit) / base)` on every digit, and the
+;; generated lane compares `current` against the quotient and remainder of
+;; `maximum / base`, divided out when the arm is emitted.
 (define (acc-mach nm base width)
   (make-machine nm 'start (list (make-uint-field 'n width 0 #f)) '() '()
     (list eof-decl rej-decl)
@@ -678,6 +681,32 @@
           (check-equal "interpreter" (parser-field-ref a 'n) 255)
           (check-equal "generated" (parser-field-ref g 'n) 255)
           (check-equal "not an error" (parser-lifecycle a) 'stopped))))
+    (harness-case "the bound's quotient rows, at u8 and at u64"
+      (lambda ()
+        ;; 255 is 25 * 10 + 5: a digit after 25 is accepted up to 5 and refused
+        ;; from 6, a digit after 24 is accepted whatever it is, and after 26
+        ;; none is. 2^64 - 1 is 1844674407370955161 * 10 + 5, the same row
+        ;; with a quotient above the fixnum range. Each lane's answers are ONE
+        ;; value holding both rows, so each way of mis-splitting the bound
+        ;; reports its own value: refusing every value equal to the quotient,
+        ;; testing the remainder strictly, taking the wrong remainder, admitting
+        ;; the quotient whatever the digit, or comparing with an equality that
+        ;; holds only for fixnums, which leaves the u8 row right.
+        (let* ((u64 (acc-lanes 'acc64row 10 64))
+               (q64 1844674407370955161)
+               (u8-row '("249x" "250x" "254x" "255x" "256x" "260x"))
+               (u64-row '("18446744073709551609x" "18446744073709551610x"
+                          "18446744073709551615x" "18446744073709551616x"
+                          "18446744073709551620x"))
+               (want (list '(249 250 254 255 25 26)
+                           (list 18446744073709551609 18446744073709551610
+                                 18446744073709551615 q64 (+ q64 1))))
+               (answers (lambda (cm row)
+                          (map (lambda (str) (parser-field-ref (run-acc cm str) 'n)) row)))
+               (rows (lambda (u8 wide) (list (answers u8 u8-row) (answers wide u64-row)))))
+          (check "the u64 quotient is above greatest-fixnum" (> q64 (greatest-fixnum)))
+          (check-equal "interpreter quotient rows" (rows (car acc8bit) (car u64)) want)
+          (check-equal "generated quotient rows" (rows (cdr acc8bit) (cdr u64)) want))))
     (harness-case "the u64 path crosses the bignum boundary in both lanes"
       (lambda ()
         ;; "Must not rely on host fixnum width", end to end: 2^60 has

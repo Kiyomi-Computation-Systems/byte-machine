@@ -8,12 +8,18 @@
 ;;; allocation in the generated path — is asserted separately by
 ;;; test/common/allocation-audit-tests.sps.
 ;;;
-;;; Run (the exact command recorded in the artefact):
+;;; Run from the repository root, after `make build` has created the object
+;;; guard directory (this is the command recorded as the artefact's
+;;; exact-command):
 ;;;   chez --script test/support/launchers/chez-source.ss \
 ;;;     --library-root test/support/harness --library-root src \
 ;;;     --object-guard build/dev/chez-object-guard \
-;;;     --program bench/runner/benchmark.sps
-;;; with BYTE_MACHINE_TEST_TMPDIR set (for the emitted generated library) and,
+;;;     --program ./bench/runner/benchmark.sps
+;;; The leading ./ is required. The launcher empties source-directories, and
+;;; load-program searches them for any relative path that does not begin with
+;;; ./ or ../, so a bare bench/runner/benchmark.sps is "not found in source
+;;; directories". An absolute path also works.
+;;; Set BYTE_MACHINE_TEST_TMPDIR (for the emitted generated library) and,
 ;;; optionally, BYTE_MACHINE_BENCH_OUT (artefact path; default stdout),
 ;;; BYTE_MACHINE_BENCH_ROUNDS and BYTE_MACHINE_BENCH_INNER (defaults 7 / 200).
 (import (rnrs) (rnrs eval)
@@ -170,7 +176,7 @@
    (list 'iterations-per-round inner)
    (list 'deterministic-seed 0)            ; workloads are fixed byte sequences; no PRNG
    (list 'exact-command
-         "chez --script test/support/launchers/chez-source.ss --library-root test/support/harness --library-root src --object-guard build/dev/chez-object-guard --program bench/runner/benchmark.sps")
+         "chez --script test/support/launchers/chez-source.ss --library-root test/support/harness --library-root src --object-guard build/dev/chez-object-guard --program ./bench/runner/benchmark.sps")
    (list 'one-time-metrics
          (list (list 'generated-source-size-bytes generated-source-size)
                (list 'aot-object-size-bytes aot-object-size)
