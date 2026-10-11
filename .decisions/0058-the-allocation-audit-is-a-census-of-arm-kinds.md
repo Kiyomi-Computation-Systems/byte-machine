@@ -1,7 +1,7 @@
 # 0058: The allocation audit is a census of arm kinds too
 
 Date: 2026-10-11
-Status: accepted; unreleased
+Status: accepted; released in 0.8.0 (2026-10-11)
 Milestone: none. Settles [0057](0057-a-digit-compares-against-its-bound.md)'s "What this does not fix", first bullet, after 0.7.0
 Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the slope and its live control), [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (the counting twin and the op census), [0057](0057-a-digit-compares-against-its-bound.md) (the digit witness, and the fixnum limit on "allocates nothing")
 Amends: [0057](0057-a-digit-compares-against-its-bound.md) ("What this does not fix", first bullet)

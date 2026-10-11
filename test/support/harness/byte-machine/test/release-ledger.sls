@@ -157,15 +157,20 @@
   ;; value. Do not state the ABI's number in this comment: prose here is not a
   ;; checked value, and a number written here goes stale at the next ABI bump
   ;; without any lane noticing.
-  (define release-version "0.7.0")
+  (define release-version "0.8.0")
   (define release-version-export? #f)
+  ;; The first four are files in the tree, and the ledger lane checks each one
+  ;; against `release-version`; the last three are records and the tag.
   (define release-version-surfaces
-    '("CHANGELOG.md 0.7.0 entry (§26:1684)"
-      "README.org status paragraph"
+    '("CHANGELOG.md's [0.8.0] entry (§26:1684)"
+      "Akku.manifest's package version"
+      "CMakeLists.txt's project VERSION"
+      "SECURITY.md's supported-versions row"
       "the parent plan's dated disposition"
       ;; The record that sets this release's version names the release in its
-      ;; status block.
-      "decision 0056's status block"
+      ;; status block. 0.8.0 is a minor because decision 0057 changes the
+      ;; emitted text.
+      "decision 0057's status block"
       "the git tag"))
 
   ;; --- accessors -----------------------------------------------------------

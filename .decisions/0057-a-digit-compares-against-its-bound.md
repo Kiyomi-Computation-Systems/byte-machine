@@ -1,7 +1,7 @@
 # 0057: A digit compares against its bound and allocates only the value it stores
 
 Date: 2026-10-11
-Status: accepted; unreleased
+Status: accepted; released in 0.8.0 (2026-10-11)
 Milestone: none. Measured 2026-10-11, after 0.7.0; the user documentation (#160) shipped it as a caveat, which this record removes
 Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the audit is a slope with a live control) and [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (its scope is a census of runtime ops)
 Amends: [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (the Context's bound on "every generated per-byte path")
