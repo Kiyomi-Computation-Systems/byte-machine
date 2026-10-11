@@ -1245,7 +1245,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # non-string is a type violation, caught by Chez's top-level handler killing
 # the process at exit 255 -- outside the harness's own status vocabulary, and
 # before a single self-test case runs -- rather than by the assertion naming
-# this decision. AGENTS.md prefers a failed comparison over a raise.
+# this decision. A failed comparison is preferred over a raise.
 byte_machine_mutation_reset()
 
 string(JOIN "|" PROVENANCE_ABSENT_COMMAND
@@ -1282,7 +1282,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # which is a value with no meaning outside that mutation. It is covered by its
 # registered lane, byte-machine.harness.provenance-missing-body.chez.source,
 # and this is recorded rather than papered over with an EXPECT_SURVIVES, which
-# AGENTS.md reserves for the genuinely unwitnessable.
+# is reserved for the genuinely unwitnessable.
 
 # --- Pass 24: the call site, witnessed against a baseline the guard cannot
 # also satisfy -----------------------------------------------------------
@@ -1624,7 +1624,7 @@ byte_machine_launcher_file_pass(
 # mutation names. A control shows it: an inert trailing space added to an
 # unrelated comment at the top of the file, nowhere near provenance, split, or
 # combine, trips the identical PROVENANCE-ERROR refusal. A catch that catches
-# anything discriminates nothing (AGENTS.md). This pass fingerprints
+# anything discriminates nothing. This pass fingerprints
 # fingerprint.sls and harness-self-tests.sps instead -- two real files a real
 # lane's manifest would name, neither touched by any mutation below -- so a
 # mismatch can only come from the split or combine logic itself. Pass 31 needs
@@ -1726,7 +1726,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # indistinguishable-from-an-assertion-failure conclusion this constant
 # exists to prevent.
 #
-# AGENTS.md: a decision that can be witnessed does not get an EXPECT_SURVIVES.
+# A decision that can be witnessed does not get an EXPECT_SURVIVES.
 byte_machine_mutation_reset()
 
 set(PROVENANCE_EXIT_MANIFEST
@@ -2723,8 +2723,8 @@ byte_machine_mutation(
 # BOTH directions of the IR-version check are declared and BOTH are caught. A
 # test can forge a machine: descriptors are bare R6RS vectors, so a test copies
 # the tag with (vector-ref m 0), an (rnrs) primitive needing no private import,
-# and builds a machine carrying any version it likes. AGENTS.md reserves
-# EXPECT_SURVIVES for the genuinely unwitnessable.
+# and builds a machine carrying any version it likes. EXPECT_SURVIVES is
+# reserved for the genuinely unwitnessable.
 byte_machine_mutation(
   FILE src/byte-machine/verify.sls SPEC byte-machine.verify.rejections.chez.source
   LABEL "verify: an unsupported IR version is accepted"
@@ -2768,7 +2768,7 @@ byte_machine_mutation(
   # Mutates the CODE the arm reports, not the guard that reaches it: skipping
   # the shape arm lets the version arm call an accessor on a non-vector, so a
   # guard mutant dies by a RAISE rather than by the failed comparison this pin
-  # names -- AGENTS.md's "try the opposite constant first". The FIND carries
+  # names -- so the opposite constant is the right mutation. The FIND carries
   # the message string because 'invalid-shape alone occurs twice in this pass.
   FIND [[           (list (make-diagnostic 'invalid-shape #f "not a machine")))]]
   REPLACE [[           (list (make-diagnostic 'invalid-name #f "not a machine")))]]
@@ -2915,8 +2915,8 @@ byte_machine_mutation(
   REPLACE [[    (cond ((pause-node? n) '())]]
   EXPECT_STATUS 1
   # An empty zero-width join is a loud raise in `eof-terminal`, so this
-  # mutant is caught by the raise that arm exists to make. AGENTS.md prefers a
-  # comparison to a raise because a raise usually depends on where the mutant
+  # mutant is caught by the raise that arm exists to make. A comparison is
+  # preferred to a raise because a raise usually depends on where the mutant
   # happens to crash -- here it crashes at exactly the decision's own site,
   # which is the case that preference exempts.
   EXPECT_OUTPUT_MATCHES "case raised -- Exception in eof-terminal: empty zero-width join")
@@ -3116,7 +3116,7 @@ byte_machine_mutation(
   # mismatching byte, so the cycle makes progress. verify-tests.sps's advance
   # case is what stops the report guard from being widened past the mismatch
   # edge's mode, and this mutation is what shows it does.
-  # `(if #t` rather than `(if #f`, per AGENTS.md's opposite-constant rule:
+  # `(if #t` rather than `(if #f`, the opposite constant:
   # `(if #f` reproduces arm 3's own deletion and would be a second copy of it,
   # while `(if #t` makes self-cycle report the advance fixture and is
   # caught by a failed comparison on a case that passes in the baseline.
@@ -3357,7 +3357,7 @@ byte_machine_mutation(
   # *** This is the UNION mutant: taking the first arm means neither a branch's
   # false target nor an action's error target is walked, so its record set is
   # exactly the union of the two arm mutations below and is contained in
-  # NEITHER. *** AGENTS.md's relation is "inside ONE sibling's", so it is
+  # NEITHER. *** Subsumption means "inside ONE sibling's", so it is
   # separable, and the conjunction is what separates it -- one record from each
   # arm, which no single-arm mutant can produce together.
   FIND [[                      (if acc (eof-verdict-join acc v) v))))))]]
@@ -3843,7 +3843,7 @@ byte_machine_mutation(
   LABEL "verify: the non-eof-into-finish gate is vacuous, so no byte edge into a finish is ever rejected"
   # The reverse direction. A gate that admits nothing passes the acceptance half
   # of the battery for the wrong reason, so the rule needs its own pin against
-  # emptiness -- the shape AGENTS.md calls seeding an output before asserting it.
+  # emptiness -- an output seeded before it is asserted empty.
   FIND [[                       (if (memq (node-name n) finish-sources)
                            (filter values]]
   REPLACE [[                       (if #f
@@ -4667,7 +4667,7 @@ byte_machine_mutation(
   # The separating fixture is `an orphan beside the family`, which carries a
   # node dead under BOTH relations beside one dead only under the narrowing:
   # this mutant leaves the orphan reported, the emission mutant leaves nothing,
-  # and the two `got` lists differ. AGENTS.md's count-don't-witness remedy.
+  # and the two `got` lists differ: count, don't witness.
   EXPECT_OUTPUT_MATCHES
     "reachability is the occupiable relation.an orphan beside the family, so the two ways of breaking pass 4 differ: both unoccupiable nodes, the family's and the orphan's -- expected ..unreachable-node . z. .unreachable-node . orphan.., got ..unreachable-node . orphan..")
 
@@ -5084,7 +5084,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # n(n-1) throughout this file -- ordered pairs of DISTINCT mutants, one pin
 # judged against one OTHER mutant's capture; self-checks are a separate count.
 # Adding a check to normal-ir-tests.sps widens every existing pin exactly as
-# adding a mutation does (AGENTS.md), so the sweep is re-run after either.
+# adding a mutation does, so the sweep is re-run after either.
 #
 # The "two alternatives over a shared prefix lower to one trie" group (which
 # lowers the HTTP `version` production) is not inert under this pass's own
@@ -6008,7 +6008,7 @@ byte_machine_mutation(
   #
   # Dropping `cbv` -- the last parameter -- rather than mangling the whole list:
   # a caught-by-COMPARISON failure of the signature assertion, not a raise from
-  # some later arity mismatch, which is what AGENTS.md prefers and what makes the
+  # some later arity mismatch, which is what makes the
   # record name this decision.
   FIND [["  (define (exec state offset bv start end finish? fieldv psr cbv)\n"]]
   REPLACE [["  (define (exec state offset bv start end finish? fieldv psr)\n"]]
@@ -6311,7 +6311,7 @@ byte_machine_mutation(
   #
   # *** No separate mutation pins the dedup half: it is SUBSUMED by this
   # mutation. Measured, with the separating attempts recorded, which is what
-  # AGENTS.md requires before the word is used. *** Suppressing only the dedup
+  # the word requires before it is used. *** Suppressing only the dedup
   # (`(and (member pair reached) (not (member pair …)))` -> `(member pair
   # reached)`) fails exactly two cases, and this mutation fails both of them plus
   # "equal fingerprints emit equal bytes", so the narrow set is a strict subset
@@ -6372,7 +6372,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # SPEC when VERIFY_COMMAND is set, so a pin is judged only against this
 # program's output. No check label is matched by any pin except its owner.
 #
-# WHAT A CLEAN SWEEP DOES NOT SAY (AGENTS.md): a whole-pass sweep re-judges the pins
+# WHAT A CLEAN SWEEP DOES NOT SAY: a whole-pass sweep re-judges the pins
 # that EXIST; it cannot notice a decision no pin names -- not the two tombstones
 # below, and not a construct in the generator that no pin covers. The
 # per-member pins here are a REPRESENTATIVE subset, not one-per-member: the eight
@@ -7072,7 +7072,7 @@ byte_machine_mutation(
   FIND [[((sequence-dispatch-node? x) (sequence-dispatch-node-name x))]]
   REPLACE [[((sequence-dispatch-node? x) 'wrong-name)]]
   # Comparison-caught, not raise-based: the clause still returns a value
-  # (the opposite-constant form AGENTS.md prefers over one that falls through
+  # (the opposite-constant form, preferred over one that falls through
   # to the else arm's raise), so check-equal reports the wrong symbol instead
   # of the call failing to return at all.
   EXPECT_STATUS 1
@@ -7631,7 +7631,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # from one of them exits 255 under this suite's launcher with no harness output
 # at all, because a missing export is an expand-time failure -- the library never
 # loads, so no case runs and there is nothing to match. That is the bare
-# nonzero-exit catch AGENTS.md forbids, wearing no signature.
+# nonzero-exit catch a pin exists to rule out, wearing no signature.
 #
 # What actually guards the decision is stronger than a mutation: an identifier
 # in one list and not the other makes (byte-machine graph) unloadable, so EVERY
@@ -7692,7 +7692,7 @@ byte_machine_mutation(
 # that inner matcher is itself a complement, in which case it reads as the empty
 # set -- so a nested complement becomes the full universe while every
 # single-level complement is untouched. That isolates the recursion specifically,
-# and it is caught by a failed comparison rather than by a raise (AGENTS.md):
+# and it is caught by a failed comparison rather than by a raise:
 # handing `memv` a vector instead of a list would crash somewhere incidental
 # rather than redden the assertion that names the decision.
 byte_machine_mutation(
@@ -7839,7 +7839,7 @@ byte_machine_mutation(
   # interpret-tests.sps's multi-alternative AB/XY trie fixtures under a
   # DIFFERENT SPEC (byte-machine.unit.interpret.chez.source); this lane's own
   # single-alternative fixture needs its own witness of the same decision
-  # (AGENTS.md: a mutation's witnessing test lives in its own SPEC lane's
+  # (a mutation's witnessing test lives in its own SPEC lane's
   # program). Folding a completed alternative into the "extend the compound"
   # shape means the four-byte sequence never terminates: the parser reports
   # need-input at stream-offset 4 instead of stopping. Measured: cases=10
@@ -7898,13 +7898,13 @@ byte_machine_mutation(
            (string-append "(and (fx>=? b " (num (+ 1 lo)) ") (fx<=? b " (num (+ 1 hi)) "))"))]]
   # Same FIND/REPLACE as Pass 44's byte-class mutation, and (for the small
   # byte values this lane's sequence uses) functionally the same shift as
-  # Pass 39's mod-256 mutation. Legitimate per AGENTS.md/SITES being
+  # Pass 39's mod-256 mutation. Legitimate because SITES is
   # per-mutation: each byte_machine_mutation() call reads a pristine copy of
   # compile.sls and restores it afterward, so three passes carrying the same
   # render-transition-arm decision under three different SPEC lanes is the
   # same defect re-witnessed where each lane's own fixture can see it, not
-  # three copies of one test (AGENTS.md: "a mutation's witnessing test lives
-  # in its own SPEC lane's program"). The FIND occurs once in the file.
+  # three copies of one test (a mutation's witnessing test lives
+  # in its own SPEC lane's program). The FIND occurs once in the file.
   #
   # Measured: mutant cases=14 failed-cases=14 checks=29 failures=16 status=1
   # (see the pass header). Comparison-caught throughout (check-equal
@@ -7943,7 +7943,7 @@ byte_machine_mutation(
   # with the emitter the mutation above targets -- it is witnessed here
   # (rather than in Pass 32, where the sibling error- and pause-arm `next`
   # mutations live) because this SPEC lane's nonzero-start case is what
-  # reddens for it (AGENTS.md: a mutation's witness lives in its own SPEC
+  # reddens for it (a mutation's witness lives in its own SPEC
   # lane's program). The FIND occurs once in the file.
   #
   # The "a nonzero-start trailing empty feed separates next from start, zero,
@@ -8046,7 +8046,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # SPEC-lane program), BOTH mutants pass it unchanged --
 # status=0, cases=10 failed-cases=0 checks=25 failures=0, no FAIL lines --
 # because with one declared alternative the truncated list and the whole list
-# are the same list (AGENTS.md: a mutation's witnessing test lives in its own
+# are the same list (a mutation's witnessing test lives in its own
 # SPEC lane's program).
 #
 # Stated rather than implied, because "the only lane to drive a branching
@@ -8150,7 +8150,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # what pins "the emitter renders EVERY arm of a branching state" to both
 # alternatives rather than to whichever one happens to be rendered.
 #
-# Why this lane's own SPEC, measured rather than asserted (AGENTS.md: a
+# Why this lane's own SPEC, measured rather than asserted (a
 # mutation's witnessing test lives in its own SPEC lane's program). Run against
 # the two neighbouring lanes, both mutants leave both passing UNCHANGED --
 # byte-identical summaries to those programs' own unmutated baselines:
@@ -8280,7 +8280,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 #
 # It is the same one-line edit Pass 35 declares as "normal-ir: trie children are
 # not kept ascending by byte", re-declared under this lane's SPEC for the reason
-# Pass 46 re-declares Pass 44's byte shift (AGENTS.md: a mutation is witnessed
+# Pass 46 re-declares Pass 44's byte shift (a mutation is witnessed
 # only by the tests that run in the lane its SPEC names). What differs is the
 # witness kind: Pass 35 asserts the lowered transition list structurally, and
 # this pass asserts the EMITTED BYTES.
@@ -8468,7 +8468,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # instead of reporting a bare disagreement between two tuples.
 #
 # The case the by-value assertion uniquely covers -- both lanes agreeing on a
-# WRONG kind, which AGENTS.md's "agreement must stay observable" rule is about --
+# WRONG kind, which no differential between the two lanes can see --
 # has no mutation here and cannot have one: a mutation edits a single FILE, and
 # making both lanes agree wrongly takes a coordinated edit to compile.sls and
 # runtime.sls at once. The by-value assertions in position-kind-tests.sps are
@@ -9821,8 +9821,8 @@ byte_machine_mutation(
   # The parked set's callback disjunct, and its only witness is in THIS
   # lane -- `verify-tests.sps` passes with the disjunct gone (measured), so a
   # pin declared in Pass 33 would ship UNCAUGHT. A mutation is witnessed only
-  # by its own SPEC lane's program
-  # (AGENTS.md), so it is declared here, where the axis-A cell
+  # by its own SPEC lane's program,
+  # so it is declared here, where the axis-A cell
   # `(callback-pause-continuation stop)` loses its `eof-reachable-stop`.
   FIND [[             (callback-node? n)
              (span-end-node? n)]]
@@ -11503,7 +11503,7 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/interpret.sls
   SPEC byte-machine.unit.keyword-table.chez.source
-  LABEL "interpret: eof-target-of has no keyword-table arm (the AGENTS.md kind-filter trap)"
+  LABEL "interpret: eof-target-of has no keyword-table arm (a per-kind filter the lookup does not teach)"
   # eof-target-of is the per-kind filter a lookup does not teach. Neutering its
   # keyword-table arm sends a parked table to the raising `else`; a finish! then
   # raises `internal`, reported by the EOF case as "case raised".
@@ -11675,7 +11675,7 @@ byte_machine_mutation(
   # A case-insensitive table resumed after capitals compares them raw. The
   # end-to-end CL|OSED record is shared with the drop/reverse/misread mutants and
   # the direct op record with the fold-direction one; only this mutant emits both,
-  # so the pin requires the pair (the AGENTS.md whole-set rule).
+  # so the pin requires the pair (subsumption is a whole-set relation).
   FIND [[(if (= (kw-fold (car p) ci?) (kw-fold (car k) ci?))]]
   REPLACE [[(if (= (car p) (kw-fold (car k) ci?))]]
   EXPECT_STATUS 1
@@ -11889,7 +11889,7 @@ byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 # CARRIED by the pause -- the verifier resolving it, the fingerprint encoding it,
 # the interpreter reading it, the guard keeping a pause's error slot #f, and the
 # errs-table reached-walk finding a pause-only code. Each signature is MEASURED
-# by staging the mutant and running its own witnessing program (AGENTS.md).
+# by staging the mutant and running its own witnessing program.
 
 # Pass A -- the verifier resolution arm, witnessed by verify-tests.sps.
 byte_machine_mutation_reset()
