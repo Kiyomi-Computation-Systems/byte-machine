@@ -150,7 +150,7 @@ cmake_minimum_required(VERSION 3.26)
 # moving a mutation changes EXPECTED_MUTATIONS; opening or retiring a pass
 # changes EXPECTED_PASSES.
 set(EXPECTED_PASSES 78)
-set(EXPECTED_MUTATIONS 682)
+set(EXPECTED_MUTATIONS 689)
 
 # --- What an EXPECT_OUTPUT_MATCHES can and cannot say -----------------------
 #
@@ -9175,7 +9175,8 @@ byte_machine_mutation(
 # (interpreter and emitter) so the differential can compare them.
 #
 # *** The two survivors are the SAME decision in the two lanes. *** Replacing
-# the pre-check `current <= floor((maximum - digit) / base)` with a
+# the pre-check -- the interpreter's `current <= floor((maximum - digit) / base)`,
+# the emitter's comparison against that bound's quotient and remainder -- with a
 # compute-then-check `current * base + digit <= maximum`
 # gives IDENTICAL answers on this host, because Chez has bignums and never
 # wraps. The pre-check is specified anyway, because the accumulation "must not
@@ -9250,11 +9251,87 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
   LABEL "compile: the emitted overflow check is made after the multiply-add"
-  FIND [[            "                   (if (<= v (div (- " (num mx) " d) " (num base) "))\n"]]
+  FIND [[            "                   (if (or (< v " (num q) ") (and (= v " (num q) ") (<= d " (num r) ")))\n"]]
   REPLACE [[            "                   (if (<= (+ (* v " (num base) ") d) " (num mx) ")\n"]]
   EXPECT_SURVIVES
-    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. The check is specified as `current <= floor((maximum - digit) / base)`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because the accumulation must not rely on host fixnum width or silent wrapping. The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then. The emitter's copy of the same decision; the two are one ruling and both are recorded so neither can be quietly changed alone."
+    "measured, not assumed: this mutant passes the whole lane unchanged, in both lanes, and it always will on this host. The emitted check compares `current` against the quotient and remainder of `maximum / base`, BEFORE the multiply-add; this mutant computes `current * base + digit` first and tests the product. Under Chez the product is an exact integer of unbounded size, so the two forms agree on every input and no fixture can separate them -- including the u64 case, where the accumulated value is already a bignum and the product simply becomes a larger one. The pre-check is written anyway because the accumulation must not rely on host fixnum width or silent wrapping. The form is for a host that WRAPS, where computing the product first would silently produce a small wrong number and the check would pass. This project does not run on such a host, so the requirement is unwitnessable here by construction -- a property of the host, not a gap in the lane. Reopening condition: a backend whose integers wrap, or any change that makes the accumulation use fixnum-specialised arithmetic, makes this mutant a bug detector and it must be re-measured and pinned then. The emitter's copy of the same decision; the two are one ruling and both are recorded so neither can be quietly changed alone."
   )
+
+# FIVE pinned for the emitter's split of the bound, and one for the
+# interpreter's own comparison. The emitted arm accepts a digit when
+# `current < q`, or `current = q` and `digit <= r`, where `maximum = q * base + r`
+# is divided out at emit time; the interpreter divides on every digit, so the
+# differential compares two arithmetics. Each lane's answers over the u8 and
+# u64 quotient rows are one value, so each mutant reports its own `got`. In the
+# u8 row, refusing at `q` gives 25 from 250 up, a strict remainder test 25 at 255 only, a zero remainder 25 from
+# 254 up, admitting `q` for every digit 256, and the interpreter's strict
+# comparison 24 at 249. `eq?` agrees with `=` on every fixnum, so only the u64
+# row, whose quotient is a bignum, sees it, and the right u8 row beside it is
+# what makes its record differ from the refusing mutant's. A remainder of `base - 1` would
+# admit `q` for every digit, the same mutant as the first on every input, so it
+# is not written.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted bound admits the quotient whatever the digit"
+  FIND [[(if (or (< v " (num q)]]
+  REPLACE [[(if (or (<= v " (num q)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "quotient rows, at u8 and at u64: generated quotient rows -- expected ..249 250 254 255 25 26. .18446744073709551609 18446744073709551610 18446744073709551615 1844674407370955161 1844674407370955162.., got ..249 250 254 255 256 26. .18446744073709551609 18446744073709551610 18446744073709551615 18446744073709551616 1844674407370955162..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted bound refuses every value equal to the quotient"
+  FIND [[(and (= v " (num q) ") (<= d " (num r) "))]]
+  REPLACE [[#f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "quotient rows, at u8 and at u64: generated quotient rows -- expected ..249 250 254 255 25 26. .18446744073709551609 18446744073709551610 18446744073709551615 1844674407370955161 1844674407370955162.., got ..249 25 25 25 25 26. .18446744073709551609 1844674407370955161 1844674407370955161 1844674407370955161 1844674407370955162..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted remainder test is strict"
+  FIND [[(<= d " (num r) ")]]
+  REPLACE [[(< d " (num r) ")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "quotient rows, at u8 and at u64: generated quotient rows -- expected ..249 250 254 255 25 26. .18446744073709551609 18446744073709551610 18446744073709551615 1844674407370955161 1844674407370955162.., got ..249 250 254 25 25 26. .18446744073709551609 18446744073709551610 1844674407370955161 1844674407370955161 1844674407370955162..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted remainder is taken as zero"
+  FIND [[(r (mod mx base))]]
+  REPLACE [[(r 0)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "quotient rows, at u8 and at u64: generated quotient rows -- expected ..249 250 254 255 25 26. .18446744073709551609 18446744073709551610 18446744073709551615 1844674407370955161 1844674407370955162.., got ..249 250 25 25 25 26. .18446744073709551609 18446744073709551610 1844674407370955161 1844674407370955161 1844674407370955162..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "compile: the emitted quotient equality is eq?, which holds only for fixnums"
+  # Fixnum-specialised arithmetic, the shape the pre-check exists to rule out.
+  # Every u8 answer is unchanged, because eq? and = agree on fixnums; only the
+  # u64 row, whose quotient is a bignum, refuses the value equal to it. Read
+  # alone, that row is the same as the refusing mutant's, so the pin needs the
+  # right u8 row beside it.
+  FIND [[(and (= v " (num q)]]
+  REPLACE [[(and (eq? v " (num q)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "quotient rows, at u8 and at u64: generated quotient rows -- expected ..249 250 254 255 25 26. .18446744073709551609 18446744073709551610 18446744073709551615 1844674407370955161 1844674407370955162.., got ..249 250 254 255 25 26. .18446744073709551609 1844674407370955161 1844674407370955161 1844674407370955161 1844674407370955162..")
+
+byte_machine_mutation(
+  FILE src/byte-machine/interpret.sls SPEC byte-machine.differential.field.chez.source
+  LABEL "interpret: the overflow bound is compared strictly"
+  # The interpreter's half of the row, by its own arithmetic: refusing a value
+  # equal to `floor((maximum - digit) / base)` refuses one digit too early, so
+  # 249 stops at 24 as well as 255 at 25.
+  FIND [[((<= (vector-ref fv slot) (div (- m* d) base))]]
+  REPLACE [[((< (vector-ref fv slot) (div (- m* d) base))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "quotient rows, at u8 and at u64: interpreter quotient rows -- expected ..249 250 254 255 25 26. .18446744073709551609 18446744073709551610 18446744073709551615 1844674407370955161 1844674407370955162.., got ..24 25 25 25 25 26. .1844674407370955160 1844674407370955161 1844674407370955161 1844674407370955161 1844674407370955162..")
 
 # ONE mutation for split-point fragmentation. The group's other cases TEST
 # behaviour the accumulate arm INHERITS rather than implements: an accumulate
@@ -9407,8 +9484,8 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls SPEC byte-machine.differential.field.chez.source
   LABEL "compile: the emitted overflow bound divides by ten rather than by the node's base"
-  FIND [[(div (- " (num mx) " d) " (num base) ")]]
-  REPLACE [[(div (- " (num mx) " d) 10)]]
+  FIND [[(q (div mx base)) (r (mod mx base))]]
+  REPLACE [[(q (div mx 10)) (r (mod mx 10))]]
   EXPECT_STATUS 1
   # Pinned like its interpreted half above, against the generated
   # lane's counterparts: "runtime: parser-field-ref always reads slot zero",
@@ -12310,6 +12387,21 @@ byte_machine_mutation(
 (define census-trailing-datum 0)]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[the census is derived from compile.sls's emitted text: compile.sls is exactly one datum -- expected a true value]])
+
+# The u64 digit witness. Every slope above feeds messages with no body, so none
+# runs an accumulate arm, and that arm calls no runtime op the census could ask
+# a witness for. This restores the bound the arm used to compute from the
+# maximum on every digit: a bignum subtraction and division per digit into a
+# u64 field, however small the value, with every answer unchanged.
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: the accumulate arm computes its bound from the maximum on every digit"
+  FIND [[(if (or (< v " (num q) ") (and (= v " (num q) ") (<= d " (num r) ")))\n"]]
+  REPLACE [[(if (<= v (div (- " (num mx) " d) " (num base) "))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "base 10: digits up to the largest fixnum allocate nothing: u64 digits: extra bytes for 1000 more fixnum-range numbers -- expected 0, got 11520720[^0-9]")
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 78: the span an error abandons (differential.abandoned-span) -------

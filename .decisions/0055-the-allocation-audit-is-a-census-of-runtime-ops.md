@@ -5,6 +5,13 @@ Status: accepted; released in 0.7.0 (2026-10-01)
 Milestone: none. Follows [0054](0054-a-keyword-walk-reads-its-prefix-in-place.md) and [issue #139](https://github.com/Kiyomi-Computation-Systems/byte-machine/issues/139), after 0.6.1
 Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the slope and its live control), [0052](0052-a-callback-outcome-is-the-object.md) (the per-header slope), [0054](0054-a-keyword-walk-reads-its-prefix-in-place.md) (the per-matched-byte shape)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-10-11 (decision 0057)** — **amends the Context's fourth paragraph**:
+>   [decision 0057](./0057-a-digit-compares-against-its-bound.md) found a
+>   per-byte path that paragraph's bound leaves out.
+
 ## Context
 
 `§26:1680` says generated per-byte paths construct no lists, vectors, strings
@@ -19,6 +26,10 @@ Emitted code reaches the runtime only by name: a generated library imports
 `(rnrs)` and `(byte-machine runtime)` and nothing else. So "every generated
 per-byte path" is bounded by the set of runtime procedures emitted text can
 name, and the audit covers the claim only if its inputs run each one.
+
+> **Amended 2026-10-11 (decision 0057)** by
+> [decision 0057](./0057-a-digit-compares-against-its-bound.md). See the dated
+> note below; the paragraph above is left as decided.
 
 Measured before this record, on `main` at `799870b`, with the census below and
 no new witness: the emitter can call **twelve** runtime procedures and read one
@@ -145,3 +156,15 @@ emitter can call is now reached by an input whose allocation the lane asserts.
   Each was measured against a staged copy. Each pin resolves exactly once in
   its own mutant's output and in no sibling's, and Pass 77's two earlier
   mutants are included in both directions of the sweep.
+
+## 2026-10-11 (decision 0057)
+
+The Context's fourth paragraph bounds "every generated per-byte path" by the
+runtime procedures emitted text can name. That bound is too narrow: emitted code
+also works inline, and inline work can allocate. The integer-accumulate arm
+subtracted from and divided a u64 field's maximum, a bignum on a 64-bit host, on
+every digit, about 32 B a digit, and called no runtime op. The HTTP fixture has
+two such arms. Every audited message has no body, so neither ran, and the census
+had nothing to count. Decision 0057 fixes the arm and gives the lane a witness
+for it. The census itself is unchanged and still covers ops only; which emitted
+arms the audited inputs enter is not measured (0057, "What this does not fix").

@@ -21,7 +21,7 @@
              (if (not d)
                  (%s2 pos 2 off (quote byte))
                  (let ((v (vector-ref fieldv 0)))
-                   (if (<= v (div (- 4294967295 d) 10))
+                   (if (or (< v 429496729) (and (= v 429496729) (<= d 5)))
                        (begin (vector-set! fieldv 0 (+ (* v 10) d))
                               (%s1 (+ pos 1) 1 (+ off 1) (quote boundary)))
                        (%s8 pos 8 off (quote byte))))))))

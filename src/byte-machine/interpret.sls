@@ -399,7 +399,9 @@
       ;; Chez's bignums and would NOT be safe under a host that wraps, so the
       ;; pre-check is what gets written. When `d` exceeds the maximum the
       ;; numerator goes negative and the comparison fails for every non-negative
-      ;; `cur`, which is correct.
+      ;; `cur`, which is correct. The emitter compares against the same bound
+      ;; divided out into a quotient and remainder at emit time, so the two
+      ;; lanes reach one answer by different arithmetic.
       (define (digit-value byte base)
         (let ((v (cond ((and (>= byte 48) (<= byte 57)) (- byte 48))
                        ((and (>= byte 97) (<= byte 102)) (+ 10 (- byte 97)))

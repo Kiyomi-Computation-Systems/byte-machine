@@ -53,9 +53,11 @@ reach a file. `emit-machine` returns a metadata value describing what it wrote.
 - **The body** has one procedure per state. Each reads a byte, tests it, and
   calls the next state's procedure directly. A byte class compiles to one
   range comparison per run of bytes, not a test per byte. Nothing is
-  allocated per byte, with one exception: reading digits into a 64-bit field
-  allocates about 32 bytes per digit, because its overflow check uses bignum
-  arithmetic. 8-, 16- and 32-bit fields allocate nothing.
+  allocated per byte while field values fit in a fixnum, including when
+  reading digits into a field: the overflow check compares against a bound
+  worked out when the code is generated. A 64-bit field can hold more than a
+  fixnum. A value of 2^60 or more is a bignum on 64-bit Chez, and each digit
+  that stores one allocates it, about 32 bytes.
 
 The binding name follows the same rule as other names (lowercase letters,
 digits, hyphens). The library imports all of `(rnrs)`, so the generator

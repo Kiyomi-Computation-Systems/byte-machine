@@ -547,11 +547,25 @@
         ;; cannot express it. The inequality is rendered as a check BEFORE the
         ;; multiply-add, not a compute-then-check, because relying on host fixnum
         ;; width is forbidden.
+        ;;
+        ;; The bound is divided out HERE, not in the emitted text. With the
+        ;; maximum written as `q * base + r` (0 <= r < base),
+        ;; `v * base + d <= maximum` holds exactly when `v < q`, or `v = q` and
+        ;; `d <= r` -- because `d < base`, so a `v` below `q` can never reach
+        ;; past `q * base - 1`. The arm therefore only compares against two
+        ;; constants. Arithmetic on the maximum itself would allocate on every
+        ;; digit into a u64 field, whose maximum is a bignum on a 64-bit host,
+        ;; while a comparison against a bignum constant allocates nothing. What
+        ;; is left to allocate is the value: a digit that stores one above the
+        ;; fixnum range stores a bignum. At base 16 `r` is always 15, since every
+        ;; maximum is 2^n - 1, so the `d <= r` test always holds there; it is
+        ;; emitted anyway so the arm has one shape for both bases.
         ((accumulate)
          (let* ((base (normal-field-selector s))
                 (fname (car (normal-field-arguments s)))
                 (sw (field-slot-width fields fname))
                 (slot (car sw)) (mx (- (expt 2 (cdr sw)) 1))
+                (q (div mx base)) (r (mod mx base))
                 (tg (normal-field-targets s))
                 (digit (car tg)) (nd (cadr tg)) (over (caddr tg))
                 (dexpr (if (= base 10)
@@ -569,7 +583,7 @@
                                     (string-append "(%s" (num (car nd)) " (+ pos 1) " (num (car nd)) " (+ off 1) (quote boundary))")
                                     (string-append "(%s" (num (car nd)) " pos " (num (car nd)) " off (quote byte))")) "\n"
             "                 (let ((v (vector-ref fieldv " (num slot) ")))\n"
-            "                   (if (<= v (div (- " (num mx) " d) " (num base) "))\n"
+            "                   (if (or (< v " (num q) ") (and (= v " (num q) ") (<= d " (num r) ")))\n"
             "                       (begin (vector-set! fieldv " (num slot)
                                      " (+ (* v " (num base) ") d))\n"
             "                              (%s" (num digit) " (+ pos 1) " (num digit) " (+ off 1) (quote boundary)))\n"
