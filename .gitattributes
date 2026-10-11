@@ -1,8 +1,8 @@
 # Line endings are a correctness concern here, not a style preference.
 #
 # byte-machine's output contract is canonical UTF-8 with LF bytes even on
-# Windows (implementation plan section 20), and CI compares generated source
-# byte for byte across operating systems (section 24.2 stage 7). A checkout that
+# Windows, and the determinism lanes compare generated source byte for byte
+# against committed goldens on every operating system. A checkout that
 # translated line endings would break that comparison for a reason that has
 # nothing to do with the generator, and the failure would point at the emitter.
 #
@@ -19,3 +19,10 @@
 test/fixtures/** -text
 bench/fixtures/** -text
 *.expected -text
+
+# The development record -- implementation plans and decision records -- stays
+# in the repository but is left out of release archives (`git archive`, and the
+# source archives GitHub attaches to a release). This does not hide it from the
+# repository itself: a clone or a browse of the public repository still shows it.
+.plans export-ignore
+.decisions export-ignore

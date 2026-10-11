@@ -1,60 +1,65 @@
 * Byte Machine
 
-State machine generator in the manner of [[https://github.com/nodejs/llparse][llparse]].
+[[https://github.com/Kiyomi-Computation-Systems/byte-machine/actions/workflows/ci.yml][https://github.com/Kiyomi-Computation-Systems/byte-machine/actions/workflows/ci.yml/badge.svg]]
 
-Byte Machine is a byte-oriented deterministic state-machine generator for Chez
-Scheme. Machines are built with ordinary Scheme procedures into an immutable,
-inspectable source IR; a mandatory verifier gates every path to output; and an
-offline generator emits deterministic R6RS Scheme. Generated parsers depend only
-on a small runtime library — never on the builder, verifier, compiler, or
-reference interpreter.
+A generator of fast, resumable, byte-level parsers for Chez Scheme, in the
+manner of [[https://github.com/nodejs/llparse][llparse]].
 
-It is a library and source generator, not itself a parser for any particular
-protocol.
+#+begin_quote
+✨ *AI Disclosure:* LLMs are used extensively in the planning and development of this project.
+#+end_quote
 
-Machines combine byte dispatch, byte classes and sequences, unsigned-integer
-fields with checked accumulation, zero-width actions and branches, callbacks,
-spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
-every constructor and node kind.
+** What it is
 
-*Status:* =0.7.0=. Beyond the core node kinds, the library provides:
+You describe a parser as a state machine over bytes, built with ordinary Scheme
+procedures. Byte Machine checks it and emits a plain R6RS library that parses
+input incrementally: feed it bytes as they arrive, in any split, and it calls
+you back. The generated library depends only on =(rnrs)= and a small runtime,
+=(byte-machine runtime)=. It never needs the builder, verifier or generator at
+run time.
 
-- *Keyword tables* — =make-keyword-table-node= matches a set of keywords,
-  tolerating proper prefixes (=GET= ⊂ =GET-PARAMETER=), with optional per-table
-  ASCII case folding. It lowers to one compact table walked by the runtime
-  rather than a trie of generated states.
-- *Pause reasons* — a =pause= node, or a callback returning =callback-pause=,
-  may name a declared =error-declaration= as its reason, reported through
-  =parser-result-pause=; =parser-result-error= stays =#f= and the parser remains
-  resumable.
-- *Settable fields* — a =uint= field declared settable (=make-uint-field='s
-  optional trailing flag) can have its initial value overridden per parser
-  through =make-parser='s optional =field-initials= alist, so one machine can
-  start in different modes. The override is range-checked, applies only at
-  construction, and survives =parser-reset!=.
-- *Observable empty spans* — a span that opens and closes on the same byte
-  position is announced to its data callback once, with an empty range.
-- *Abandoned-span reporting* — when an error stops the parser with a span open,
-  =parser-error-span= and =parser-error-span-offset= name that span and the
-  stream offset where its undelivered bytes begin (or =#f= when no span was
-  open), so the delivered fragments plus that range account for every span byte
-  however the input was split.
+It is a toolkit for writing protocol and format parsers, not a parser for any
+one format. [[https://github.com/Kiyomi-Computation-Systems/chez-httparse][chez-httparse]], an HTTP/1.x parser built with it, passes llhttp's
+conformance corpus at every chunk size.
 
-The emitted parser dispatches states, bytes and callback answers through jumps,
-range tests and binary searches rather than linear =case= scans. A generated
-parser carries the runtime ABI version it was emitted for (currently 9); a
-runtime refuses, at construction, a parser emitted for a different version, so
-regenerate parsers after upgrading across an ABI change. The [[file:CHANGELOG.md][changelog]] records
-what changed in each release.
+** What it gives you
 
-=src/byte-machine/= holds the construction API, the verifier, the normalizer and
-emitter, the reference interpreter, and the runtime.
+- *Resumable parsing.* Every state survives a feed boundary, so a token split
+  across any number of feeds parses exactly as it would in one buffer.
+- *No input buffering.* Spans (a header name, a body) are delivered to your
+  callbacks as ranges into the bytevector you fed. The runtime keeps no
+  reference to it after the feed returns, and the generated per-byte path
+  allocates nothing.
+- *The pieces protocol parsers need.* Byte dispatch, byte classes, exact
+  sequences, keyword tables (prefix-tolerant, optionally case-insensitive),
+  unsigned-integer fields with overflow-checked accumulation, counted consumption
+  (read N bytes of body), callbacks that can pause the parser, and spans.
+- *Precise errors.* An error record names its code, the node, the stream offset,
+  whether the fault was a byte, a feed boundary or end of input, and any span it
+  cut short.
+- *A machine you can inspect.* The machine is an immutable data structure, not a
+  grammar file or a macro expansion, so it can be built, printed and tested like
+  any other value.
+
+** What makes it different
+
+- *Verified before it is generated.* Every machine passes a mandatory verifier
+  before any code is emitted. It reports unreachable nodes, zero-progress loops
+  that would spin forever, end-of-input paths that end in the wrong place,
+  malformed spans and invalid field operations: [[file:.reference/verifier-diagnostic-catalog.md][33 diagnostic codes]], each with
+  the offending path.
+- *A reference interpreter to test against.* An independent interpreter executes
+  the same machine. The test harness runs it beside the generated parser and
+  requires the two to agree, so a generator bug shows up as a disagreement.
+- *Deterministic, reviewable output.* The same machine always emits the same
+  source bytes. You can commit the generated parser and review changes as a diff.
+- *Pure Scheme.* No C and no FFI. The library and the generated parsers use only
+  R6RS, so they also run on Guile and Racket (see [[*Portability][Portability]]).
 
 ** Quick start
 
-Build a *parser* — not the repository. A machine is constructed through the
-public =(byte-machine graph)= API, verified, compiled, and emitted as a
-self-contained Scheme library that depends only on =(byte-machine runtime)=:
+A machine is built with =(byte-machine graph)=, verified and compiled, then
+emitted as a library that depends only on =(byte-machine runtime)=:
 
 #+begin_src scheme
 (import (byte-machine graph) (byte-machine verify) (byte-machine compile))
@@ -76,53 +81,23 @@ self-contained Scheme library that depends only on =(byte-machine runtime)=:
 (compilation-ok? (compile-machine m '()))   ; => #t
 #+end_src
 
-The runnable, end-to-end version — construct, compile, emit, load, feed bytes —
+The runnable version, which constructs, compiles, emits, loads and feeds bytes,
 is [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=]]:
 
 #+begin_src bash
 chez --libdirs src --program examples/generate-simple-machine/generate.sps
 #+end_src
 
-From there, the [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents every constructor, and
-the [[file:.reference/generated-code-integration-chez.md][generated-code integration guide]] shows how a consumer imports and runs a
-generated parser. See [[*Documentation][Documentation]] below for the full set.
+Next, read the [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] for every constructor, and the
+[[file:.reference/generated-code-integration-chez.md][generated-code integration guide]] for importing and running a generated parser.
 
 ** Requirements
 
-- CMake 3.26 or newer
-- Chez Scheme 10.4.1 or newer, full system rather than Petite
+- Chez Scheme 10.4.1 or newer (the full system, not Petite)
+- CMake 3.26 or newer, to build and run the tests
 
-The Chez version is a floor recording what has actually been verified. The
-library is verified on macOS arm64; Linux amd64, Windows amd64 and Linux arm64
-are supported targets that are not CI-verified — see the
-[[file:.reference/portability-matrix.md][portability matrix]].
-
-** R6RS portability
-
-Everything under =src/byte-machine/= imports only =(rnrs)=, and a generated
-parser imports only =(rnrs)= and =(byte-machine runtime)=. Porting to another
-R6RS system is therefore a question of that system's library search, not of
-changing Scheme code. What is Chez-specific is the build and test layer — CMake's
-runtime discovery, =--libdirs=/=--program=, the ahead-of-time =compile-program=
-lane, and the harness reading =(machine-type)= — so =make test= is Chez-only.
-
-Checked locally, not CI-gated: on *Guile 3.0.11* the whole toolchain runs
-unchanged; on *Racket 9.3* it runs once each =.sls= begins with a =#!r6rs= line,
-which Chez and Guile accept too. In both, the emitter produced a library
-byte-identical to the Chez one, and the generated parser returned the same
-statuses and offsets.
-
-#+begin_src bash
-guile --r6rs -L src your-program.scm
-plt-r6rs ++path src your-program.sps
-#+end_src
-
-Generation and execution split cleanly, so a port can be partial: generate on
-Chez and deploy only the emitted =.sls= and =(byte-machine runtime)=. The one
-=(chezscheme)= import outside =test/= and =bench/= is in
-[[file:examples/generate-simple-machine/generate.sps][the example]], which =load=s
-the file it just wrote; a consumer importing a generated parser through the
-ordinary library path needs nothing like it.
+Verified on macOS arm64. Linux amd64, Windows amd64 and Linux arm64 are
+supported targets that are not CI-verified; see the [[file:.reference/portability-matrix.md][portability matrix]].
 
 ** Building and testing
 
@@ -134,52 +109,53 @@ make build
 make test
 #+end_src
 
-Other targets: =make doctor= reports the discovered toolchain and stops,
-=make dev= builds and runs the harness selection (the build-layer
-specifications, the Chez self-test lanes, and the Scheme mutation
-suite), =make test-all= runs the complete selection, =make prod= builds the
-release configuration, and =make clean= removes the build trees. =make help=
-lists them.
-
-The presets work identically without =make=, which matters on Windows:
+=make help= lists every target. =make test-all= runs the complete selection,
+including the mutation suite, and =make doctor= reports the discovered toolchain.
+Without =make= (on Windows, for instance), use the CMake presets directly:
 
 #+begin_src bash
 cmake --preset dev
 #+end_src
 
-If discovery cannot find a runtime, point it at one explicitly:
+If discovery cannot find Chez, point it at the executable:
 
 #+begin_src bash
 cmake --preset dev -DBYTE_MACHINE_CHEZ_EXECUTABLE=/absolute/path/to/scheme
 #+end_src
 
-Both =make dev= and =make test= launch real Chez processes; neither is a
-CMake-only target. To work on the build layer alone, with no Scheme runtime
-installed, use the =no-scheme= preset instead, which configures and runs only
-the build-layer specifications:
+** Portability
+
+Everything under =src/byte-machine/= imports only =(rnrs)=, and a generated
+parser imports only =(rnrs)= and =(byte-machine runtime)=. Only the build and
+test layer is Chez-specific. Checked locally, without CI: on Guile 3.0.11 the
+toolchain runs unchanged, and on Racket 9.3 it runs once each =.sls= starts with
+=#!r6rs=. On both, the emitted library is byte-identical to Chez's.
 
 #+begin_src bash
-cmake --preset no-scheme && ctest --preset no-scheme
+guile --r6rs -L src your-program.scm
+plt-r6rs ++path src your-program.sps
 #+end_src
+
+You can also generate on Chez and deploy only the emitted =.sls= with
+=(byte-machine runtime)=.
 
 ** Documentation
 
-*References* ([[file:.reference/][=.reference/=]]):
+References in [[file:.reference/][=.reference/=]]:
 
-- [[file:.reference/source-ir-and-builder.md][Source IR and builder]] — every =(byte-machine graph)= constructor and node kind
-- [[file:.reference/transition-and-cursor-semantics.md][Transition and cursor semantics]] — edge modes, cursor, offsets, statuses, position kinds
-- [[file:.reference/field-and-overflow.md][Fields and overflow]] — uint fields, actions, predicates, accumulation, counted consumption
-- [[file:.reference/callback-span-lifetime.md][Callback and span lifetime]] — what a callback receives, how long it may hold it, and the byte guarantees
-- [[file:.reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]] — the diagnostic codes the verifier can emit
-- [[file:.reference/generated-code-integration-chez.md][Generated-code integration for Chez]] — generating, importing, and running a parser; the dependency boundary
-- [[file:.reference/grammar-author-testing-guide.md][Grammar-author testing guide]] — the harness, lanes, and differential testing
-- [[file:.reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]] — the metrics, workloads, and the recorded baseline
-- [[file:.reference/portability-matrix.md][Portability matrix]] — the Tier 1 matrix and the pinned runtime
+- [[file:.reference/source-ir-and-builder.md][Source IR and builder]]: every =(byte-machine graph)= constructor and node kind
+- [[file:.reference/transition-and-cursor-semantics.md][Transition and cursor semantics]]: edge modes, cursor, offsets, statuses and position kinds
+- [[file:.reference/field-and-overflow.md][Fields and overflow]]: uint fields, actions, predicates, accumulation and counted consumption
+- [[file:.reference/callback-span-lifetime.md][Callback and span lifetime]]: what a callback receives and how long it may hold it
+- [[file:.reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]]: every code the verifier can report
+- [[file:.reference/generated-code-integration-chez.md][Generated-code integration for Chez]]: generating, importing and running a parser
+- [[file:.reference/grammar-author-testing-guide.md][Grammar-author testing guide]]: the harness and differential testing
+- [[file:.reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]]: metrics, workloads and the recorded baseline
+- [[file:.reference/portability-matrix.md][Portability matrix]]: target platforms and the pinned runtime
 
-*Example*: [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=]] — construct, compile, emit, and run a parser end to end.
-
-*Changelog*: [[file:CHANGELOG.md][=CHANGELOG.md=]].
+See the [[file:CHANGELOG.md][changelog]] for release history.
 
 -----
 
-© 2026 Kiyomi Computation Systems LLC. Released under the [[file:LICENSE][BSD 3-Clause License]].
+© 2026 Kiyomi Computation Systems LLC. Released under the [[file:LICENSE][BSD 3-Clause License]]; third-party
+acknowledgements are in [[file:NOTICE][NOTICE]].
