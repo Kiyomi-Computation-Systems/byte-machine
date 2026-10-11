@@ -160,6 +160,36 @@
                (harness-join fields " "))))
         (else (loop (cdr lines)))))))
 
+;; The rest of a rendered error arm's line after its fixed head, which ends at
+;; the errs index -- "1) (quote reject) 2 off pk) 2 off))" for
+;;   (define (%s2 pos st off pk) (byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 1) (quote reject) 2 off pk) 2 off))
+;;
+;; Two emitter decisions live in that tail: which errs entry the arm indexes,
+;; and that the source-node name is rendered under quote. A `check` over a
+;; substring probe reports the same content-blind "expected a true value" for a
+;; wrong index and for an unquoted name, so the mutation suite could not tell
+;; the two apart. Comparing the tail with check-equal puts the arm's own text
+;; in the failure detail. The head is matched whole, so the comparison covers
+;; every token the substring probe did. Search-only, like `pause-arm`: one
+;; known line, never a re-parse of the emitted library.
+(define (string-index-of s needle)
+  (let ((n (string-length s)) (m (string-length needle)))
+    (let loop ((i 0))
+      (cond ((> (+ i m) n) #f)
+            ((string=? (substring s i (+ i m)) needle) i)
+            (else (loop (+ i 1)))))))
+(define (error-arm st)
+  (let ((head (string-append "(define (%s" (number->string st)
+                             " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote error) pos"
+                             " (byte-machine-make-parser-error/v1 (vector-ref errs ")))
+    (let loop ((lines (harness-split (text) #\newline)))
+      (cond
+        ((null? lines) "no such arm")
+        ((string-index-of (car lines) head)
+         => (lambda (at)
+              (substring (car lines) (+ at (string-length head)) (string-length (car lines)))))
+        (else (loop (cdr lines)))))))
+
 (harness-group "compilation"
   (lambda ()
     (harness-case "a valid machine compiles ok"
@@ -253,8 +283,7 @@
                (has? "(define (%s0 pos st off pk)"))))
     (harness-case "the error state emits the resolved code"
       (lambda ()
-        (check "error arm"
-               (has? "(byte-machine-make-feed-outcome/v1 (quote error) pos (byte-machine-make-parser-error/v1 (vector-ref errs 1) (quote reject) 2 off pk) 2 off)"))
+        (check-equal "error arm" (error-arm 2) "1) (quote reject) 2 off pk) 2 off))")
         ;; The errs table is per DECLARATION, not per site: the default-eof arm
         ;; alone renders at every dispatch state.
         (check "errs table"

@@ -21,6 +21,7 @@ CTEST_FLAGS ?= --output-on-failure --no-tests=error
 # Chez as well as on the version the library's own build requires. SITE_REF
 # is the git ref that ../ links in docs/ are pinned to on GitHub.
 CHEZ ?= chez
+AKKU ?= akku
 SITE_REF ?= main
 SITE_LIBDIRS = .:test/site:test/support/harness:$(CMARK_GFM_ROOT)/src
 REFERENCE_LIBDIRS = .:test/site:test/support/harness
@@ -28,7 +29,7 @@ REFERENCE_LIBDIRS = .:test/site:test/support/harness
 # Bare 'make' prints the target list rather than building; 'make all' still builds.
 .DEFAULT_GOAL := help
 
-.PHONY: all help doctor configure build dev test test-all test-mutation prod clean site check-site check-reference cmark-gfm-root
+.PHONY: all help doctor configure build dev test test-all test-mutation prod clean site check-site check-reference cmark-gfm-root check-akku
 
 all: build   ## build the development preset
 
@@ -107,3 +108,9 @@ check-site: cmark-gfm-root check-reference   ## test the site generator, then ch
 	@CHEZSCHEMELIBDIRS=$(SITE_LIBDIRS) $(CHEZ) --program test/site/test-site-render.sps
 	@CHEZSCHEMELIBDIRS=$(SITE_LIBDIRS) SITE_REF="$(SITE_REF)" \
 	  $(CHEZ) --program test/site/site-check.sps
+
+# What Akku installs into a consumer's .akku/lib: install this package as a
+# dependency of a throwaway project and require exactly src/'s libraries.
+# .akkuignore keeps site/ (the docs generator) and examples/ out. Needs akku.
+check-akku:   ## install as an Akku dependency and check exactly src/'s libraries land
+	@AKKU="$(AKKU)" CHEZ="$(CHEZ)" scripts/check-akku
