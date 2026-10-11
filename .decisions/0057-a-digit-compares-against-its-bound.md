@@ -100,7 +100,11 @@ admission under 0048.
   closed runtime ops. To settle it: count, on the counting twin, which state
   arms each audited input enters, and fail for any arm kind the HTTP and
   keyword machines render that no witness enters.
-  *Amended 2026-10-11 (decision 0058); see the dated note below.*
+
+  > **Amended 2026-10-11 (decision 0058)** by
+  > [decision 0058](./0058-the-allocation-audit-is-a-census-of-arm-kinds.md).
+  > See the dated note below; the bullet above is left as decided.
+
 - **A value above the fixnum range allocates** (item 3).
 
 ## Witnesses
@@ -133,10 +137,11 @@ The first bullet of "What this does not fix" said which arms an audited input
 reaches had not been measured. Decision 0058 measured it, against this lane
 with its digit group in place: the HTTP machine's accumulate and
 counted-consume arms were never entered, nor the overflow arm of either digit
-machine; no audited machine rendered a pause; and 11 of the emitter's 14 field
+machine; no audited machine rendered a pause; and 12 of the emitter's 14 field
 operations and predicates ran under no input. The lane now counts, on each
-counting twin, the states every witness enters, and fails for an arm kind an
-audited machine renders that no witness enters there, for a kind the emitter
+counting twin, the states every witness enters, and fails for an arm an
+audited machine renders that no witness enters there (its kind, with a field
+arm's operation or predicate and an accumulate arm's base), for a kind the emitter
 renders that no audited machine has, and for a field operation or predicate no
 witness runs. It gained the witnesses those rows asked for. None of them found
 an arm allocating while its values are fixnums, so item 3's limit is the

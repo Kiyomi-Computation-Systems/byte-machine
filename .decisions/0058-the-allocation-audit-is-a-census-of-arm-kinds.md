@@ -18,8 +18,8 @@ audited input enters, and fail for any arm kind the HTTP and keyword machines
 render that no witness enters.
 
 Measured first. The twin was given a counter at the head of every state
-procedure (item 1), and the rows of item 2 were run against the lane as 0057
-left it, before any witness below was added. Through the source launcher
+procedure (item 1), and the rows of items 2 and 3 were run against the lane as
+0057 left it, before any witness below was added. Through the source launcher
 (`ctest --test-dir build/dev -R allocation-audit.chez.source -V`, which prints
 the `arm census` lines and the rows' failures):
 
@@ -29,7 +29,9 @@ the `arm census` lines and the rows' failures):
   overflow `error` arm of each of 0057's two digit machines.
 - Kinds `render-state-arm` renders that no audited machine renders: `pause`.
 - Field operations and predicates the emitter renders and no input entered:
-  11 of 14. The HTTP machine renders three (`store`, `clear`, `nonzero`).
+  12 of 14. The HTTP machine renders three (`store`, `clear`, `nonzero`), and
+  its only stores, the two framing flags, were on the body path, so only
+  `clear` and `nonzero` had run.
 
 The two unentered HTTP kinds are the body path: every audited message had no
 body. A scratch probe listing the HTTP machine's field, count and accumulate
@@ -51,12 +53,18 @@ branch and its reset.
    refuses to load a pair whose IR fingerprint differs from the one the
    rendered library passes its constructor. A check asserts that the counted
    ids of every twin are exactly `0..N-1`.
-2. **The totality row is per machine.** Every arm kind an audited machine
-   renders must be entered, in that machine, by a witness. That is 0057's
-   reading ("the HTTP and keyword machines render"), and the union reading
-   would have missed the defect it exists for: once 0057's digit machines
-   were witnessed, `accumulate` was entered somewhere, while the HTTP
-   machine's two accumulate arms still never ran.
+2. **The totality row is per machine, and per arm.** Every arm an audited
+   machine renders must be entered, in that machine, by a witness, an arm
+   being the state's kind, with its selector where it has one: a field arm's
+   operation or predicate, an accumulate arm's base. Each selector renders
+   different inline code. Per machine is 0057's reading ("the HTTP and keyword
+   machines render"); across machines, once 0057's digit machines were
+   witnessed `accumulate` was entered somewhere while the HTTP machine's two
+   accumulate arms still never ran. Per kind is not enough either, measured:
+   with the fixed-body witnesses' registrations deleted, a per-kind row stayed
+   green, since the chunk size's base-16 arm stood in for the Content-Length
+   digits' base-10 one, which is the arm 0057 fixed; the per-arm row names
+   `(httpcensus accumulate . 10)`.
 3. **It is total over the emitter, not only over the fixtures.** The kinds
    `render-state-arm` renders are derived from compile.sls as the labels of its
    `case` on `(normal-state-kind s)`, the way 0055 derives ops from string
@@ -84,8 +92,9 @@ branch and its reset.
    - *A pause.* A machine with both renderings of the arm, with and without a
      reason: a pause after 40044 bytes allocates what one after 44 does.
    - *Every field operation and predicate on a u64 field.* One machine, a
-     settable field per row, constants that are bignums wherever the values
-     stay fixnums. Each row runs from an initial value below
+     settable field per row, and bignum constants where a row's values can
+     still be fixnums: `clear-mask`'s mask, `range`'s upper bound, and the
+     masks of `mask-any` and `mask-none`. Each row runs from an initial value below
      `(greatest-fixnum)`, where 1000 more executions must allocate nothing, and
      from one above it, recorded. The live control is `increment` above the
      range, which must allocate.
@@ -95,14 +104,14 @@ branch and its reset.
    (`increment`, `decrement`, `add`, `set-mask`, `clear-mask`) and for a mask
    test whose masked value is one (`mask-any`, `mask-none` here); 0 B for
    `store`, `clear`, `mask-all` with a fixnum mask, and every comparison
-   (`equal`, `zero`, `nonzero`, `range`), including against a bignum constant.
+   (`equal`, `zero`, `nonzero`, `range`; `range` against a bignum bound).
    No library code changes: the measurement found no arm allocating below the
    range. The documentation's caveat already states the limit.
 
 ## What it costs
 
 The lane ran in about 1.4 s and now runs in about 1.5 s (source). The
-mutation lane gains twelve mutations.
+mutation lane gains thirteen mutations.
 
 ## What this does not cover
 
@@ -113,10 +122,20 @@ mutation lane gains twelve mutations.
   machine's 217, 136 are. The other 81 are 25 error states, 44 dispatch states
   and 12 span states (counted by a scratch copy of the lane), and no row asks
   for them, because their kinds are entered elsewhere in the machine.
-- **Variants below the operation.** Accumulate's two bases, a span completion
-  with and without its callback, a pause or callback with and without a
-  reason: each is witnessed where this lane already runs it (both bases by
-  0057's group, both pause renderings here), but no row requires it.
+- **Variants below the arm.** A span completion with and without its
+  callback, a pause or callback with and without a reason: each is witnessed
+  where this lane already runs it (both pause renderings here), but no row
+  requires it.
+- **The emitter-wide field rows are across machines.** Every operation and
+  predicate the emitter renders must be entered in some machine (in practice
+  the field machine), not in each; the per-machine row is what asks for the
+  ones an audited machine renders, in that machine.
+- **What the compiler folds.** `clear-mask` renders `(bitwise-and v
+  (bitwise-not K))`, and allocates nothing below the range only because Chez
+  folds `(bitwise-not K)` at compile time; for a 64-bit mask K is a bignum.
+  The emitter could write the complement at emit time, as 0057 did for the
+  digit bound, and would move every golden with a `clear-mask` in it. Not done
+  here: the field row is what would notice if the folding stopped.
 - **A kind rendered outside `render-state-arm`'s case.** The emitter-side row
   derives from that one `case`. A kind rendered some other way would be
   invisible to it, though the per-machine row would still fail for it as soon
@@ -126,21 +145,27 @@ mutation lane gains twelve mutations.
 
 - `byte-machine.unit.allocation-audit` gains a body group (four cases), a pause
   group, a field-arm group, an overflow block in each digit case, and an
-  arm-kind census group of six rows: the instrumenter's completeness, the kind
-  recogniser's control, the emitter's kinds rendered, the per-machine
+  arm census group of six rows: the instrumenter's completeness, the kind
+  recogniser's control, the emitter's kinds rendered, the per-machine arm
   totality, the field-arm recogniser's control, and the field arms entered.
-- The mutation lane goes from 78 passes / 689 mutations to 78 / 701, all in
+- The mutation lane goes from 78 passes / 689 mutations to 78 / 702, all in
   Pass 77. Two shipped mutations moved: "an arm no audited input reaches calls
   a runtime op" and its split-name twin were anchored in the counted-consume
   arm, which a witness now enters, so the first went uncaught (measured: exit
   0). Both now sit in `%dispatch`'s fallback clause of a callback answer, the
-  one clause no construction reaches. Twelve are new: an error node in the HTTP
-  fixture turned into a stop no input reaches (the per-machine row); a case
-  label no IR state carries, for kinds and for operations (the emitter rows);
-  each dispatch rewritten so its recogniser reads nothing (the controls); the
-  stop arm defined as `(define %sN (lambda ...))` (the instrumenter's check);
-  and one allocation per new witness, in counted consume, an infallible and a
-  fallible field action, a field branch, a pause and an accumulate overflow.
-  Every pin was measured against a staged copy: each resolves exactly once in
-  its own mutant's output and in none of the other 23 mutants' outputs in the
-  pass, whose baseline exits 0.
+  one clause no construction reaches. Thirteen are new. Two turn an HTTP
+  fixture error node that no input reaches into an arm no witness enters
+  there: a stop, a kind the machine has nowhere else, and a `set-mask` field
+  action, a kind its witnesses enter with an operation they never run there,
+  which only the per-arm reading catches (the per-machine row). A case label
+  no IR state carries, for kinds and for operations (the emitter rows). Each
+  dispatch rewritten so its recogniser reads nothing (the controls). The stop
+  arm defined as `(define %sN (lambda ...))` (the instrumenter's check). And
+  six allocations in the arms the new witnesses enter: counted consume
+  (pinned on the fixed body), an infallible and a fallible field action and a
+  field branch (the field group), a pause, and an accumulate overflow. The
+  chunked body and the two above-range cases carry no pin of their own; they
+  redden under the counted-consume, digit-bound, infallible field-action and
+  field-branch mutants. Every pin was measured against a staged copy: each
+  resolves exactly once in its own mutant's output and in none of the other
+  24 mutants' outputs in the pass, whose baseline exits 0.

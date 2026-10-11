@@ -1355,9 +1355,8 @@ is the edge of what it closed. Two things carry over:
   same arm and the same apparatus, giving a positive number.
 
 **A witness that enters an arm can disarm a mutation anchored on its absence
-(2026-10-11, decision 0058).** The arm-kind census asked for witnesses on the
-HTTP body path, and adding them moved three things nothing else would have
-flagged:
+(2026-10-11, decision 0058).** The arm census asked for new witnesses, and
+adding them turned up three things nothing else would have flagged:
 
 - **The op census's founding mutation went uncaught.** It put a runtime call
   in the counted-consume arm, "on the body path, which no audited message

@@ -150,7 +150,7 @@ cmake_minimum_required(VERSION 3.26)
 # moving a mutation changes EXPECTED_MUTATIONS; opening or retiring a pass
 # changes EXPECTED_PASSES.
 set(EXPECTED_PASSES 78)
-set(EXPECTED_MUTATIONS 701)
+set(EXPECTED_MUTATIONS 702)
 
 # --- What an EXPECT_OUTPUT_MATCHES can and cannot say -----------------------
 #
@@ -12294,9 +12294,9 @@ byte_machine_mutation(
   SPEC byte-machine.unit.allocation-audit.chez.source
   LABEL "compile: a clause no input takes calls a runtime op nothing else emits"
   # The census's reason to exist: emitted code that calls an op the allocation
-  # audit has never run. The arm-kind census now asks a witness to enter every
-  # arm an audited machine renders, so the call sits in the one clause no
-  # construction reaches: the `%dispatch` fallback of a callback answer.
+  # audit has never run. The arm census now asks a witness to enter, in each
+  # audited machine, every arm it renders, so the call sits in the one clause
+  # no construction reaches: the `%dispatch` fallback of a callback answer.
   # `parser-error?` answers #f and the fallback runs as before.
   FIND [[(string-append "(else (%dispatch pos " expr " off pk))")]]
   REPLACE [[(string-append "(else (parser-error? " expr ") (%dispatch pos " expr " off pk))")]]
@@ -12407,8 +12407,9 @@ byte_machine_mutation(
 # census could not ask a witness for it. This restores the bound the arm used to
 # compute from the maximum on every digit: a bignum subtraction and division per
 # digit into a u64 field, however small the value, with every answer unchanged.
-# The body witnesses' slopes hold the digit count fixed, so only the two digit
-# cases see it.
+# The two digit cases see it, and so does the chunked body's slope, since each
+# chunk brings its size's hex digits; the fixed body's slope holds its digit
+# count fixed and does not.
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
@@ -12422,12 +12423,14 @@ byte_machine_mutation(
 # The arm-kind census. An arm whose cost is inline code calls no runtime op, so
 # the op census above cannot see whether an audited input runs it. The lane's
 # counting twins also count the states each witness enters, read through the
-# normalized IR as arm kinds, and a field arm's operation or predicate. The
-# rows: every kind an audited machine renders is entered there by a witness;
-# every kind, operation and predicate the emitter renders (case labels read
-# from compile.sls) is rendered and entered; the derivations' own controls;
-# and the instrumenter's. Then one mutation per new witness, each making the
-# arm it enters allocate where the witness says it must not.
+# normalized IR as arms: the kind, with a field arm's operation or predicate
+# and an accumulate arm's base. The rows: every arm an audited machine renders
+# is entered there by a witness; every kind, operation and predicate the
+# emitter renders (case labels read from compile.sls) is rendered and entered;
+# the derivations' own controls; and the instrumenter's. Then allocation
+# mutations in the arms the new witnesses enter: counted consume, both field
+# action renderings, the field branch, the pause and the accumulate overflow,
+# each where its witness says it must not allocate.
 
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/http-machine.sls
@@ -12440,7 +12443,22 @@ byte_machine_mutation(
   FIND [[(make-error-node 'e-method 'invalid-method #f)]]
   REPLACE [[(make-stop-node 'e-method #f)]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[entered there by a witness: rendered .machine . kind. no witness entered -- expected .., got ..httpcensus . stop..]])
+  EXPECT_OUTPUT_MATCHES [[entered there by a witness: rendered .machine . arm. no witness entered -- expected .., got ..httpcensus . stop..]])
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "http fixture: a field operation no audited input runs there is rendered"
+  # The row is per arm, not per kind: the same node becomes a `set-mask` field
+  # action, a kind the HTTP machine's witnesses enter and an operation they
+  # never run there. A kind-level row stays green; the field machine runs
+  # `set-mask`, so the emitter-wide row does too. It goes on to another error
+  # node: the verifier refuses a return to `idle` (a zero-progress cycle) and a
+  # byte path into the finish node.
+  FIND [[(make-error-node 'e-method 'invalid-method #f)]]
+  REPLACE [[(make-field-action-node 'e-method 'set-mask '(has-cl 1) 'e-target #f #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[entered there by a witness: rendered .machine . arm. no witness entered -- expected .., got ..httpcensus field-action . set-mask..]])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
@@ -12515,7 +12533,7 @@ byte_machine_mutation(
   FIND [["         (vector-set! fieldv " (num slot) " " expr ")\n"]]
   REPLACE [["         (vector-set! fieldv " (num slot) " (make-bytevector 8 0))\n         (vector-set! fieldv " (num slot) " " expr ")\n"]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[fixnum-range executions .arm . extra bytes. -- expected .., got ..store . 320000. .clear . 320000. .set-mask . 320000. .clear-mask . 320000..]])
+  EXPECT_OUTPUT_MATCHES [[below and above the fixnum range: field arms that allocated for 1000 more fixnum-range executions .arm . extra bytes. -- expected .., got ..store . 320000. .clear . 320000. .set-mask . 320000. .clear-mask . 320000..]])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
@@ -12524,7 +12542,7 @@ byte_machine_mutation(
   FIND [["             (begin (vector-set! fieldv " (num slot) " r) "]]
   REPLACE [["             (begin (vector-set! fieldv " (num slot) " (make-bytevector 8 0)) (vector-set! fieldv " (num slot) " r) "]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[fixnum-range executions .arm . extra bytes. -- expected .., got ..increment . 320000. .decrement . 320000. .add . 320000. .equal . 320000.]])
+  EXPECT_OUTPUT_MATCHES [[below and above the fixnum range: field arms that allocated for 1000 more fixnum-range executions .arm . extra bytes. -- expected .., got ..increment . 320000. .decrement . 320000. .add . 320000. .equal . 320000.]])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
@@ -12534,7 +12552,7 @@ byte_machine_mutation(
   FIND [["       (let ((v (vector-ref fieldv " (num (car sw)) ")))\n"]]
   REPLACE [["       (let ((v (vector-ref fieldv " (num (car sw)) "))) (vector-set! fieldv " (num (car sw)) " (make-bytevector 8 0)) (vector-set! fieldv " (num (car sw)) " v)\n"]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[fixnum-range executions .arm . extra bytes. -- expected .., got ..equal . 320000. .zero . 320000.]])
+  EXPECT_OUTPUT_MATCHES [[below and above the fixnum range: field arms that allocated for 1000 more fixnum-range executions .arm . extra bytes. -- expected .., got ..equal . 320000. .zero . 320000.]])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
@@ -12545,7 +12563,7 @@ byte_machine_mutation(
   FIND [["      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos "]]
   REPLACE [["      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) (- (+ pos (length (vector->list (make-vector off 0)))) off) "]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[pause: alloc.short prefix. = alloc.long prefix., each arm -- expected .0 0., got .38402624 38402624.]])
+  EXPECT_OUTPUT_MATCHES [[the offset it reports: pause: alloc.short prefix. = alloc.long prefix., each arm -- expected .0 0., got .38402624 38402624.]])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
@@ -12555,7 +12573,7 @@ byte_machine_mutation(
   REPLACE [["                       (%s" (num over) " pos " (num over) " (- (+ off (length (vector->list (make-vector off 0)))) off) (quote byte))))))))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
-    "base 10: digits up to the largest fixnum allocate nothing: u64 overflow: alloc after 10 numbers = alloc after 1010 -- expected 129536, got 9730288[^0-9]")
+    "base 16: digits up to the largest fixnum allocate nothing: u64 overflow: extra bytes when 1000 more numbers precede it -- expected 0, got 7680000[^0-9]")
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 78: the span an error abandons (differential.abandoned-span) -------

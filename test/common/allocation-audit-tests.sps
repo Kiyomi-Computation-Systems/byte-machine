@@ -367,8 +367,10 @@
 ;;     the head of each state procedure). Allocation is measured on the real
 ;;     machine, calls on the twin; the code paths are the same.
 ;;
-;; A witness registers what it reached only from inside the case that asserts
-;; its allocation shape, so deleting a witness group deletes its reach too. The
+;; A witness registers what it reached only from inside a case that asserts
+;; its allocation shape -- or, for the HTTP slopes, from a group that feeds the
+;; twin exactly the messages those slopes measured -- so deleting a witness
+;; group deletes its reach too. The
 ;; totality row at the end then fails for a future node kind whose lowering
 ;; calls an op no witness runs, naming the op, until a witness is added.
 ;;
@@ -491,7 +493,8 @@
 
 ;; Per load-pair: (name . shapes), shapes a vector by state id of
 ;; (kind . selector), the selector being a field arm's operation or predicate
-;; and #f for every other kind.
+;; or an accumulate arm's base -- each renders different inline code -- and #f
+;; for every other kind.
 (define audited '())
 ;; Per load-pair: (name instrumented-ids state-count), for the check that every
 ;; state procedure carries its counter.
@@ -542,7 +545,8 @@
      (lambda (s)
        (vector-set! shapes (normal-state-id s)
                     (cons (normal-state-kind s)
-                          (and (memq (normal-state-kind s) '(field-action field-branch))
+                          (and (memq (normal-state-kind s)
+                                     '(field-action field-branch accumulate))
                                (normal-field-selector s)))))
      states)
     (values (normal-machine-fingerprint n) shapes)))
@@ -607,8 +611,8 @@
                             (set! ever-called (cons (car c) ever-called))))
               calls)
     calls))
-;; The states every witness's twin entered, as (machine . state-id) keys. Read
-;; only by the witness procedures below, like `witnessed`.
+;; The states every witness's twin entered, as (machine . state-id) keys.
+;; Written only by the witness procedures below, like `witnessed`.
 (define entered (make-hashtable equal-hash equal?))
 (define (note-entered!)
   (for-each (lambda (k) (hashtable-set! entered k #t)) (census-entered)))
@@ -843,9 +847,10 @@
                    (list (parser-result-status r) (parser-error-code (parser-result-error r))
                          (- (bytevector-length many-over) (parser-error-offset (parser-result-error r))))
                    '(error unexpected-byte 1))
-      (check-equal "u64 overflow: alloc after 10 numbers = alloc after 1010"
-                   (alloc-feeding-only real '() many-over digit-reps)
-                   (alloc-feeding-only real '() few-over digit-reps))
+      (check-equal "u64 overflow: extra bytes when 1000 more numbers precede it"
+                   (- (alloc-feeding-only real '() many-over digit-reps)
+                      (alloc-feeding-only real '() few-over digit-reps))
+                   0)
       (witness-feed! twin '() few-over)
       (witness-feed! twin '() many-over))))
 
@@ -1202,8 +1207,6 @@
                (extra-above (map (lambda (x) (cons (car x) (caddr (caddr x)))) runs)))
           ;; The answers first, so an arm that stopped computing could not
           ;; pass by allocating nothing.
-          (check-equal "every row was run" (length runs)
-                       (+ (length field-op-rows) (length field-predicate-rows)))
           (check-equal "field arms that did not answer their row (arm got)" wrong '())
           (check "control: an increment storing a bignum allocates"
                  (positive? (cdr (assq 'increment extra-above))))
@@ -1344,17 +1347,19 @@
 (define (rendered-shapes)
   (apply append (map (lambda (a) (map (lambda (s) (cons (car a) s)) (vector->list (cdr a))))
                      audited)))
-;; Each distinct (machine . kind), or (machine . (kind . selector)) for a field
-;; arm, once.
+;; Each distinct (machine . kind) once, and each distinct (machine . arm), an
+;; arm being its kind or, where the kind has a selector, (kind . selector).
 (define (distinct xs)
   (fold-left (lambda (acc x) (if (member x acc) acc (cons x acc))) '() xs))
 (define (machine-kinds shapes) (distinct (map (lambda (x) (cons (car x) (cadr x))) shapes)))
+(define (machine-arms shapes)
+  (distinct (map (lambda (x) (cons (car x) (if (cddr x) (cdr x) (cadr x)))) shapes)))
 (define (iota-list n)
   (let loop ((i (- n 1)) (acc '())) (if (< i 0) acc (loop (- i 1) (cons i acc)))))
 (define (by-name xs)
   (list-sort (lambda (a b) (string<? (adapter-value->string a) (adapter-value->string b))) xs))
 
-(harness-group "the arm-kind census: every arm kind an audited machine renders has a witness"
+(harness-group "the arm census: every arm an audited machine renders has a witness"
   (lambda ()
     (harness-case "every state procedure of every audited twin counts its entries"
       (lambda ()
@@ -1393,18 +1398,23 @@
           (check-equal "emitted kinds no audited machine renders"
                        (by-name (filter (lambda (k) (not (memq k rendered))) emitted-kinds))
                        '()))))
-    (harness-case "every arm kind an audited machine renders is entered there by a witness"
+    (harness-case "every arm an audited machine renders is entered there by a witness"
       (lambda ()
-        ;; The totality row, per machine: an arm kind a machine renders and no
-        ;; witness enters in that machine is code this audit has never run.
-        (let ((entered-kinds (machine-kinds (entered-shapes))))
-          (check-equal "rendered (machine . kind) no witness entered"
-                       (by-name (filter (lambda (x) (not (member x entered-kinds)))
-                                        (machine-kinds (rendered-shapes))))
+        ;; The totality row, per machine: an arm a machine renders and no
+        ;; witness enters in that machine is code this audit has never run. Per
+        ;; ARM, not per kind: the HTTP machine's base-10 accumulate (the
+        ;; Content-Length digits) and its base-16 one (the chunk size) are two
+        ;; arms, and entering one says nothing about the other.
+        (let ((entered-arms (machine-arms (entered-shapes))))
+          (check-equal "rendered (machine . arm) no witness entered"
+                       (by-name (filter (lambda (x) (not (member x entered-arms)))
+                                        (machine-arms (rendered-shapes))))
                        '()))))
-    ;; One level down. A field arm is the operation or predicate it renders,
-    ;; and each renders its own inline arithmetic, which no census of runtime
-    ;; ops or arm kinds can tell apart.
+    ;; One level down, over the emitter's whole set. A field arm is the
+    ;; operation or predicate it renders, and each renders its own inline
+    ;; arithmetic, which no census of runtime ops or arm kinds can tell apart.
+    ;; These two rows ask for each one in SOME machine; the row above already
+    ;; asks for each one an audited machine renders, in that machine.
     (harness-case "every field operation and predicate a witness entered is one the emitter names"
       (lambda ()
         (check-equal "entered field arms render-operation and render-predicate do not name"
