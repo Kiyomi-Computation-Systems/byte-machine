@@ -1,10 +1,9 @@
-;;; Milestone 8 Slice ③: framing recognition and the fixed body (§25:1637-1638),
-;;; through the reference interpreter with ABSOLUTE outcomes. This is the slice
-;;; decision 0035/§4.2 exists for: case-insensitive Content-Length /
-;;; Transfer-Encoding recognition that keeps the opaque path's bytes, checked
-;;; Content-Length accumulation, the counted fixed body, and the framing refusals
-;;; at the boundary after the later header line's LF. Agreement between the
-;;; executors is differential-http-tests.sps's.
+;;; Framing recognition and the fixed body, through the reference interpreter
+;;; with ABSOLUTE outcomes: case-insensitive Content-Length / Transfer-Encoding
+;;; recognition that keeps the opaque path's bytes, checked Content-Length
+;;; accumulation, the counted fixed body, and the framing refusals at the
+;;; boundary after the later header line's LF. Agreement between the executors
+;;; is differential-http-tests.sps's.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test http-machine)
@@ -48,7 +47,7 @@
 (define (has-entry? e tr) (and (member e tr) #t))
 (define (rl s) (string-append "GET / HTTP/1.1\r\n" s))   ; a valid request line prefix
 
-;; --- the recognizer: hit/miss, and the name delivered on both paths (§4.2) ----
+;; --- the recognizer: hit/miss, and the name delivered on both paths ---------
 
 (harness-group "case-insensitive framing recognition keeps the opaque path's bytes (decision 0035)"
   (lambda ()
@@ -77,7 +76,7 @@
          '("Content-Length" "content-length" "Content-Lengthy" "Conx" "Content_Length"))))
     (harness-case "Transfer-Encoding is recognized: a non-chunked value is unsupported"
       (lambda ()
-        ;; A recognized `chunked` reaches the chunked body (Slice ④'s), which a
+        ;; A recognized `chunked` reaches the chunked body, which a
         ;; body-less feed truncates as unexpected-eof — proving it was recognized
         ;; (reached the body path) rather than rejected as unsupported.
         (check-equal "chunked is recognized (reaches the chunked body, truncated here)"
@@ -86,7 +85,7 @@
         (check-equal "gzip is unsupported-transfer-encoding"
                      (err (rl "Transfer-Encoding: gzip\r\n\r\n")) '(unsupported-transfer-encoding byte 35))))))
 
-;; --- Content-Length's value and the fixed body (§21.3:1145) -------------------
+;; --- Content-Length's value and the fixed body -------------------------------
 
 (harness-group "checked Content-Length and the counted fixed body"
   (lambda ()
@@ -116,7 +115,7 @@
                      (err (rl "Content-Length: 99999999999999999999999999\r\n\r\n"))
                      '(content-length-overflow byte 51))))))
 
-;; --- the framing refusals, at the boundary after the later line's LF (P2) -----
+;; --- the framing refusals, at the boundary after the later line's LF --------
 
 (harness-group "framing refusals at the between-byte boundary (§21.4:1175, decision 0035)"
   (lambda ()
@@ -139,7 +138,7 @@
                      (err "GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 1\r\n\r\n")
                      '(framing-conflict boundary 63))))))
 
-;; --- the body across split points (§22.5) -------------------------------------
+;; --- the body across split points -------------------------------------------
 
 (harness-group "the fixed body coalesces identically across every split (§22.5)"
   (lambda ()

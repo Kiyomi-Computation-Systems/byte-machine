@@ -1,5 +1,5 @@
 ;;; verify-machine over the one-byte machine and its broken variants. Tests
-;;; compare diagnostic codes, never rendered text (parent §16.4).
+;;; compare diagnostic codes, never rendered text.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine graph)
@@ -20,12 +20,12 @@
 (define (machine* name nodes eof-name)
   (make-machine name 'start '() '() '() errs nodes eof-name #f))
 (define (machine nodes) (machine* 'one-byte nodes 'default-eof))
-;; Slice ①b task 4: a one-byte machine carrying a caller-supplied field list.
+;; A one-byte machine carrying a caller-supplied field list.
 (define (machine-with-fields fs)
   (make-machine 'one-byte 'start fs '() '() errs
                 (one-byte-nodes (make-edge 'reject 'reexecute)) 'default-eof #f))
-;; Slice ①a task 1: a one-byte machine carrying a caller-supplied error-declaration
-;; list, so a reason can be varied without touching the shipped `errs`.
+;; A one-byte machine carrying a caller-supplied error-declaration list, so a
+;; reason can be varied without touching the shared `errs`.
 (define (machine-errs* ds nodes . eof-name)
   (make-machine 'one-byte 'start '() '() '() ds nodes
                 (if (null? eof-name) 'default-eof (car eof-name)) #f))
@@ -34,10 +34,8 @@
                  (one-byte-nodes (make-edge 'reject 'reexecute))))
 
 (define (codes m) (map diagnostic-code (verification-diagnostics (verify-machine m))))
-;; Slice ①b: the `node` slot of each diagnostic, so a decision that says WHICH
-;; name a diagnostic carries can be asserted rather than described. `codes`
-;; alone is blind to it, which is how both field diagnostics shipped with their
-;; "carries the offending field name" decision unwitnessed.
+;; The `node` slot of each diagnostic, so WHICH name a diagnostic carries can be
+;; asserted rather than described. `codes` alone is blind to it.
 (define (nodes-of m) (map diagnostic-node (verification-diagnostics (verify-machine m))))
 (define (has-code? m code) (and (memq code (codes m)) #t))
 
@@ -135,13 +133,12 @@
                               (one-byte-nodes (make-edge 'reject 'reexecute))
                               'default-eof #f)
                 'duplicate-error-declaration))))
-    ;; Milestone 4 Slice ①a task 1: §16.2:886 puts "reasons" in one portability
-    ;; bullet with names and codes, and §10.1:480 restricts them to printable
-    ;; ASCII plus LF -- a DIFFERENT repertoire from valid-name?'s [a-z][a-z0-9-]*,
-    ;; and over a string rather than a symbol, so the reason clause is its own
-    ;; predicate reusing the invalid-name CODE (decision 0022's Consequences).
-    ;; The gap was inert until the emitter began writing a reason into generated
-    ;; source; these three cases are what make it live.
+    ;; Error reasons are portability-checked alongside names and codes, but
+    ;; restricted to printable ASCII plus LF -- a DIFFERENT repertoire from
+    ;; valid-name?'s [a-z][a-z0-9-]*, and over a string rather than a symbol, so
+    ;; the reason clause is its own predicate reusing the invalid-name CODE. The
+    ;; emitter writes each reason into generated source, which is what makes the
+    ;; restriction load-bearing.
     (harness-case "a reason outside printable ASCII is rejected"
       (lambda ()
         (let ((ds 'seed))
@@ -151,9 +148,9 @@
     (harness-case "a reason may carry quote backslash and newline"
       (lambda ()
         (let ((ds 'seed))
-          ;; The three characters the emitter must escape (§20:1039). All are
-          ;; inside §10.1:480's repertoire, so the VERIFIER must accept them --
-          ;; escaping is the writer's job, not a rejection.
+          ;; The three characters the emitter must escape. All are inside the
+          ;; reason repertoire, so the VERIFIER must accept them -- escaping is
+          ;; the writer's job, not a rejection.
           (set! ds (codes (machine-with-reason (string #\a #\" #\\ #\newline #\b))))
           (check-equal "no diagnostics" (length ds) 0))))
     (harness-case "one declaration bad in every field still yields a single finding"
@@ -172,12 +169,11 @@
                            'Default-Eof)))
           (check-equal "one finding" (length ds) 1)
           (check-equal "invalid-name" (car ds) 'invalid-name))))
-    ;; Milestone 4 Slice ①b task 4: pass-fields, declaration half (§16.3:924
-    ;; item 6). It carries the RELATIONAL checks decision 0020 assigns to the
-    ;; verifier -- duplicate field names and portable field names -- and nothing
-    ;; else. Widths and initial ranges are closed at construction, so a machine
-    ;; whose field failed them never exists and a verifier arm for either would
-    ;; be dead code (0020's one-rejection-site rule).
+    ;; pass-fields, declaration half. It carries the RELATIONAL checks the
+    ;; verifier owns -- duplicate field names and portable field names -- and
+    ;; nothing else. Widths and initial ranges are closed at construction, so a
+    ;; machine whose field failed them never exists and a verifier arm for
+    ;; either would be dead code (each rule has exactly one rejection site).
     (harness-case "two fields sharing a name is invalid-field-declaration"
       (lambda ()
         ;; This is the defect the pass exists to close, and it verifies CLEAN
@@ -193,10 +189,10 @@
           (check-equal "invalid-field-declaration" (car ds) 'invalid-field-declaration))))
     (harness-case "the duplicate diagnostic names the offending FIELD"
       (lambda ()
-        ;; §0 D2 and verify.sls's own comment make this a decision -- the field
-        ;; name goes in the diagnostic's existing `node` slot, following
-        ;; duplicate-error-declaration and missing-target, which already put
-        ;; non-node symbols there. Asserted here because `codes` cannot see it.
+        ;; The field name goes in the diagnostic's existing `node` slot,
+        ;; following duplicate-error-declaration and missing-target, which also
+        ;; put non-node symbols there. Asserted here because `codes` cannot see
+        ;; it.
         (let ((ns 'seed))
           (set! ns (nodes-of (machine-with-fields
                               (list (make-uint-field 'count 8 0 #f)
@@ -221,32 +217,26 @@
         ;; THREE fields, not two, and the count is load-bearing. The restrictive
         ;; mutant of the portable check reports one diagnostic per field here,
         ;; and this machine carries `errs` -- two declarations, two reasons -- so
-        ;; at two fields the mutant's whole record set was a SUBSET of the
+        ;; at two fields the mutant's whole record set would be a SUBSET of the
         ;; "reason repertoire rejects every reason" mutant's, which reddens the
-        ;; same case with the same 0-versus-2. Not a loose pin but a subsumed
-        ;; one: no record separated them, in either direction. A third field
-        ;; separates the two by construction (3 against 2) and is the smallest
-        ;; change that does. Measured, in both directions, by Task 4's Pass 33
-        ;; sweep.
+        ;; same case with the same 0-versus-2: no record would separate them, in
+        ;; either direction. A third field separates the two by construction (3
+        ;; against 2) and is the smallest change that does.
         (let ((ds 'seed))
           (set! ds (codes (machine-with-fields
                            (list (make-uint-field 'count 8 0 #f)
                                  (make-uint-field 'limit 16 3 #f)
                                  (make-uint-field 'seen 32 0 #f)))))
           (check-equal "no diagnostics" (length ds) 0))))
-    ;; Milestone 4 Slice ①b task 3: §16.2:884's unsupported-IR-version half,
-    ;; listed since Milestone 1 and unimplemented until now.
+    ;; The unsupported-IR-version half of the shape check.
     ;;
-    ;; The design (§6 task 3) said no external test could reach this arm --
-    ;; "machine-tag is a freshly allocated, unexported vector compared with eq?,
-    ;; so a test cannot forge a machine? object" -- and on that ground told the
-    ;; implementer to declare the permissive direction EXPECT_SURVIVES. That was
-    ;; measured false before this slice began. Descriptors are bare R6RS vectors
-    ;; with no opacity, so (vector-ref m 0) yields the tag using an (rnrs)
-    ;; primitive and no private import.
+    ;; machine-tag is an unexported vector compared with eq?, but descriptors
+    ;; are bare R6RS vectors with no opacity, so (vector-ref m 0) yields the tag
+    ;; using an (rnrs) primitive and no private import -- a machine? object CAN
+    ;; be forged.
     ;;
     ;; This is a TEST-ONLY device. It reaches through the representation on
-    ;; purpose, because make-machine stamps the version as a constant and §9.1's
+    ;; purpose, because make-machine stamps the version as a constant and its
     ;; fixed arity gives the public API no way to produce a wrong one -- so this
     ;; is the only thing that can witness the check. Confined to these two cases.
     (harness-case "a machine carrying an unsupported IR version is invalid-shape"
@@ -271,7 +261,7 @@
     (harness-case "a machine at the supported IR version is not reported"
       (lambda ()
         ;; The other direction, and the one that fails if the supported constant
-        ;; is mutated: every shipped fixture becomes unsupported at once.
+        ;; is mutated: every fixture becomes unsupported at once.
         (let ((ds 'seed))
           (set! ds (codes (machine (one-byte-nodes (make-edge 'reject 'reexecute)))))
           (check-equal "no diagnostics" (length ds) 0))))
@@ -328,7 +318,7 @@
     (harness-case "a finish node reachable only via an eof-target verifies"
       (lambda ()
         (check "verifies" (verification-ok? (verify-machine (eof-ok))))))
-    ;; §16.2:908 — a BYTE edge into a finish terminal is rejected.
+    ;; A BYTE edge into a finish terminal is rejected.
     (harness-case "a byte case targeting a finish node is rejected (non-eof-into-finish)"
       (lambda ()
         (let ((m (make-machine 'bad1 's0 '() '() '()
@@ -341,7 +331,7 @@
           (check "has non-eof-into-finish"
                  (memq 'non-eof-into-finish
                        (map diagnostic-code (verification-diagnostics (verify-machine m))))))))
-    ;; §16.2:909 — an eof-target chain reaching a STOP terminal is rejected.
+    ;; An eof-target chain reaching a STOP terminal is rejected.
     (harness-case "an eof-target reaching a stop terminal is rejected (eof-reachable-stop)"
       (lambda ()
         (let ((m (make-machine 'bad2 's0 '() '() '()
@@ -405,15 +395,16 @@
           ;; ATTRIBUTION, not verdict. "accepted" is one boolean that ANY
           ;; diagnostic reddens, so every mutation that wrongly rejects this
           ;; fixture fails the same check and no pin can say which one did it
-          ;; (the pin sweep measured exactly that: three mutants shared this
-          ;; record). These two name the diagnostic that must be ABSENT, so
+          ;; (three mutants share that record). These two name the diagnostic
+          ;; that must be ABSENT, so
           ;; each of those mutants fails a different check:
           ;;   'unreachable-node -- node-out-targets' pause arm is what keeps
           ;;     p's continuation s1 (and pe's continuation done) on the
           ;;     reachability walk; dropping it strands them.
           ;;   'non-eof-into-finish -- pe is EOF-only-reachable and continues
-          ;;     into a finish node, which is legal (decision 0011); only the
-          ;;     :908 site's byte-reachability gate keeps it legal.
+          ;;     into a finish node, which is legal; only the
+          ;;     non-eof-into-finish check's byte-reachability gate keeps it
+          ;;     legal.
           (let ((cs (map diagnostic-code (verification-diagnostics v))))
             (check "no unreachable-node" (not (memq 'unreachable-node cs)))
             (check "no non-eof-into-finish"
@@ -465,26 +456,24 @@
                  (exists (lambda (d) (eq? (diagnostic-code d) 'eof-zero-progress-cycle))
                          (verification-diagnostics v)))
           (check "and NOT zero-progress-cycle: :898's gate excludes them"
-                 ;; *** THE OPPOSITE OF WHAT THIS ASSERTED BEFORE Slice ③. ***
                  ;; `pa` and `pb` are reachable only through `e0`'s eof-target,
-                 ;; so they are not byte-reachable and §16.2:898's gate
-                 ;; (decision 0027 item 3) excludes them. The machine is still
-                 ;; rejected -- by `eof-zero-progress-cycle`, whose bullet
-                 ;; `:908` is and whose owner is `eof-terminal`. That NON-OVERLAP
-                 ;; is what 0027 item 3 argues for when it gates on
-                 ;; `byte-reached` alone rather than on item 1's composite, so
-                 ;; this line is now the assertion that the two checks do not
-                 ;; both fire on the machine `:908` was written for.
+                 ;; so they are not byte-reachable and the zero-progress check's
+                 ;; byte-reachability gate excludes them. The machine is still
+                 ;; rejected -- by `eof-zero-progress-cycle`, whose owner is
+                 ;; `eof-terminal`. The gate reads `byte-reached` alone rather
+                 ;; than a composite reachability relation precisely so the two
+                 ;; checks do NOT overlap, and this line asserts that they do not
+                 ;; both fire on an EOF-only pause cycle.
                  (not (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
                               (verification-diagnostics v))))
           ;; Attribution, not just verdict: the eof-zero-progress-cycle above is
-          ;; the entry dispatch node e0's own :909 eof-target-chain walk (its
-          ;; target is 'pa, which cycles). It must NOT also be raised on 'pa
-          ;; itself -- that would only happen if the D4(d) byte-reachability
-          ;; gate at the eof-terminal-chain call site stopped filtering pa/pb
-          ;; out (neither is byte-reached; both are eof-only-reachable), which
-          ;; produces a redundant same-code diagnostic no verdict-based check
-          ;; can see (whole-branch review; see the mutation's own comment).
+          ;; the entry dispatch node e0's own eof-target-chain walk (its target
+          ;; is 'pa, which cycles). It must NOT also be raised on 'pa itself --
+          ;; that would only happen if the byte-reachability gate at the
+          ;; eof-terminal-chain call site stopped filtering pa/pb out (neither
+          ;; is byte-reached; both are eof-only-reachable), which produces a
+          ;; redundant same-code diagnostic no verdict-based check can see (see
+          ;; the mutation's own comment).
           (check "eof-zero-progress-cycle attributed to e0"
                  (exists (lambda (d) (and (eq? (diagnostic-code d) 'eof-zero-progress-cycle)
                                            (eq? (diagnostic-node d) 'e0)))
@@ -519,8 +508,8 @@
     ;;   e0 --eof--> pa (pause) --> stop        : eof-reachable-stop on e0
     ;;   e1 --eof--> pb (pause) --> e1 --eof--> : eof-zero-progress-cycle on e1
     ;; Neither pause is byte-reachable (each is only an eof-target), so the
-    ;; D4(b)/(d) pause checks are out of the picture and the count belongs to
-    ;; the dispatch-node walk alone.
+    ;; byte-reachable-pause continuation checks are out of the picture and the
+    ;; count belongs to the dispatch-node walk alone.
     (harness-case "an EOF walk crosses a pause for both terminal kinds (§16.2:909)"
       (lambda ()
         (let* ((v (verify-machine
@@ -547,8 +536,8 @@
                        2))))
     (harness-case "a byte-reachable pause into a stop would leak stopped through EOF (§16.2:909)"
       (lambda ()
-        ;; D4(d): after feed pauses at p, current = stop and resume returns to
-        ;; ready, where finish! would begin EOF processing AT the stop.
+        ;; After feed pauses at p, current = stop and resume returns to ready,
+        ;; where finish! would begin EOF processing AT the stop.
         (let ((v (verify-machine
                   (pause-fixture
                    (list (make-byte-dispatch-node 'e0
@@ -588,10 +577,9 @@
                  (exists (lambda (d) (eq? (diagnostic-code d) 'zero-progress-cycle))
                          (verification-diagnostics v))))))))
 
-;; Milestone 3 Slice ① Task 3: overlap is a property of canonical byte SETS, so
-;; it must be found across mixed matcher kinds, and reported once per colliding
-;; PAIR of cases -- not once per shared byte. A set and a complement can share
-;; 200 bytes, and §16.4:937-943 wants one finding per decision.
+;; Overlap is a property of canonical byte SETS, so it must be found across
+;; mixed matcher kinds, and reported once per colliding PAIR of cases -- not
+;; once per shared byte: a set and a complement can share 200 bytes.
 (define (dispatch-node-machine cases)
   (machine (list (dispatch cases (make-edge 'reject 'reexecute))
                  (make-stop-node 'stop #f)
@@ -641,10 +629,11 @@
                                            (to-stop (make-byte-range-matcher 0 255)))))
                      1)))
     ;; These three fixtures are ordered deliberately. Each isolates one half of
-    ;; the pair enumeration, so the three Task 3 mutations below have distinct
-    ;; first failures and distinct failure SETS -- without the first-and-third
-    ;; fixture, "collisions after the first are dropped" is subsumed by "only the
-    ;; first case is compared" and no pin can separate them.
+    ;; the pair enumeration, so the three pair-enumeration mutations have
+    ;; distinct first failures and distinct failure SETS -- without the
+    ;; first-and-third fixture, "collisions after the first are dropped" is
+    ;; subsumed by "only the first case is compared" and no pin can separate
+    ;; them.
     (harness-case "a collision between the first and third cases is found"
       (lambda ()
         (check-equal "one pair"
@@ -694,64 +683,58 @@
                                            (to-stop (make-exact-byte-matcher 50)))))
                      3)))))
 
-;; Milestone 3 Slice ② Task 1: the sixth node kind, at the verify.sls sites it
-;; is actually extended to. Slice ③ Task 2 added the seventh. RECOUNTED at
-;; Milestone 3's close, and the RULE that reproduces the number is stated here
-;; because the rule is what a later reader re-derives from: not "every site in
-;; verify.sls that dispatches on node KIND", which yields TWELVE at HEAD, and
-;; not a grep for byte-dispatch-node?, which cannot see a cond dispatching
-;; through OTHER kind predicates and so cannot find its own omission. It is
+;; The sequence-dispatch node kind, at the verify.sls sites that must handle
+;; it. The RULE that reproduces the site count is stated here because the rule
+;; is what a later reader re-derives from: not "every site in verify.sls that
+;; dispatches on node KIND", which yields twelve, and not a grep for
+;; byte-dispatch-node?, which cannot see a cond dispatching through OTHER kind
+;; predicates and so cannot find its own omission. It is
 ;;
 ;;   every kind dispatch with a PERMISSIVE FALL-THROUGH that a sequence node's
 ;;   own data could pass through unexamined
 ;;
-;; -- a site whose non-matching branch quietly yields '() or #f while the sixth
-;; kind carries exactly the data the site exists to inspect. That rule gives
-;; EIGHT sites, SEVEN extended and ONE permanently not.
+;; -- a site whose non-matching branch quietly yields '() or #f while the
+;; sequence kind carries exactly the data the site exists to inspect. That rule
+;; gives EIGHT sites, SEVEN extended and ONE permanently not.
 ;;
 ;; The four kind-dispatching sites the looser wording sweeps in, and why the
 ;; rule excludes each: pass-names' error-node? filter (a sequence node has no
 ;; error name to leave undeclared); pass-eof-execution's TWO byte-reachability
-;; gates for D4(b)/(d), which select pause nodes to inspect a CONTINUATION a
-;; sequence node does not have -- these are NOT the pass's two :908/:909
-;; filters, which are in the eight and were extended; and
-;; pass-sequence-ambiguity, excluded for its own separate reason below. Each
-;; positively selects one kind rather than falling through past another's data.
+;; gates for byte-reachable pauses, which select pause nodes to inspect a
+;; CONTINUATION a sequence node does not have -- these are NOT the pass's
+;; non-eof-into-finish and eof-reachable-stop filters, which are in the eight
+;; and are extended; and pass-sequence-ambiguity, excluded for its own separate
+;; reason below. Each positively selects one kind rather than falling through
+;; past another's data.
 ;;
-;; This project has miscounted this set twice (design §6 said six and
-;; enumerated seven; a later audit found the eighth), so the number is derived,
-;; not inherited.
+;; The set is easy to miscount by inspection, so derive it from the rule rather
+;; than inheriting the number.
 ;;
-;; The seven extended, each with an arm here: node-out-targets; node-eof-target
-;; -- the site Task 1's own fix wave collapsed three near-duplicate accessors
-;; into, exercised by arms 2 and 4 below through two different callers, which
-;; since decision 0031 are `eof-step` (the reachability and pass-7 walk, where
-;; the retired walk used to read it) and pass-eof; reexec-targets; eof-terminal;
-;; pass-eof-execution's two filters (§16.2:908 and :909); and
-;; pass-zero-progress's REPORT guard, which Slice ② deliberately left out and
-;; Slice ③ added (§25:1533) -- covered by the two zero-progress cases below,
-;; "a sequence node whose reexecute mismatch edge targets itself ..." and its
-;; advance-mode twin, which sit between arms 3 and 4.
+;; The seven extended, each with an arm here: node-out-targets;
+;; node-eof-target, exercised by arms 2 and 4 below through two different
+;; callers, `eof-step` (the reachability and pass-7 walk) and pass-eof;
+;; reexec-targets; eof-terminal; pass-eof-execution's two filters
+;; (non-eof-into-finish and eof-reachable-stop); and pass-zero-progress's
+;; REPORT guard -- covered by the two zero-progress cases below, "a sequence
+;; node whose reexecute mismatch edge targets itself ..." and its advance-mode
+;; twin, which sit between arms 3 and 4.
 ;;
 ;; The eighth, pass-overlap, is the one site deliberately NOT extended, and
-;; PERMANENTLY so rather than deferred: decision 0017 point 4 keeps §16.2:893
-;; and :894 as two entries with two checks and two codes, and :894 is
-;; pass-sequence-ambiguity's, not this pass's. It has no arm here and will not
-;; get one. pass-sequence-ambiguity is itself a ninth kind-dispatching site but
-;; is NOT in the census above: it is sequence-only by construction, born in
-;; Slice ③ already knowing the sixth kind, and was never a permissive
-;; fall-through that had to be taught it. Its own group is at the end of this
-;; file.
+;; PERMANENTLY so: byte-class overlap and sequence-prefix ambiguity are two
+;; entries with two checks and two codes, and ambiguity is
+;; pass-sequence-ambiguity's, not this pass's. It has no arm here.
+;; pass-sequence-ambiguity is itself a ninth kind-dispatching site but is NOT in
+;; the census above: it is sequence-only by construction, not a permissive
+;; fall-through that has to be taught the kind. Its own group is at
+;; the end of this file.
 ;;
 ;; A sequence node added to ir.sls but NOT to verify.sls VERIFIES CLEAN --
 ;; targets never resolution-checked, cycles never detected, EOF chain never
-;; walked -- and only crashes later in the normalizer. That is why Slice ②'s
-;; six live sites landed in the same commit as the node kind.
+;; walked -- and only crashes later in the normalizer. That is why a node kind
+;; and its verifier sites must land together.
 (define (seq-node cases mismatch eof-target)
   (make-sequence-dispatch-node 'seq cases mismatch eof-target #f))
 (define (one-alt bytes target) (list (make-sequence-case bytes target #f)))
-;; Fix wave 1 (Minor 3): seq-machine* took a name/eof-name pair no caller ever
-;; varied -- one caller (seq-machine), always 'seqnode/'default-eof. Inlined.
 (define (seq-machine nodes)
   (make-machine 'seqnode 'seq '() '() '() errs nodes 'default-eof #f))
 (define (well-formed-seq-nodes)
@@ -786,8 +769,8 @@
                                  (make-stop-node 'stop #f)
                                  (make-error-node 'reject 'rejected #f)))
                           'missing-target))))
-    ;; arm 2 -- the reachability walk (`eof-step` since decision 0031): a node
-    ;; reachable ONLY through the sequence eof-target
+    ;; arm 2 -- the reachability walk (`eof-step`): a node reachable ONLY
+    ;; through the sequence eof-target
     (harness-case "a node reached only through the sequence eof-target is reachable"
       (lambda ()
         (check-equal "no unreachable-node"
@@ -814,13 +797,11 @@
                         (make-error-node 'reject 'rejected #f))
                   'default-eof #f)
                 'zero-progress-cycle))))
-    ;; Milestone 3 Slice ③ Task 2: §25:1533's cycle extension, and BOTH halves
-    ;; of exit criterion §25:1540. Slice ② taught reexec-targets to see THROUGH
-    ;; a sequence node while deliberately leaving it out of the REPORTED set;
-    ;; this is the report. Measured on `main` before the extension: the first
-    ;; fixture verified ok #t with ZERO diagnostics and HUNG both executors
-    ;; (exit 124 under timeout), while the byte-identical shape built from a
-    ;; byte-dispatch node reported zero-progress-cycle.
+    ;; A sequence node on a reexecute cycle is itself REPORTED, not only seen
+    ;; through by reexec-targets. Without the report, the first fixture
+    ;; verifies ok #t with ZERO diagnostics and HANGS both executors, while the
+    ;; byte-identical shape built from a byte-dispatch node reports
+    ;; zero-progress-cycle.
     (harness-case "a sequence node whose reexecute mismatch edge targets itself is a zero-progress cycle"
       (lambda ()
         (let ((m (make-machine 'selfseq 'seq '() '() '() errs
@@ -829,22 +810,20 @@
                    'default-eof #f)))
           (check "rejected" (not (verification-ok? (verify-machine m))))
           (check "zero-progress-cycle" (has-code? m 'zero-progress-cycle)))))
-    ;; The other half of :1540. The mismatch edge's MODE is the whole decision:
+    ;; The other half. The mismatch edge's MODE is the whole decision:
     ;; an advance edge consumes the mismatching byte, so the loop makes
     ;; progress and must verify clean. reexec-targets' sequence arm is what
     ;; discriminates on mode; this case is what stops the report guard from
     ;; being widened past it.
     ;;
-    ;; The third check is an ATTRIBUTION check, and the whole-branch review fix
-    ;; wave added it on a measurement rather than on a reading. "ok" and
-    ;; "diagnostic count" are unattributed: they say the machine verified
-    ;; clean, not WHICH diagnostic would have been wrong. Measured at 42
-    ;; mutations, three different Pass 33 mutants redden both of them here with
-    ;; three different diagnostics -- the mode test deleted (zero-progress-cycle
-    ;; on 'seq), node-out-targets' sequence arm deleted (unreachable-node on
-    ;; 'stop), and the sequence-alternative self-comparison
+    ;; The third check is an ATTRIBUTION check. "ok" and "diagnostic count" are
+    ;; unattributed: they say the machine verified clean, not WHICH diagnostic
+    ;; would have been wrong. Three different Pass 33 mutants redden both of
+    ;; them here with three different diagnostics -- the mode test deleted
+    ;; (zero-progress-cycle on 'seq), node-out-targets' sequence arm deleted
+    ;; (unreachable-node on 'stop), and the sequence-alternative self-comparison
     ;; (ambiguous-sequence-prefix) -- so a count of 1 is reached three ways and
-    ;; the mode decision owned no FAIL record of its own. Naming the code that
+    ;; the mode decision would own no FAIL record of its own. Naming the code that
     ;; must be ABSENT splits them: only losing the mode test can put a
     ;; zero-progress-cycle on a machine whose mismatch edge consumes a byte.
     ;; This is the same remedy the pause group's "no unreachable-node" /
@@ -872,29 +851,25 @@
                                  (make-stop-node 'stop #f)
                                  (make-error-node 'reject 'rejected #f)))
                           'invalid-eof-target))))
-    ;; arm 5 -- eof-terminal: the chain is walked THROUGH a sequence node
-    ;; Measured plan defect (brief §6): the literal fixture pointed the
-    ;; sequence node's eof-target at 'start, but the file's `dispatch` helper
-    ;; (line 15) hard-wires 'start's own eof-target to #f, so the walk
-    ;; terminates at 'default-error on its first step and never even revisits
-    ;; a node, let alone cycles -- confirmed by hand-tracing eof-terminal and
-    ;; by the measured Step 7 red not clearing until this fixture changed. A
-    ;; self-targeting eof-target ('seq instead of 'start) makes the sequence
-    ;; node genuinely revisit itself, which is what exercises eof-terminal's
-    ;; new sequence-dispatch-node? branch (arm 5) rather than terminating
-    ;; before ever reaching it.
+    ;; arm 5 -- eof-terminal: the chain is walked THROUGH a sequence node.
+    ;; The sequence node's eof-target is itself, not 'start: the file's
+    ;; `dispatch` helper hard-wires 'start's own eof-target to #f, so a chain
+    ;; through 'start terminates at 'default-error on its first step and never
+    ;; revisits a node, let alone cycles. A self-targeting eof-target makes
+    ;; the sequence node genuinely revisit itself, which is what exercises
+    ;; eof-terminal's sequence-dispatch-node? branch (arm 5) rather than
+    ;; terminating before ever reaching it.
     (harness-case "an eof chain that cycles through a sequence node is an EOF cycle"
       (lambda ()
         (check "eof-zero-progress-cycle"
                (has-code?
                 (make-machine 'eofcyc 'start '() '() '() errs
-                  ;; *** Slice ⓪b: `seq` needs an inbound BYTE case. *** The EOF
-                  ;; walk now starts only from states a parser can be parked on,
-                  ;; and `seq` was reachable from nowhere -- so its self-cycling
-                  ;; eof-target is unreachable and correctly no longer reported.
-                  ;; The case's intent is that a cycle THROUGH A SEQUENCE NODE is
-                  ;; caught, so the sequence node is made reachable rather than
-                  ;; the expectation weakened.
+                  ;; `seq` needs an inbound BYTE case: the EOF walk starts only
+                  ;; from states a parser can be parked on, so without one
+                  ;; `seq`'s self-cycling eof-target is unreachable and
+                  ;; correctly not reported. Byte 7 makes the sequence node
+                  ;; reachable, so what this case catches is a cycle THROUGH A
+                  ;; SEQUENCE NODE.
                   (list (dispatch (list accept-case
                                         (make-byte-case (make-exact-byte-matcher 7)
                                                         (make-edge 'seq 'advance) #f))
@@ -904,19 +879,19 @@
                         (make-error-node 'reject 'rejected #f))
                   'default-eof #f)
                 'eof-zero-progress-cycle))))
-    ;; Second arm-5 witness, added during mutation measurement (Step 11/12):
-    ;; the self-loop fixture above is caught not only by removing arm 5 (the
+    ;; Second arm-5 witness: the self-loop fixture above is caught not only by
+    ;; removing arm 5 (the
     ;; sequence-dispatch-node? branch INSIDE eof-terminal) but also by
     ;; removing arm 7's own OUTER filter disjunct in pass-eof-execution --
     ;; with 'seq excluded from that map, eof-terminal is never even called
     ;; starting from 'seq, so its own inner branch is moot and both mutants
-    ;; produce byte-identical FAIL output on that one case (measured; see the
-    ;; mutation suite's arm 5 pin comment). A genuine two-node cycle entered
+    ;; produce byte-identical FAIL output on that one case (see the mutation
+    ;; suite's arm 5 pin comment). A genuine two-node cycle entered
     ;; from a BYTE-DISPATCH node separates them: 'start's own eof-target
     ;; check (arm 7 never touches byte-dispatch-node? entries) drives the
     ;; walk INTO 'seq, and only arm 5's branch lets the walk continue back
-    ;; out through 'seq's own eof-target to close the cycle. Measured: arm
-    ;; 5's mutant fails this case (the walk reads 'unknown at 'seq and stops
+    ;; out through 'seq's own eof-target to close the cycle. Arm 5's mutant
+    ;; fails this case (the walk reads 'unknown at 'seq and stops
     ;; short of the cycle); arm 7's mutant still finds the cycle via 'start's
     ;; independent check and leaves this case green.
     (harness-case "an eof chain that cycles from a dispatch node through a sequence node's own eof-target is an EOF cycle"
@@ -931,7 +906,7 @@
                         (make-error-node 'reject 'rejected #f))
                   'default-eof #f)
                 'eof-zero-progress-cycle))))
-    ;; arm 6 -- :908, a sequence BYTE edge into a finish terminal
+    ;; arm 6 -- non-eof-into-finish: a sequence BYTE edge into a finish terminal
     (harness-case "a sequence case targeting a finish terminal is non-eof-into-finish"
       (lambda ()
         (check "non-eof-into-finish"
@@ -941,7 +916,8 @@
                                  (make-error-node 'reject 'rejected #f)
                                  (make-finish-node 'done #f)))
                           'non-eof-into-finish))))
-    ;; arm 7 -- :909, the sequence node's own eof chain reaching a stop
+    ;; arm 7 -- eof-reachable-stop: the sequence node's own eof chain reaching
+    ;; a stop
     (harness-case "a sequence eof path reaching a stop terminal is eof-reachable-stop"
       (lambda ()
         (check "eof-reachable-stop"
@@ -951,45 +927,40 @@
                                  (make-stop-node 'stop #f)
                                  (make-error-node 'reject 'rejected #f)))
                           'eof-reachable-stop))))
-    ;; Review fix wave (Critical): arm 3, arm 5, and arm 6 above were each
-    ;; classified SUBSUMED by a whole-FAIL-record subset test alone (a
-    ;; mutant's failure set was a full subset of a sibling's), which AGENTS.md
-    ;; warns reports "separable but deliberately declined" as clean too --
-    ;; count-not-witness is the fix that shape needs, precedented by
-    ;; verify-tests.sps's own "both EOF terminals reported" and "three pairs"
-    ;; checks above. Each case below puts at least TWO independent occurrences
+    ;; Count-don't-witness for arms 3, 5 and 6. Against the arm cases above
+    ;; alone, each arm's mutant has a failure set that is a full subset of a
+    ;; broader sibling's -- which a subset test reports as subsumed even when a
+    ;; better fixture could separate them. This is the same remedy as the
+    ;; "both EOF terminals reported" and "three pairs" checks above. Each case
+    ;; below puts at least TWO independent occurrences
     ;; of one decision in a single machine -- one on a byte-dispatch node
     ;; (which the competing broader mutation ALSO breaks, so the count drops
     ;; by the byte-dispatch contribution too) and one on a sequence node
     ;; reached only through the arm's own mechanism (which only the arm's
     ;; narrower mutation breaks) -- so the two mutations report different
-    ;; "got" values on the same check. Measured directly against both mutants,
-    ;; not predicted; see SchemeMutationSuite.cmake's arms 3/5/6 for the
-    ;; sweep. Slice ③ Task 2 added a THIRD occurrence to the first case below
-    ;; -- 'seq itself, once the REPORT set saw it (§25:1533) -- so that one
-    ;; separates three mutations rather than two; its own table says which.
+    ;; "got" values on the same check; see SchemeMutationSuite.cmake's arms
+    ;; 3/5/6. The first case below carries a THIRD occurrence -- 'seq itself,
+    ;; which the REPORT set includes -- so that one separates three mutations
+    ;; rather than two; its own table says which.
     (harness-case "a byte-dispatch self-loop, a dispatch-through-sequence cycle and the sequence node itself are three zero-progress cycles"
       (lambda ()
-        ;; Count-don't-witness, and Slice ③ makes it four-way. Measured against
-        ;; this one check:
+        ;; Count-don't-witness, four ways. Against this one check:
         ;;   correct code                                       -> 3
         ;;   PASS 5's REPORT guard loses its sequence clause     -> 2
         ;;   reexec-targets loses its sequence arm (arm 3)       -> 1
         ;;   PASS 5's report conditional replaced by (if #f      -> 0
         ;; 'x's case and fallback both reexecute into itself, a decision only
         ;; the last of those touches; 'start -> 'seq -> 'start is the cycle the
-        ;; walk must see THROUGH; and 'seq itself is what Slice ③ added to the
-        ;; REPORTED set.
+        ;; walk must see THROUGH; and 'seq itself is in the REPORTED set.
         (check-equal "zero-progress-cycle count"
                      (length (filter (lambda (c) (eq? c 'zero-progress-cycle))
                                      (codes
                                       (make-machine 'combined3 'x '() '() '() errs
-                                        ;; Byte 1 ADVANCES into 'start, added by
-                                        ;; Slice ③: §16.2:898's gate reports a
-                                        ;; cycle only on a BYTE-REACHABLE node,
-                                        ;; and before this edge 'start and 'seq
-                                        ;; were reachable from nowhere. The
-                                        ;; count was 3 for the wrong reason.
+                                        ;; Byte 1 ADVANCES into 'start: the
+                                        ;; zero-progress gate reports a cycle
+                                        ;; only on a BYTE-REACHABLE node, and
+                                        ;; without this edge 'start and 'seq
+                                        ;; are reachable from nowhere.
                                         (list (make-byte-dispatch-node 'x
                                                 (list (make-byte-case (make-exact-byte-matcher 0)
                                                                       (make-edge 'x 'reexecute) #f)
@@ -1007,7 +978,7 @@
     (harness-case "a byte-dispatch eof self-loop and a two-node dispatch/sequence eof cycle are three eof-zero-progress cycles"
       (lambda ()
         ;; arm 5 (eof-terminal's sequence clause) vs "verify: an eof-target
-        ;; cycle is classified as a finish terminal" (mut19): 'x's own
+        ;; cycle is classified as a finish terminal": 'x's own
         ;; eof-target chain cycles through itself without ever touching a
         ;; sequence node, a decision arm 5 never reaches. 'start <-> 'seq is
         ;; the SAME two-node cycle as arm 5's own "an eof chain that cycles
@@ -1015,21 +986,21 @@
         ;; case above; under correct code BOTH nodes' own eof-target-chain
         ;; walks find the cycle, so this pair alone contributes 2. A
         ;; self-loop entirely at the sequence node (arm 5's OTHER own case,
-        ;; and arm 7's fixture) was tried here first and rejected: it does
-        ;; not separate arm 5 from arm 7, because a walk that starts AND ends
-        ;; at the sequence node without ever passing through a byte-dispatch
-        ;; node is killed identically by either mutation (measured: both
-        ;; reported "got 1" on that design). The 'start/'seq pair is entered
+        ;; and arm 7's fixture) would not do here: it does not separate arm 5
+        ;; from arm 7, because a walk that starts AND ends at the sequence
+        ;; node without ever passing through a byte-dispatch node is killed
+        ;; identically by either mutation (both report "got 1" on that
+        ;; shape). The 'start/'seq pair is entered
         ;; from a byte-dispatch node's own eof-target, which only arm 5's
         ;; inner eof-terminal change touches -- arm 7's outer-filter change
         ;; is irrelevant to a chain that never STARTS at the sequence node.
-        ;; Measured: correct code reports 3; mut19 disables eof-terminal's
-        ;; cycle guard globally, reporting 0; arm 5 still finds 'x's own
-        ;; cycle but every walk that must pass through 'seq now returns
-        ;; 'unknown, reporting 1; arm 7 (measured as a control, not just
-        ;; mut19) still finds 'x's cycle and 'start's own eof-target-chain
-        ;; walk (arm 7 never touches eof-terminal, and 'start stays in the
-        ;; :909 outer filter under arm 7's mutation), losing only 'seq's own
+        ;; Correct code reports 3; the cycle-classification mutant disables
+        ;; eof-terminal's cycle guard globally, reporting 0; arm 5 still finds
+        ;; 'x's own cycle but every walk that must pass through 'seq returns
+        ;; 'unknown, reporting 1; arm 7 still finds 'x's cycle and 'start's
+        ;; own eof-target-chain walk (arm 7 never touches eof-terminal, and
+        ;; 'start stays in the EOF-chain outer filter under arm 7's
+        ;; mutation), losing only 'seq's own
         ;; entry, reporting 2 -- three distinct "got" values, so this check
         ;; also happens to separate arm 5 from arm 7 as a byproduct.
         (check-equal "eof-zero-progress-cycle count"
@@ -1038,15 +1009,14 @@
                                       (make-machine 'combined5 'start '() '() '() errs
                                         (list (make-byte-dispatch-node 'x '()
                                                 (make-edge 'reject 'reexecute) 'x #f)
-                                              ;; *** Slice ⓪b: `x` and `seq` need inbound BYTE
-                                              ;; cases. *** The EOF walk now starts only from
-                                              ;; states a parser can be parked on. `x` was
-                                              ;; reachable from nowhere and `seq` only as an
-                                              ;; eof-target, so neither started a walk and the
-                                              ;; count fell to 1. Both are made byte-reachable,
-                                              ;; which keeps all THREE findings and the case's
-                                              ;; full discriminating power, rather than lowering
-                                              ;; the expectation to match the new rule.
+                                              ;; `x` and `seq` need inbound BYTE cases: the EOF
+                                              ;; walk starts only from states a parser can be
+                                              ;; parked on. Without them `x` is reachable from
+                                              ;; nowhere and `seq` only as an eof-target, so
+                                              ;; neither starts a walk and the count is 1.
+                                              ;; Making both byte-reachable keeps all THREE
+                                              ;; findings and the case's full discriminating
+                                              ;; power.
                                               (make-byte-dispatch-node 'start
                                                 (list accept-case
                                                       (make-byte-case (make-exact-byte-matcher 7)
@@ -1061,20 +1031,20 @@
                      3)))
     (harness-case "a byte case and a sequence case both into a finish terminal are two non-eof-into-finish diagnostics"
       (lambda ()
-        ;; arm 6 (the :908 outer filter's sequence disjunct) vs "verify: a
-        ;; byte edge into a finish terminal is accepted" (mut17): 's0's own
-        ;; byte case into 'done is the decision mut17's own case above
-        ;; witnesses by existence and arm 6 never touches (byte-dispatch
-        ;; nodes stay in the :908 filter under arm 6's mutation); 'seq's own
-        ;; case into 'done is arm 6's own case above. Correct code reports 2;
-        ;; mut17 disables the shared finish-check for every node kind,
+        ;; arm 6 (the non-eof-into-finish outer filter's sequence disjunct)
+        ;; vs "verify: a byte edge into a finish terminal is accepted": 's0's
+        ;; own byte case into 'done is the decision that mutation's own case
+        ;; above witnesses by existence and arm 6 never touches (byte-dispatch
+        ;; nodes stay in the filter under arm 6's mutation); 'seq's own case
+        ;; into 'done is arm 6's own case above. Correct code reports 2; that
+        ;; mutation disables the shared finish-check for every node kind,
         ;; reporting 0; arm 6 narrows the filter to byte-dispatch only, so
-        ;; 's0 still reports but 'seq no longer does, reporting 1.
+        ;; 's0 still reports but 'seq does not, reporting 1.
         ;;
-        ;; Measured NOT to separate arm 6 from "verify: a sequence node's
+        ;; This does NOT separate arm 6 from "verify: a sequence node's
         ;; case and mismatch targets are not out-targets" (arm 1): arm 1
         ;; empties node-out-targets for every sequence node, which starves
-        ;; THIS check's :908 loop identically to arm 6's own narrower filter
+        ;; THIS check's loop identically to arm 6's own narrower filter
         ;; -- both report 1 here, and every other record this case's fixture
         ;; could produce is one arm 6 never reaches either (arm 1's own extra
         ;; failures -- the well-formed-machine, both missing-target, and the
@@ -1088,15 +1058,13 @@
                                       (make-machine 'combined6 's0 '() '() '() errs
                                         (list (make-byte-dispatch-node 's0
                                                 (list (make-byte-case (make-exact-byte-matcher 1) (make-edge 'done 'advance) #f)
-                                                      ;; *** Slice ⓪b: `seq` needs its own inbound
-                                                      ;; byte case. *** §16.2:908 is now gated on
-                                                      ;; byte-reachability, and `seq` was reachable
-                                                      ;; from nowhere -- so its edge into `done` is
-                                                      ;; untakeable and correctly no longer reported.
-                                                      ;; This case's INTENT is two findings from two
-                                                      ;; different source nodes, and that intent is
-                                                      ;; preserved by making the second source real
-                                                      ;; rather than by lowering the expected count.
+                                                      ;; `seq` needs its own inbound byte case:
+                                                      ;; non-eof-into-finish is gated on
+                                                      ;; byte-reachability, so without one `seq`'s
+                                                      ;; edge into `done` is untakeable and correctly
+                                                      ;; not reported. This case's INTENT is two
+                                                      ;; findings from two different source nodes, so
+                                                      ;; the second source must be real.
                                                       (make-byte-case (make-exact-byte-matcher 2) (make-edge 'seq 'advance) #f))
                                                 (make-edge 'reject 'reexecute) #f #f)
                                               (seq-node (one-alt '(1 2) 'done) (make-edge 'reject 'reexecute) #f)
@@ -1105,13 +1073,12 @@
                                         'default-eof #f))))
                      2)))))
 
-;; Milestone 3 Slice ③ Task 1: §16.2:894 sequence ambiguity. One alternative
-;; being a terminal prefix of another is UNREPRESENTABLE (decision 0015 point
-;; 2: a prefix state has no "accept here" slot), so it is rejected here rather
-;; than left to the normalizer's internal guard. Duplicate alternatives are the
-;; maximal case of the same relation -- `AB` is a terminal prefix of `AB` -- so
-;; both shapes carry the one code design §4.5 allows. Reported once per
-;; colliding PAIR, like pass-overlap (§16.4:937-943).
+;; Sequence ambiguity. One alternative being a terminal prefix of another is
+;; UNREPRESENTABLE (a prefix state has no "accept here" slot), so it is
+;; rejected here rather than left to the normalizer's internal guard. Duplicate
+;; alternatives are the maximal case of the same relation -- `AB` is a terminal
+;; prefix of `AB` -- so both shapes carry the one code. Reported once per
+;; colliding PAIR, like pass-overlap.
 (define (amb-machine name alts extra-nodes)
   (make-machine name 'seq '() '() '() errs
     (append (list (make-sequence-dispatch-node 'seq
@@ -1148,8 +1115,8 @@
     ;; The count fixtures. SUMMED over both declaration orders, deliberately:
     ;; a short-first list is caught by a one-directional test as well as by a
     ;; correct one, so a per-ordering check leaves the one-directional
-    ;; mutation's whole failure set inside the never-run mutation's -- the
-    ;; subsumed shape AGENTS.md names. The sum separates them (6 / 3 / 0).
+    ;; mutation's whole failure set inside the never-run mutation's -- a
+    ;; subsumed shape. The sum separates them (6 / 3 / 0).
     (harness-case "the prefix test asks both directions, counted over both declaration orders"
       (lambda ()
         (check-equal "ambiguity count over both orderings"
@@ -1157,9 +1124,9 @@
                         (ambiguity-count nested-long-first))
                      6)))
     ;; The over-rejection direction, which nothing else in this file tests: a
-    ;; SHARED first byte is not ambiguity (§10.6:544 permits shared nonterminal
-    ;; prefixes; the trie merges them), and a check that cannot tell the two
-    ;; apart would reject every branching machine this slice ships.
+    ;; SHARED first byte is not ambiguity (shared nonterminal prefixes are
+    ;; permitted; the trie merges them), and a check that cannot tell the two
+    ;; apart would reject every branching sequence machine.
     (harness-case "alternatives that merely share a prefix are not ambiguous"
       (lambda ()
         (check-equal "ambiguity count"
@@ -1186,19 +1153,14 @@
                      0)))))
 
 
-;; Milestone 4 Slice ② task 2: the eof-terminal rewrite (§4.4, decision 0021).
-;;
-;; *** These cases could not have been written before task 1. *** Every kind
-;; shipped before this slice is SINGLE-successor, so none can witness a join, a
-;; re-converging diamond, or the completed-set. That is why tasks 1 and 2 are
-;; swapped relative to the plan, which ordered the rewrite first "so its own
-;; tests are written against shipped kinds".
+;; eof-terminal over multi-successor zero-width nodes. Only a multi-successor
+;; kind such as a field branch can witness a join, a re-converging diamond, or
+;; the completed-set; a SINGLE-successor kind cannot.
 ;;
 ;; Each machine routes its entry dispatch's eof-target into a field branch, so
-;; the :909 walk reaches the multi-successor node. The field kinds are not yet
-;; taught to the other passes (that is task 3), so these machines carry unrelated
-;; diagnostics too -- every assertion is therefore about the PRESENCE or ABSENCE
-;; of one code, never about a total count.
+;; the EOF-chain walk reaches the multi-successor node. These machines declare
+;; no fields and may carry unrelated diagnostics, so every assertion is about
+;; the PRESENCE or ABSENCE of one code, never about a total count.
 (define (eof-into fa-nodes)
   (make-machine 'm 'start '() '() '() (list eof-decl rej-decl)
     (append (list (make-byte-dispatch-node 'start
@@ -1221,10 +1183,9 @@
           (check "no reachable stop" (not (memq 'eof-reachable-stop cs))))))
     (harness-case "a DIAMOND that re-converges is not a cycle"
       (lambda ()
-        ;; The defect the rejected algorithm has: one shared `seen` that
-        ;; tolerates re-visits reports 'cycle for a diamond that merely
-        ;; re-converges. Both arms reach the SAME finish node here, so the walk
-        ;; meets `f1` twice.
+        ;; A walk with one shared `seen` across arms reports 'cycle for a
+        ;; diamond that merely re-converges. Both arms reach the SAME finish
+        ;; node here, so the walk meets `f1` twice.
         (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'a 'b #f)
                                          (make-field-action-node 'a 'clear '(count) 'f1 #f #f)
                                          (make-field-action-node 'b 'clear '(count) 'f1 #f #f)
@@ -1240,8 +1201,8 @@
           (check "cycle" (memq 'eof-zero-progress-cycle cs)))))
     (harness-case "cycle outranks eof-reachable-stop when the arms differ"
       (lambda ()
-        ;; The ONE relation decision 0021 item 1 pins in the source, and the only
-        ;; place two verdicts can now meet.
+        ;; The ONE verdict ordering pinned in the source, and the only place two
+        ;; verdicts can meet.
         (let ((cs (codes (eof-into (list (make-field-branch-node 'br 'zero '(count) 'stop 'loop #f)
                                          (make-field-action-node 'loop 'clear '(count) 'br #f #f))))))
           (check "cycle" (memq 'eof-zero-progress-cycle cs))
@@ -1273,20 +1234,18 @@
           (check "reachable stop" (memq 'eof-reachable-stop cs)))))))
 
 
-;; Milestone 4 Slice ② task 3: the verifier census. Every site that switches on
-;; node kind and must learn the two zero-width kinds.
+;; The verifier census for the two zero-width kinds: every site that switches
+;; on node kind and must handle them.
 ;;
-;; *** Census row 14 (D4(d)) is DELIBERATELY NOT EXTENDED, and the last case
-;; here is what holds that decision. *** The design prescribed a
-;; byte-reachability-gated sibling block "same shape" as the pause one. Written
-;; that way it turns `dispatch --advance--> field-action --next--> stop` into a
-;; false eof-reachable-stop. A pause IS an EOF start -- parser-feed-op!'s pause
-;; arm commits `current` PAST it, so a later finish begins at the continuation --
+;; *** The byte-reachable-pause stop check is DELIBERATELY NOT EXTENDED to
+;; zero-width nodes, and the last case here is what holds that decision. *** A
+;; byte-reachability-gated sibling block "same shape" as the pause one would
+;; turn `dispatch --advance--> field-action --next--> stop` into a false
+;; eof-reachable-stop. A pause IS an EOF start -- parser-feed-op!'s pause arm
+;; commits `current` PAST it, so a later finish begins at the continuation --
 ;; whereas a zero-width node never becomes `current`, because the dispatch arm
-;; returns need-input without moving it. Row 10's eof-terminal extension plus
-;; the shipped pause block already cover every real EOF start. The one stated,
-;; witnessed gap is "the machine ENTRY is a zero-width node", which no shipped
-;; fixture can reach today.
+;; returns need-input without moving it. eof-terminal's zero-width arms plus
+;; the pause block already cover every real EOF start.
 (define (fields1) (list (make-uint-field 'count 8 0 #f)))
 (define (zw-machine nodes entry)
   (make-machine 'm entry (fields1) '() '() (list eof-decl rej-decl) nodes 'default-eof #f))
@@ -1297,7 +1256,7 @@
       (lambda ()
         ;; The failure this closes: without BOTH the walk and the REPORT set,
         ;; a `store`-into-itself machine verifies clean and then hangs in both
-        ;; lanes. The walk alone is the half-fix M3 Slice ② shipped.
+        ;; lanes. The walk alone is a half-fix.
         (let ((cs (codes (zw-machine
                           (list (make-field-action-node 'loop 'clear '(count) 'loop #f #f)
                                 (make-stop-node 'stop #f)
@@ -1326,10 +1285,10 @@
                                 (make-error-node 'oops 'rejected #f))
                           'act))))
           (check "nothing unreachable" (not (memq 'unreachable-node cs))))
-        ;; *** A SECOND MACHINE, because the narrowing rescued the first one
-        ;; from the mutant that witnessed this arm. *** `act` above is the
-        ;; ENTRY, so decision 0031 makes it a parked node, and `eof-step` reads
-        ;; `zero-width-edges` DIRECTLY rather than through `node-out-targets` --
+        ;; *** A SECOND MACHINE, because the first one cannot witness this
+        ;; arm. *** `act` above is the ENTRY, which makes it a parked node, and
+        ;; `eof-step` reads `zero-width-edges` DIRECTLY rather than through
+        ;; `node-out-targets` --
         ;; the entry's EOF walk therefore visits `after` and `oops` even when
         ;; the arm under test yields nothing. Here `act` is reached by a BYTE
         ;; edge from the entry instead, so nothing is parked but the entry
@@ -1354,10 +1313,10 @@
                      '())))
     (harness-case "a byte-reachable zero-width node into a finish is non-eof-into-finish"
       (lambda ()
-        ;; §16.2:908 forbids non-EOF control flow into a finish terminal, and a
-        ;; byte path that runs dispatch -> field-action -> finish is exactly
-        ;; that. The shipped :908 check cannot see it: it filters on dispatch
-        ;; kinds, so the finish sits one hop further than it looks.
+        ;; Non-EOF control flow into a finish terminal is forbidden, and a byte
+        ;; path that runs dispatch -> field-action -> finish is exactly that. A
+        ;; check filtering on dispatch kinds alone cannot see it: the finish
+        ;; sits one hop further than it looks.
         (let ((cs (codes (zw-machine
                           (list (make-byte-dispatch-node 'start
                                   (list (make-byte-case (make-exact-byte-matcher 0)
@@ -1375,8 +1334,7 @@
         ;; member is the byte-dispatch node, which is in the report set either
         ;; way -- so narrowing the report set leaves this diagnostic standing,
         ;; while narrowing the walk removes it. Without this case the two mutants
-        ;; emit identical records, which is the half-fix M3 Slice ② shipped and
-        ;; Slice ③ closed.
+        ;; emit identical records.
         (let ((ds (verification-diagnostics
                    (verify-machine
                     (zw-machine
@@ -1394,9 +1352,9 @@
                                            ds)))))))
     (harness-case "an EOF-only-reachable zero-width node may continue into a finish"
       (lambda ()
-        ;; Decision 0011 for the pause kind, applied here: §16.2:908 forbids
-        ;; NON-EOF control flow into a finish, so a zero-width node reached only
-        ;; along an EOF path legally continues into one. This is what the
+        ;; The pause kind's rule, applied here: only NON-EOF control flow into a
+        ;; finish is forbidden, so a zero-width node reached only along an EOF
+        ;; path legally continues into one. This is what the
         ;; byte-reachability GATE buys -- without the gate the check fires on
         ;; every zero-width node regardless of how it is reached, and this
         ;; machine is rejected for a defect it does not have.
@@ -1413,11 +1371,11 @@
           (check "no non-eof-into-finish" (not (memq 'non-eof-into-finish cs))))))
     (harness-case "a byte path through a zero-width node into a STOP verifies clean"
       (lambda ()
-        ;; *** The case that holds row 14's drop. *** Written "same shape" as the
-        ;; pause block, the prescribed sibling would report eof-reachable-stop
-        ;; here -- on a diagnostic and message about EOF, for a machine whose
-        ;; only path to that stop is a byte path. If a later slice adds that
-        ;; block, this case fails, which is the point.
+        ;; *** The case that holds the decision not to extend the pause stop
+        ;; check. *** A sibling block written "same shape" as the pause one
+        ;; would report eof-reachable-stop here -- a diagnostic and message
+        ;; about EOF, for a machine whose only path to that stop is a byte
+        ;; path. If that block is added, this case fails, which is the point.
         (let ((cs (codes (zw-machine
                           (list (make-byte-dispatch-node 'start
                                   (list (make-byte-case (make-exact-byte-matcher 0)
@@ -1432,10 +1390,9 @@
           (check "no non-eof-into-finish" (not (memq 'non-eof-into-finish cs))))))))
 
 
-;; Milestone 4 Slice ② task 4: pass-fields' OPERAND half (§16.3:924 item 6,
-;; decision 0020 item 3). Everything here needs a SECOND object -- the field
-;; declaration -- which is exactly why none of it is a constructor contract, and
-;; why the constructor accepts every one of these nodes.
+;; pass-fields' OPERAND half. Everything here needs a SECOND object -- the
+;; field declaration -- which is exactly why none of it is a constructor
+;; contract, and why the constructor accepts every one of these nodes.
 (define (operand-machine node)
   (make-machine 'm 'act (list (make-uint-field 'count 8 0 #f)) '() '()
                 (list eof-decl rej-decl)
@@ -1455,8 +1412,8 @@
                      0)))
     (harness-case "wrong arity is invalid-field-operand"
       (lambda ()
-        ;; The check the CONSTRUCTOR deliberately does not make -- 0020 item 2:
-        ;; nothing can be read out of `arguments` before arity is known.
+        ;; The check the CONSTRUCTOR deliberately does not make: nothing can be
+        ;; read out of `arguments` before arity is known.
         (check-equal "too few" (length (operand-codes
                                         (make-field-action-node 'act 'store '(count) 'next #f #f)))
                      1)
@@ -1497,9 +1454,9 @@
           (check-equal "legal for the wide field" (length cs) 0))))
     (harness-case "low > high for range is invalid-field-operand"
       (lambda ()
-        ;; Decision 0020 item 2 names this as the consequence that will look
-        ;; wrong to a reader of 0017. The constructor accepts it -- asserted in
-        ;; ir-tests.sps -- and the verifier is where it is caught.
+        ;; This looks like a constructor contract and is not: the constructor
+        ;; accepts it -- asserted in ir-tests.sps -- and the verifier is where it
+        ;; is caught.
         (check-equal "one" (length (operand-codes
                                     (make-field-branch-node 'act 'range '(count 9 2) 'next 'next #f)))
                      1)))
@@ -1535,8 +1492,8 @@
                       (mask-none (count))))
           (check-equal "all seven predicates" seen 7))))))
 
-;; Milestone 13 (decision 0047 item 4): a settable field may not be a
-;; counted-consume counter -- its embedder-chosen initial would falsify the
+;; A settable field may not be a counted-consume counter -- its
+;; embedder-chosen initial would falsify the
 ;; EOF-execution pass's reasoning that an entry counter holds its declared
 ;; initial. A settable field used as a field-branch SELECTOR stays legal.
 (define (counter-machine field)
@@ -1567,16 +1524,14 @@
                  (not (memq 'settable-consume-counter (codes m)))))))))
 
 
-;; Milestone 4 Slice ③ task 2: the verifier census for the INPUT-READING kind.
+;; The verifier census for the INPUT-READING kind (integer-accumulate).
 ;;
-;; *** The two self-cycles need SEPARATE fixtures. *** Design §8 says only
-;; `nondigit-edge` can be `reexecute` "since the overflow edge is non-consuming
-;; but terminal-directed" -- it is not, and §8 contradicts itself sixteen lines
-;; later. §12.7:772 makes the overflow non-consuming and §15:870 leaves the field
-;; unchanged, so an `overflow-error` naming its own node re-reads the same byte
-;; forever with no cycle guard in either runtime loop. Measured before this was
-;; written: cutting Slice ②'s field-action arm to one disjunct makes a
-;; self-targeting error edge verify with ZERO diagnostics.
+;; *** The two self-cycles need SEPARATE fixtures. *** `nondigit-edge` is not
+;; the only edge that can loop without consuming: overflow is non-consuming and
+;; leaves the field unchanged, so an `overflow-error` naming its own node
+;; re-reads the same byte forever with no cycle guard in either runtime loop. A
+;; walk that takes only the nondigit disjunct verifies a self-targeting overflow
+;; edge with ZERO diagnostics.
 ;;
 ;; Neither fixture distinguishes the other's mutant, which is exactly why there
 ;; are two: a walk that takes only the nondigit disjunct passes the first and
@@ -1599,8 +1554,8 @@
           (check "zero-progress-cycle" (memq 'zero-progress-cycle cs)))))
     (harness-case "an accumulate whose OVERFLOW edge targets itself is a zero-progress cycle"
       (lambda ()
-        ;; The fixture design §8 would have shipped without. The overflow edge
-        ;; consumes nothing, so this loops forever -- and a walk taking only the
+        ;; The overflow edge consumes nothing, so this loops forever -- and a
+        ;; walk taking only the
         ;; nondigit disjunct reports NOTHING here while passing the case above.
         (let ((cs (codes (acc-machine
                           (list (make-integer-accumulate-node 'acc 'count 10 'stop
@@ -1623,7 +1578,7 @@
           (check "no cycle" (not (memq 'zero-progress-cycle cs))))))
     (harness-case "the DIGIT edge self-targeting is not a cycle -- it advances"
       (lambda ()
-        ;; §10.6:566: the digit edge always advances, so an accumulate node
+        ;; The digit edge always advances, so an accumulate node
         ;; looping on digits makes progress and must not be reported. The case
         ;; above already has digit-target = acc; this states it as the decision
         ;; it is, so a walk that wrongly added the digit disjunct fails here.
@@ -1647,8 +1602,8 @@
           (check "nothing unreachable" (not (memq 'unreachable-node cs))))))
     (harness-case "an accumulate naming no declared field is invalid-field-operand"
       (lambda ()
-        ;; D3's sibling arm. Reported under the NODE's name, matching the
-        ;; operand walk's own convention.
+        ;; Reported under the NODE's name, matching the operand walk's own
+        ;; convention.
         (let ((ds (verification-diagnostics
                    (verify-machine
                     (acc-machine
@@ -1676,18 +1631,18 @@
                           'acc))))
           (check "no operand fault" (not (memq 'invalid-field-operand cs))))))))
 
-;; *** Whole-branch review, 2026-09-03: THREE kind filters Slice ③ did not widen.
-;; *** The slice taught `node-eof-target` and `node-out-targets` about the
-;; accumulate kind and stopped there. `eof-terminal`'s `classify` and both of
-;; `pass-eof-execution`'s filters still enumerated their kinds by hand, so an
-;; accumulate node was invisible to all three -- and every fixture above misses
-;; it by construction, because each declares `eof-target #f` and makes `acc` the
-;; entry, so no EOF chain in this file ever walks into one.
+;; *** THREE kind filters beyond the shared accessors. *** Teaching
+;; `node-eof-target` and `node-out-targets` about the accumulate kind is not
+;; enough: `eof-terminal`'s `classify` and both of `pass-eof-execution`'s
+;; filters enumerate their kinds by hand, so a kind missing from them is
+;; invisible to all three -- and every fixture above misses that by
+;; construction, because each declares `eof-target #f` and makes `acc` the
+;; entry, so no EOF chain in those cases walks into one.
 ;;
-;; This is the milestone's own lesson arriving a third time: a sweep re-judges
-;; the pins that exist and cannot notice a decision no pin names. The group below
-;; is one case per filter, and each is a machine both executors already ran
-;; correctly while the verifier either raised or waved it through.
+;; A pin sweep re-judges the pins that exist and cannot notice a decision no
+;; pin names. The group below is one case per filter, each a machine both
+;; executors run correctly and which a filter missing the kind would make the
+;; verifier either raise on or wave through.
 (define (acc-eof-machine acc-eof digit-target extra-nodes)
   ;; The entry dispatch declares NO eof-target, so the accumulate node's own is
   ;; the only one in the machine -- which is what makes these cases about the
@@ -1710,10 +1665,10 @@
   (lambda ()
     (harness-case "an EOF chain may reach an accumulate node at all"
       (lambda ()
-        ;; The `classify` arm. Before it, this RAISED out of verification --
-        ;; `verify-machine` never returned, so the machine had no verdict rather
-        ;; than a bad one, and `compile-machine` raised with it. Asserted as a
-        ;; clean verdict because the machine IS legal: both lanes already ran it.
+        ;; The `classify` arm. Without it, this RAISES out of verification --
+        ;; `verify-machine` never returns, so the machine has no verdict rather
+        ;; than a bad one, and `compile-machine` raises with it. Asserted as a
+        ;; clean verdict because the machine IS legal: both lanes run it.
         (let* ((m (acc-machine
                    (list (make-byte-dispatch-node 'start
                            (list (make-byte-case (make-exact-byte-matcher 35)
@@ -1731,10 +1686,10 @@
           (check-equal "with no diagnostics" (length (verification-diagnostics v)) 0))))
     (harness-case "an accumulate whose own EOF target is itself is an EOF zero-progress cycle"
       (lambda ()
-        ;; §16.2:909. This is the worst of the three: `parser-finish-op!` says in
-        ;; its own comment that it carries no local cycle guard because it relies
-        ;; on this check, so before the fix this machine verified with ZERO
-        ;; diagnostics and then looped forever in BOTH executors.
+        ;; This is the worst of the three: `parser-finish-op!` says in its own
+        ;; comment that it carries no local cycle guard because it relies on
+        ;; this check, so without it this machine verifies with ZERO diagnostics
+        ;; and then loops forever in BOTH executors.
         (let ((cs (codes (acc-eof-machine 'acc 'acc '()))))
           (check "eof-zero-progress-cycle" (memq 'eof-zero-progress-cycle cs)))))
     (harness-case "an accumulate whose own EOF chain reaches a stop terminal is rejected"
@@ -1745,35 +1700,29 @@
           (check "eof-reachable-stop" (memq 'eof-reachable-stop cs)))))
     (harness-case "an accumulate BYTE edge into a finish terminal is rejected"
       (lambda ()
-        ;; §16.2:908, and the third filter. `node-out-targets` already yielded
-        ;; the accumulate node's three byte out-targets; nothing looked at them.
-        ;; The digit target is used here because it is the arm a digit takes on
+        ;; The third filter. `node-out-targets` yields the accumulate node's
+        ;; three byte out-targets; this filter is what inspects them. The digit
+        ;; target is used here because it is the arm a digit takes on
         ;; every accepted byte -- the least exotic of the three.
         (let ((cs (codes (acc-eof-machine #f 'fin (list (make-finish-node 'fin #f))))))
           (check "non-eof-into-finish" (memq 'non-eof-into-finish cs)))))))
 
-;; Milestone 5 Slice ⓪ task 1: the site that reports an EOF zero-progress cycle
-;; for a PAUSE continuation.
+;; The site that reports an EOF zero-progress cycle for a PAUSE continuation.
 ;;
-;; *** Measured before this group existed: deleting that site's `((cycle) ...)`
-;; clause left every runnable program in the tree byte-identical. *** It was dead
-;; in the suite while being live in the code -- the only site that can see a
-;; cycle which BEGINS at a pause continuation and involves no dispatch
-;; eof-target at all. The other `eof-zero-progress-cycle` site attributes such a
+;; It is the only site that can see a cycle which BEGINS at a pause
+;; continuation and involves no dispatch eof-target at all; without this group,
+;; deleting its `((cycle) ...)` clause leaves every other program in the tree
+;; byte-identical. The other `eof-zero-progress-cycle` site attributes such a
 ;; cycle to a DISPATCH node; this one attributes it to the pause.
 ;;
 ;; That matters beyond bookkeeping: `parser-finish-op!` records in its own
 ;; comment that it carries no local cycle guard because it relies on these
 ;; checks. A machine of this shape verifying clean is a machine that loops
-;; forever in both executors -- the same consequence Milestone 4 Slice ③'s
-;; second Critical had.
+;; forever in both executors.
 ;;
-;; The assertion is written on the PAIR (code, node-kind), not on the count.
-;; Four diagnostics are emitted today, and Slice ⓪b may reduce that: §16.4's
-;; one-finding-per-decision is an open question (the §16.2:908 sites emit two or
-;; three findings for one decision, and this pass may follow). The pair
-;; `eof-zero-progress-cycle` AT A PAUSE NODE is what only this site can produce,
-;; and it survives any de-duplication ⓪b chooses.
+;; The assertion is written on the PAIR (code, node-kind), not on the count, so
+;; it survives any de-duplication of findings per decision: the pair
+;; `eof-zero-progress-cycle` AT A PAUSE NODE is what only this site can produce.
 (define (pause-cycle-machine)
   ;; entry --advance--> p (pause) -> q (pause) -> p, and the ENTRY's own eof
   ;; route is a finish, so the dispatch arm of this check has nothing to say
@@ -1793,8 +1742,8 @@
   (lambda ()
     (harness-case "the machine is rejected"
       (lambda ()
-        ;; Stated separately so that a later slice making this shape UNBUILDABLE
-        ;; fails here and says so, rather than silently emptying the case below.
+        ;; Stated separately so that a change making this shape UNBUILDABLE fails
+        ;; here and says so, rather than silently emptying the case below.
         (let ((v (verify-machine (pause-cycle-machine))))
           (check "rejected" (not (verification-ok? v)))
           (check "some diagnostic" (> (length (verification-diagnostics v)) 0)))))
@@ -1822,25 +1771,17 @@
                                                 'eof-zero-progress-cycle))
                                          ds))))))))))
 
-;; Milestone 5 Slice ⓪b task 2: §16.2:908 is a rule about BYTE-REACHABILITY, and
-;; the shipped verifier states it two ways that contradict each other.
+;; non-eof-into-finish is a rule about BYTE-REACHABILITY, for every kind. A node
+;; reachable ONLY as an eof-target carries byte edges no byte can traverse, so
+;; its edge into a finish is untakeable and is accepted, whatever its kind.
 ;;
-;; The check lives at three sites under two gating rules -- one unconditional,
-;; two gated on byte-reachability. So a node reachable ONLY as an eof-target is
-;; accepted when it is a pause, a field-action or a field-branch, and rejected
-;; when it is a byte-dispatch, a sequence-dispatch or an integer-accumulate. The
-;; byte edge is untakeable in all six.
+;; The ungated reading is wrong: the machine it refuses is
+;; `make-pause-machine` -- the canonical legal shape, an EOF-only pause
+;; continuing into a finish node, named in that fixture's own header.
 ;;
-;; *** The gated reading is the correct one, and the evidence runs both ways. ***
-;; Applying the unconditional reading uniformly breaks five shipped programs, and
-;; the machine it refuses is `make-pause-machine` -- decision 0011's canonical
-;; legal shape, an EOF-only pause continuing into a finish node, named in that
-;; fixture's own header. The rule that rejects the fixture 0011 was written to
-;; permit is the wrong rule.
-;;
-;; Decision 0021 item 5 split the kinds by "reads input" versus "zero-width", on
-;; the reasoning that an input-reading node is always on the feed path. These
-;; sixteen machines are the counterexample: all four input-reading kinds can be
+;; Splitting the kinds by "reads input" versus "zero-width", on the reasoning
+;; that an input-reading node is always on the feed path, is wrong too. These
+;; sixteen machines are the counterexample: every input-reading kind can be
 ;; EOF-only-reachable.
 (define (t2-hop kind)
   ;; The offender: a node of `kind` carrying a BYTE edge into the finish `fin`.
@@ -1857,15 +1798,15 @@
     ((pause) (make-pause-node 'hop 'fin #f))
     ((field-action) (make-field-action-node 'hop 'clear '(n) 'fin #f #f))
     ((field-branch) (make-field-branch-node 'hop 'zero '(n) 'fin 'rej #f))
-    ;; Milestone 5 Slice ②'s tenth kind. Its PAUSE CONTINUATION is the error
-    ;; node and not the stop: a byte-reachable callback is a parked state whose
-    ;; EOF walk starts on that one edge, so a stop there is a §16.2:909 finding
-    ;; and this row would stop being about §16.2:908. Found by building it.
+    ;; The callback's PAUSE CONTINUATION is the error node and not the stop: a
+    ;; byte-reachable callback is a parked state whose EOF walk starts on that
+    ;; one edge, so a stop there is an eof-reachable-stop finding and this row
+    ;; would stop being about non-eof-into-finish.
     ((callback) (make-callback-node 'hop 'cb 'fin '() 'rej #f))
-    ;; Milestone 6 Slice ①'s thirteenth kind. A #f eof-target keeps `hop` out of
-    ;; the parked set, and in the eof-only variant the entry's walk classifies
-    ;; it as the join of default-error and finish -- tier 0 -- so the row still
-    ;; isolates §16.2:908 (design §4.10).
+    ;; A #f eof-target keeps the counted consume out of the parked set, and in
+    ;; the eof-only variant the entry's walk classifies it as the join of
+    ;; default-error and finish -- tier 0 -- so the row still isolates
+    ;; non-eof-into-finish.
     ((counted-consume) (make-counted-consume-node 'hop 'n 'fin #f #f))
     (else (assertion-violation 't2-hop "no such kind" kind))))
 
@@ -1874,8 +1815,8 @@
   ;; incidental unreachable-node muddies the record.
   ;; The callback declaration is present for EVERY kind, not only the callback
   ;; one: a declaration no node invokes is not a diagnostic (only a SPAN-kind
-  ;; one is, §16.2's unreferenced clause), and a table that varied per kind
-  ;; would make the six older rows compare against a different machine.
+  ;; one is), and a table that varied per kind would make the other rows
+  ;; compare against a different machine.
   (make-machine 'x 'start (list (make-uint-field 'n 8 0 #f))
                 (list (make-callback-declaration 'cb 'event #t '() #f #f)) '()
                 (list eof-decl rej-decl)
@@ -1889,30 +1830,30 @@
                       (make-stop-node 'stop #f) (make-error-node 'rej 'rejected #f))
                 'default-eof #f))
 
-;; *** A HAND-WRITTEN PER-KIND CENSUS, and Slice ②'s reconciliation found it.
-;; *** It is derived from nothing, so a new kind joins it only because someone
-;; remembers -- the exact shape three Milestone 4 Slice ③ defects had. The
-;; slice's own plan listed the per-kind sites in `src/` and this one is in
-;; `test/`, which is why it was missed there and is recorded here.
+;; *** A HAND-WRITTEN PER-KIND CENSUS. *** It is derived from nothing, so a new
+;; kind joins it only because someone remembers. When listing the per-kind
+;; sites a new node kind must reach, search `test/` as well as `src/`: this is
+;; one of the `test/` sites.
 (define t2-kinds
   '(byte-dispatch sequence-dispatch integer-accumulate pause field-action
     field-branch callback counted-consume))
 
 ;; *** THE TWO SPAN KINDS ARE EXCLUDED, and the reason is a property rather than
-;; a fixture problem. *** This row isolates §16.2:908 -- a byte edge into a
-;; finish terminal -- by placing one node of each kind with such an edge and
-;; asserting the verdict is that finding and nothing else. Neither span kind can
-;; sit here without a SECOND finding that is not §16.2:908's:
+;; a fixture problem. *** This row isolates non-eof-into-finish -- a byte edge
+;; into a finish terminal -- by placing one node of each kind with such an edge
+;; and asserting the verdict is that finding and nothing else. Neither span kind
+;; can sit here without a SECOND, unrelated finding:
 ;;
 ;;   - a span START whose byte edge reaches `fin` carries the span it just
-;;     opened into a successful terminal, which is §16.2:907 and decision 0029
-;;     item 4. There is nowhere to close it: the edge under test is the one that
-;;     reaches `fin`, so any closing node would have to sit on it.
-;;   - a span END reached with nothing open is `unmatched end`, §16.2:899's
-;;     fourth rejection, whatever its successor is.
+;;     opened into a successful terminal, which the span rules reject. There is
+;;     nowhere to close it: the edge under test is the one that reaches `fin`,
+;;     so any closing node would have to sit on it.
+;;   - a span END reached with nothing open is an unmatched end, whatever its
+;;     successor is.
 ;;
-;; So the exclusion is derived, not convenient, and the §16.2:908 verdict for
-;; both kinds is asserted where it CAN be isolated: the kind x position matrix's
+;; So the exclusion is derived, not convenient, and the non-eof-into-finish
+;; verdict for both kinds is asserted where it CAN be isolated: the kind x
+;; position matrix's
 ;; `finish` column, where every position is driven for every kind and the
 ;; expectation carries the span rules explicitly.
 
@@ -1920,25 +1861,20 @@
   (lambda ()
     (harness-case "an EOF-only-reachable byte edge into a finish is accepted"
       (lambda ()
-        ;; The half that fails today for the four input-reading kinds. The edge
-        ;; is untakeable: once an execution takes an eof-target it can never feed
-        ;; again, so no byte ever traverses it.
+        ;; The EOF-only half. The edge is untakeable: once an execution takes an
+        ;; eof-target it can never feed again, so no byte ever traverses it.
         ;;
-        ;; *** RE-BASELINED by Milestone 7 Slice ⓪ (decision 0031 item 5), and
-        ;; the property this case owns is unchanged. *** §16.2:908 is what it
-        ;; asserts -- no kind reports `non-eof-into-finish` for an edge no byte
-        ;; can traverse -- and that is now its own check, total over `t2-kinds`
-        ;; so it cannot pass by not running. What moved is a SECOND fact about
-        ;; the same sixteen machines: `pass-reachability` now walks the
+        ;; The property this case owns -- no kind reports `non-eof-into-finish`
+        ;; for an edge no byte can traverse -- is its own check, total over
+        ;; `t2-kinds` so it cannot pass by not running. The third check is a
+        ;; SECOND fact about the same machines: `pass-reachability` walks the
         ;; occupiable relation, so for the three kinds whose byte edges are dead
         ;; at EOF -- byte-dispatch, sequence-dispatch, integer-accumulate, whose
         ;; `hop` carries no EOF route of its own and therefore no EOF successor
-        ;; -- `fin` sits behind that dead edge and is a dead node under
-        ;; §16.2:897 (0031 item 2; 0023's second Consequence, amended). The
+        ;; -- `fin` sits behind that dead edge and is an unreachable node. The
         ;; other five keep `fin` occupiable: a pause, a field-action and a
         ;; field-branch continue into it zero-width, a callback's outcome
-        ;; reaches it, and a counted consume's `next` is an EOF successor
-        ;; (0030 item 5).
+        ;; reaches it, and a counted consume's `next` is an EOF successor.
         (let ((seen 0) (bad '()) (into-finish '()))
           (for-each (lambda (k)
                       (set! seen (+ seen 1))
@@ -1952,9 +1888,9 @@
                         (unless (null? ds) (set! bad (cons (cons k ds) bad)))))
                     t2-kinds)
           (check-equal "all eight kinds driven" seen 8)
-          ;; The §16.2:908 property, asserted per kind rather than as an empty
-          ;; list: a total answer over `t2-kinds` fails if the loop stops early
-          ;; as well as if a verdict flips.
+          ;; The non-eof-into-finish property, asserted per kind rather than as
+          ;; an empty list: a total answer over `t2-kinds` fails if the loop
+          ;; stops early as well as if a verdict flips.
           (check-equal "no kind reports non-eof-into-finish for the untakeable edge"
                        (reverse into-finish)
                        '((byte-dispatch . #f) (sequence-dispatch . #f)
@@ -1970,8 +1906,8 @@
       (lambda ()
         ;; The reverse-direction pin: the gate must not become vacuous. Asserted
         ;; on the (code . node) pair, because the node slot is the half that says
-        ;; WHICH edge to fix, and one candidate shape for this check reported at
-        ;; the finish node instead -- merging findings from different sources.
+        ;; WHICH edge to fix, and a check reporting at the finish node instead
+        ;; would merge findings from different sources.
         (let ((seen 0) (bad '()))
           (for-each (lambda (k)
                       (set! seen (+ seen 1))
@@ -1984,30 +1920,24 @@
           (check-equal "all eight kinds driven" seen 8)
           (check-equal "each rejected exactly once, at `hop`" bad '()))))))
 
-;; Milestone 5 Slice ⓪b task 3: the ENTRY may not be a finish terminal (OQ-2).
+;; The ENTRY may not be a finish terminal.
 ;;
-;; §16.2:908 forbids "non-EOF control flow INTO a finish terminal", and decision
-;; 0011 item 4(b) states the same rule over REACHING: "a `finish` node reached by
-;; non-EOF (byte) control flow is rejected". §10.6:616 agrees -- "may be reached
-;; only while processing `parser-finish!`". The entry is reached by
-;; `parser-feed!`, so zero hops is still reaching.
+;; Non-EOF control flow INTO a finish terminal is forbidden, and the same rule
+;; holds over REACHING: a `finish` node may be reached only while processing
+;; `parser-finish!`. The entry is reached by `parser-feed!`, so zero hops is
+;; still reaching.
 ;;
-;; *** Measured before the clause below existed: `entry = finish` verified with
-;; ZERO diagnostics, and `parser-feed!` returned `finished` for an EMPTY slice
-;; and for a one-byte slice alike, consuming 0. *** §11.1:638's closed list of
-;; what an empty slice may produce is "a callback, stop, or error" -- `finished`
-;; is not in it, and §12.1:671's `ready --feed-->` target set does not contain it
-;; either. Three independent sentences forbid the shape.
+;; Without the clause, `entry = finish` verifies with ZERO diagnostics, and
+;; `parser-feed!` returns `finished` for an EMPTY slice and for a one-byte slice
+;; alike, consuming 0 -- yet an empty slice may produce only a callback, stop,
+;; or error, and `finished` is not a status a feed from `ready` may reach.
 ;;
-;; The runtime half of that measurement cannot be re-asserted as a live test:
-;; once the verifier rejects the machine, no executor will build it. So it is
-;; recorded here as the measurement that justified the rule, and the case below
-;; asserts what remains observable -- the verdict.
+;; That runtime behaviour cannot be asserted as a live test: once the verifier
+;; rejects the machine, no executor will build it. The case below asserts what
+;; remains observable -- the verdict.
 ;;
-;; NO NEW CODE: this reuses `non-eof-into-finish`, on the Slice ③ precedent where
-;; `invalid-field-operand` took a second meaning rather than spending a code. A
-;; new code would need a new §16.2 bullet, and the parent plan is append-only, so
-;; its anchor would land nine hundred lines from its siblings.
+;; NO NEW CODE: this reuses `non-eof-into-finish`, as `invalid-field-operand`
+;; carries a second meaning rather than spending a code.
 (harness-group "the entry may not be a finish terminal (Slice ⓪b)"
   (lambda ()
     (harness-case "a machine whose entry IS a finish node is rejected, once, at the entry"
@@ -2025,10 +1955,9 @@
                        ds '((non-eof-into-finish . fin))))))
     (harness-case "an entry that ROUTES eof to a finish is still legal"
       (lambda ()
-        ;; The shape people actually want, and the one §12.4:725 describes: a
-        ;; stream-idle entry may route EOF to a successful `finished`. The tree
-        ;; already ships it as `eof-machine.sls`. Asserted here so the clause
-        ;; above cannot be widened into it by a later slice.
+        ;; The shape people actually want: a stream-idle entry may route EOF to
+        ;; a successful `finished`, as `eof-machine.sls` does. Asserted here so
+        ;; the clause above cannot be widened into it.
         (let ((v (verify-machine
                   (make-machine 'ok 'start '() '() '() (list eof-decl rej-decl)
                                 (list (make-byte-dispatch-node 'start
@@ -2042,35 +1971,31 @@
           (check "accepted" (verification-ok? v))
           (check-equal "no diagnostics" (length (verification-diagnostics v)) 0))))))
 
-;; Milestone 5 Slice ⓪b task 4: the §16.2:909 walk starts from the states a
-;; parser can be PARKED on -- which includes the ENTRY, and did not (D-1).
+;; The EOF-chain walk starts from the states a parser can be PARKED on --
+;; which includes the ENTRY, since `parser-finish!` on a fresh or reset parser
+;; starts precisely there.
 ;;
-;; `eof-terminal` was called from exactly two sites, and `machine-entry` was
-;; neither, although `parser-finish!` on a fresh or reset parser starts precisely
-;; there. So the EOF path that begins AT the entry was never classified.
+;; A walk that omits the entry verifies `entry = a stop node` with ZERO
+;; diagnostics, and `parser-finish!` then returns `stopped`, while the
+;; identical property one hop away -- a dispatch whose eof-target is that stop,
+;; or a pause whose continuation is -- is rejected with `eof-reachable-stop`.
 ;;
-;; *** Measured before the fix: `entry = a stop node` verified with ZERO
-;; diagnostics and `parser-finish!` returned `stopped`. *** The identical
-;; property one hop away -- a dispatch whose eof-target is that stop, or a pause
-;; whose continuation is -- was correctly rejected with `eof-reachable-stop`.
-;; §16.2:909 forbids the first by name.
-;;
-;; The naive fix (bolt a second walk start onto the entry) DOUBLE-REPORTS
-;; wherever the entry is already a start, and the only filter that suppresses
-;; that is a per-kind census of the entry -- the construct that shipped three
-;; Slice ③ defects. The shape used instead is a SET of parkable states, so the
-;; entry appears exactly once by construction. The two one-hop controls below are
-;; the anti-duplication pin: they must stay at exactly ONE finding.
+;; Bolting a second walk start onto the entry DOUBLE-REPORTS wherever the entry
+;; is already a start, and the only filter that suppresses that is a per-kind
+;; census of the entry -- a construct that silently misses new kinds. The walk
+;; starts instead from a SET of parkable states, so the entry appears exactly
+;; once by construction. The two one-hop controls below are the
+;; anti-duplication pin: they must stay at exactly ONE finding.
 (define (t4-machine entry-kind)
   (let ((nodes
          (case entry-kind
-           ;; D-1's four cells: the entry itself terminates an EOF path badly.
+           ;; The entry itself terminates an EOF path badly.
            ((stop) (list (make-stop-node 'e #f)))
            ((field-action)
             (list (make-field-action-node 'e 'clear '(n) 'stop #f #f) (make-stop-node 'stop #f)))
            ((field-branch)
             (list (make-field-branch-node 'e 'zero '(n) 'stop 'stop #f) (make-stop-node 'stop #f)))
-           ;; The two one-hop controls, already correct today.
+           ;; The two one-hop controls.
            ((dispatch-eof)
             (list (make-byte-dispatch-node 'e
                     (list (make-byte-case (make-exact-byte-matcher 0)
@@ -2101,9 +2026,9 @@
           (check-equal "each rejected exactly once, at the entry" bad '()))))
     (harness-case "the one-hop controls still report exactly ONE finding"
       (lambda ()
-        ;; The anti-duplication pin. Both of these were already correct; the risk
-        ;; the fix introduces is reporting them TWICE, once for the entry start
-        ;; and once for the node's own. A set of parkable states cannot.
+        ;; The anti-duplication pin. The risk in starting a walk at the entry is
+        ;; reporting these TWICE, once for the entry start and once for the
+        ;; node's own. A set of parkable states cannot.
         (let ((seen 0) (bad '()))
           (for-each (lambda (k)
                       (set! seen (+ seen 1))
@@ -2116,20 +2041,16 @@
           (check-equal "both controls driven" seen 2)
           (check-equal "each reports once, not twice" bad '()))))))
 
-;; Milestone 5 Slice ⓪b task 5: §16.4:940's edge/source label (OQ-4).
+;; A diagnostic's edge/source label.
 ;;
-;; §16.4:937-943 lists what a diagnostic CONTAINS -- code, severity, machine
-;; name, "node and edge/source label where applicable", message, declaration
-;; names, graph path. *** It carries NO cardinality rule. *** The
-;; "one finding per decision" gloss that has been cited against these checks
-;; entered at a Milestone 3 plan and propagated; it is not in the spec. So the
-;; problem was never too many findings -- it is that two findings from one node
-;; were the IDENTICAL record.
+;; A diagnostic CONTAINS a code, severity, machine name, "node and edge/source
+;; label where applicable", message, declaration names and graph path. *** There
+;; is NO cardinality rule. *** Two findings from one node are fine; two findings
+;; from one node that are the IDENTICAL record are not.
 ;;
-;; The label half was implemented nowhere: three arguments at every call site.
-;; Now a :908 finding carries the edge ROLE that produced it, and the two
-;; machines below are what makes that observable: each has a node with two byte
-;; edges into the same finish terminal, differing only in role.
+;; A non-eof-into-finish finding carries the edge ROLE that produced it, and the
+;; two machines below are what makes that observable: each has a node with two
+;; byte edges into the same finish terminal, differing only in role.
 ;;
 ;; A ROLE, not an index. verify.sls declines elsewhere to promise the order of
 ;; two diagnostics from one node, and an index would newly promise it.
@@ -2137,9 +2058,9 @@
   (lambda ()
     (harness-case "a byte-dispatch's case and fallback into one finish are two distinguishable findings"
       (lambda ()
-        ;; Before the label, both were `(non-eof-into-finish . d)` -- same code,
-        ;; same node, indistinguishable. The count was already 2; what was
-        ;; missing was being able to tell WHICH edge each one is about.
+        ;; Without the label, both are `(non-eof-into-finish . d)` -- same code,
+        ;; same node, indistinguishable. The count is 2 either way; the label is
+        ;; what tells WHICH edge each one is about.
         (let ((ds (map (lambda (x) (list (diagnostic-code x) (diagnostic-node x)
                                          (diagnostic-edge x)))
                        (verification-diagnostics
@@ -2174,24 +2095,22 @@
                             (non-eof-into-finish s mismatch))))))
     (harness-case "every other kind labels its edges too"
       (lambda ()
-        ;; *** Added by the whole-branch review: nine of the thirteen role labels
-        ;; had no test and no pin. *** The dispatch and sequence cases above
-        ;; covered four; a role that is never asserted is a slot that can be
-        ;; wired to the wrong accessor, or to a constant, without anything
-        ;; failing -- which is the same shape as a label that is always present.
+        ;; The dispatch and sequence cases above cover four role labels; this
+        ;; table covers the rest. A role that is never asserted is a slot that
+        ;; can be wired to the wrong accessor, or to a constant, without
+        ;; anything failing -- which is the same shape as a label that is always
+        ;; present.
         ;;
-        ;; *** AND IT STOPPED AT FOUR KINDS FOR TWO SLICES. *** Slice ③'s census
-        ;; reconciliation found this table with no callback row and no span row,
-        ;; while `zero-width-edges` labels seven more edges across those three
-        ;; kinds. This is the ONLY census of `diagnostic-edge` in the tree, so a
-        ;; span arm wired to an existing role -- `case` instead of `next` -- would
-        ;; ship a wrong §16.4:940 label with nothing red.
+        ;; This is the ONLY census of `diagnostic-edge` in the tree, so every
+        ;; kind `zero-width-edges` labels needs a row here: otherwise a span arm
+        ;; wired to an existing role -- `case` instead of `next` -- would ship a
+        ;; wrong label with nothing red.
         ;;
         ;; Each machine points EVERY byte out-edge of one kind at a finish
         ;; terminal, so the full role set for that kind is asserted at once, as a
         ;; multiset rather than a membership test. The span and callback rows
         ;; carry their DECLARATIONS too, and their expected lists carry the
-        ;; findings that come with pointing a span at a finish -- §14:843's
+        ;; findings that come with pointing a span at a finish -- the span
         ;; successful-exit rule fires as well, and a row hiding that would be
         ;; asserting a subset.
         (let ((seen 0) (bad '()))
@@ -2232,29 +2151,28 @@
                     (non-eof-into-finish fb false)))
             (list 'p (list (make-pause-node 'p 'fin #f))
                   '((non-eof-into-finish p continuation)))
-            ;; Slice ②'s kind, unlisted until Slice ③'s reconciliation. A
-            ;; DECISION callback so the branch-key roles are reachable at all --
+            ;; A DECISION callback so the branch-key roles are reachable at all --
             ;; an event callback declares none, and the two branch edges are two
             ;; of the four labels this row exists for.
             (list 'cb (list (make-callback-node 'cb 'pick 'fin
                                                 '((keep fin) (skip fin)) 'fin #f))
-                  ;; Measured: BOTH branch edges carry the bare role `branch`,
-                  ;; not the key. §16.4:940 asks for "the edge role where
-                  ;; applicable" and a role is what this answers; the KEY is in
-                  ;; the node's own declaration, and two findings differing only
-                  ;; by a key are told apart by nothing here. Recorded rather
-                  ;; than silently expected, because it is the one place in this
-                  ;; table where the label is not injective over the edges.
+                  ;; BOTH branch edges carry the bare role `branch`, not the
+                  ;; key. The label is "the edge role where applicable" and a
+                  ;; role is what this answers; the KEY is in the node's own
+                  ;; declaration, and two findings differing only by a key are
+                  ;; told apart by nothing here. Stated explicitly because it is
+                  ;; the one place in this table where the label is not
+                  ;; injective over the edges.
                   '((non-eof-into-finish cb continue)
                     (non-eof-into-finish cb branch)
                     (non-eof-into-finish cb branch)
                     (non-eof-into-finish cb pause))
                   (list (make-callback-declaration 'pick 'decision #t '(keep skip) #f #f)))
-            ;; Slice ③'s two. Both reuse `next` rather than minting a role, which
-            ;; is the thing this row pins: a span arm wired to `case` or to a
-            ;; constant would still produce a finding and still be caught only
-            ;; here. §14:843 fires alongside, because a span open at a finish is
-            ;; a successful exit with a span active.
+            ;; The two span kinds. Both reuse `next` rather than minting a role,
+            ;; which is the thing this row pins: a span arm wired to `case` or to
+            ;; a constant would still produce a finding and still be caught only
+            ;; here. The span successful-exit rule fires alongside, because a
+            ;; span open at a finish is a successful exit with a span active.
             (list 'ss (list (make-span-start-node 'ss 'body 'fin #f))
                   '((span-active-at-exit fin #f)
                     (non-eof-into-finish ss next))
@@ -2265,7 +2183,7 @@
                     (non-eof-into-finish se next))
                   (list (make-callback-declaration 'on-data 'span-data #t '() #f #f))
                   (list (make-span-declaration 'body 'on-data #f #f)))
-            ;; Milestone 6 Slice ①: one byte edge, the shipped `next` role.
+            ;; The counted consume: one byte edge, the existing `next` role.
             (list 'cc (list (make-counted-consume-node 'cc 'n 'fin #f #f))
                   '((non-eof-into-finish cc next)))))
           (check-equal "eight kinds driven" seen 8)
@@ -2281,39 +2199,38 @@
           (check-equal "one finding" (length ds) 1)
           (check-equal "and it carries no edge label" (diagnostic-edge (car ds)) #f))))))
 
-;; Milestone 5 Slice ⓪b task 6: the EOF verdict order is THREE TIERS, not a flat
-;; six (OQ-5).
+;; The EOF verdict order is THREE TIERS, not a flat six.
 ;;
 ;; `eof-verdict-join` takes the max, so the ORDER decides which of two sibling
-;; verdicts survives a join. Decision 0021 item 1 pins only `cycle >
-;; eof-reachable-stop` and calls the rest "this slice's call" -- but the rest is
-;; not free. Measured: six of the fifteen verdict pairs are undecidable by any
-;; machine, and all six sit inside {finish, unresolved, error, default-error}.
+;; verdicts survives a join. Beyond `cycle > eof-reachable-stop` the order is
+;; not free: six of the fifteen verdict pairs are undecidable by any machine,
+;; and all six sit inside {finish, unresolved, error, default-error}.
 ;;
 ;; *** Four of those six are ACCEPTANCE HOLES. *** With `default-error` ranked
 ;; above `cycle`, a field-branch machine verifies ok=#t with ZERO diagnostics and
 ;; `parser-finish!` never returns. So a flat ranking has 720 orderings of which
 ;; 24 are observationally identical and some of the rest silently accept
 ;; non-terminating machines -- and an unwitnessable ordering cannot be a
-;; decision under this project's own rules.
+;; decision.
 ;;
 ;; Three tiers make the 24-permutation survivor UNWRITABLE rather than an
 ;; EXPECT_SURVIVES, and turn each tier assignment into a single-token mutation
-;; caught by a failed comparison. All six symbols are KEPT: Milestone 5's span
-;; check needs `finish` distinguished from `error` at `classify`, and 0021 item
-;; 3's loud-else discipline forbids merging arms.
+;; caught by a failed comparison. All six symbols are KEPT: the span check
+;; needs `finish` distinguished from `error` at `classify`, and the loud-else
+;; discipline forbids merging arms.
 (define (t6-join-machine x-nodes x-name)
   ;; A field-branch is the only shape whose join is observable: one arm reaches
   ;; X, the other a stop, and whatever X's own verdict the join must be the stop
   ;; -- `eof-reachable-stop` is tier 1 and every benign verdict tier 0.
   ;;
   ;; *** The branch sits ONE HOP from the entry, not at it. *** Placed at the
-  ;; entry, these fixtures depend on the entry being a walk start -- which is
-  ;; task 4's decision, not this one -- and the whole-pass sweep duly found the
-  ;; tier pins nesting inside task 4's. Reached instead as a dispatch's
+  ;; entry, these fixtures would depend on the entry being a walk start -- a
+  ;; separate decision, pinned by the walk-starts-at-the-entry group above --
+  ;; and the tier pins would nest inside that group's. Reached instead as a
+  ;; dispatch's
   ;; eof-target, the join is still exercised (and reported at the dispatch),
-  ;; while task 4's entry disjunct is irrelevant to it: `s0` starts a walk
-  ;; through the OTHER disjunct, its own EOF route.
+  ;; while the entry disjunct is irrelevant to it: `s0` starts a walk through
+  ;; the OTHER disjunct, its own EOF route.
   (make-machine 'j 's0 (list (make-uint-field 'n 8 0 #f)) '() '()
                 (list eof-decl rej-decl)
                 (append (list (make-byte-dispatch-node 's0
@@ -2339,14 +2256,13 @@
     (harness-case "a `default-error` sibling does not mask the stop"
       (lambda ()
         ;; X is a dispatch with NO eof-target, so `dispatch-arm` answers
-        ;; `default-error` -- the verdict whose promotion above `cycle` was
-        ;; measured to accept a machine that never terminates.
+        ;; `default-error` -- the verdict whose promotion above `cycle` accepts
+        ;; a machine that never terminates.
         ;;
-        ;; Re-baselined by Milestone 7 Slice ⓪ (decision 0031 item 5): `rj2` is
-        ;; reachable only through `x`'s dead fallback edge -- `x` is itself
-        ;; EOF-only-reachable and carries no EOF route, so no execution can take
-        ;; that edge -- and `pass-reachability` now says so. The join this case
-        ;; owns is untouched: `eof-reachable-stop` still survives it, and the
+        ;; `rj2` is reachable only through `x`'s dead fallback edge -- `x` is
+        ;; itself EOF-only-reachable and carries no EOF route, so no execution
+        ;; can take that edge -- and `pass-reachability` reports it. The join
+        ;; this case owns is separate: `eof-reachable-stop` survives it, and the
         ;; order is `verify-machine`'s `append` order, pass 4 before pass 6.
         (check-equal "eof-reachable-stop survives the join"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
@@ -2364,12 +2280,12 @@
                      '((unreachable-node . rj2) (eof-reachable-stop . s0)))))
     (harness-case "an UNRESOLVED sibling does not mask the stop"
       (lambda ()
-        ;; The sixth verdict, and the one the tier group did not cover until the
-        ;; whole-branch review found it. `classify` answers `'unresolved` for an
-        ;; EOF successor naming no node; the machine is rejected either way (the
-        ;; dangling name is its own finding), but the §16.2:909 violation is
-        ;; reported ONLY because `unresolved` sits in the benign tier and loses
-        ;; the join. Move it up one tier and the stop is silently masked.
+        ;; The sixth verdict. `classify` answers `'unresolved` for an EOF
+        ;; successor naming no node; the machine is rejected either way (the
+        ;; dangling name is its own finding), but the eof-reachable-stop
+        ;; violation is reported ONLY because `unresolved` sits in the benign
+        ;; tier and loses the join. Move it up one tier and the stop is
+        ;; silently masked.
         (check-equal "both findings: the dangling name AND the stop"
                      (list-sort (lambda (a b) (string<? (symbol->string a)
                                                         (symbol->string b)))
@@ -2379,9 +2295,9 @@
                      '(eof-reachable-stop missing-target))))
     (harness-case "a `finish` sibling does not mask the stop either"
       (lambda ()
-        ;; Moving the branch off the entry made this case cleaner as well as
-        ;; better-anchored: `br` is EOF-only-reachable, so its arm into a finish
-        ;; is NOT a §16.2:908 violation and the join is the only thing asserted.
+        ;; With the branch off the entry, `br` is EOF-only-reachable, so its arm
+        ;; into a finish is NOT a non-eof-into-finish violation and the join is
+        ;; the only thing asserted.
         (check-equal "the stop, and nothing else"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                           (verification-diagnostics
@@ -2389,10 +2305,10 @@
                             (t6-join-machine (list (make-finish-node 'x #f)) 'x))))
                      '((eof-reachable-stop . s0)))))))
 
-;; --- §16.2:901's NODE half (Milestone 5 Slice ②) -----------------------------
+;; --- callback decision branches: the NODE half --------------------------------
 ;; "callback decision branches that are missing, duplicated, or undeclared."
-;; Slice ①b shipped the declaration share and left this, which needed a node
-;; kind that did not exist. Every fixture below is otherwise valid, so the codes
+;; The declaration half is checked elsewhere; this is the invoking node's.
+;; Every fixture below is otherwise valid, so the codes
 ;; asserted are the whole verification result rather than a subset of it -- and
 ;; the `node` slot is asserted with them, because each of these findings is
 ;; about the INVOKING NODE and not about the declaration it names.
@@ -2407,7 +2323,8 @@
                       ;; The pause continuation is the ERROR node, never the
                       ;; stop: a parser parked at a callback resumes on that one
                       ;; edge, so a stop there is an EOF path reaching a stop
-                      ;; terminal and §16.2:909 would report that instead.
+                      ;; terminal and eof-reachable-stop would report that
+                      ;; instead.
                       (make-callback-node 'inv node-callback 'stop
                                           node-branches 'reject #f)
                       (make-stop-node 'stop #f)
@@ -2434,7 +2351,7 @@
                      '())))
     (harness-case "a node naming no declaration reports missing-callback-declaration"
       (lambda ()
-        ;; The SAME code a span naming no declaration reports (§16.2:890), reused
+        ;; The SAME code a span naming no declaration reports, reused
         ;; rather than minted: the fault is identical and only the subject moves.
         (check-equal "one finding, at the node"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
@@ -2456,8 +2373,8 @@
                      1)))
     (harness-case "a node invoking a span-kind callback is an invalid invocation"
       (lambda ()
-        ;; §10.6:584 invokes "one named event or decision callback"; a span
-        ;; callback is reached only through a span declaration (§10.4:515-516).
+        ;; A callback node invokes one named event or decision callback; a span
+        ;; callback is reached only through a span declaration.
         ;; The span declaration this needs to exist is what keeps
         ;; `unreferenced-callback-declaration` out of the result.
         (check-equal "the invocation, and nothing about keys"
@@ -2491,8 +2408,8 @@
                      '((invalid-callback-invocation . inv)))))
     (harness-case "an EVENT callback's node declaring a branch is the same fault"
       (lambda ()
-        ;; §13:812's first sentence, enforced statically: an event callback
-        ;; declares no keys, so every key on its node is undeclared. This is why
+        ;; Enforced statically: an event callback declares no keys, so every
+        ;; key on its node is undeclared. This is why
         ;; the rule needs no arm of its own.
         (check-equal "one finding"
                      (codes (cb-machine (make-callback-declaration 'note 'event #t
@@ -2501,9 +2418,8 @@
                      '(invalid-callback-invocation))))
     (harness-case "a declared key the node gives no target for is MISSING"
       (lambda ()
-        ;; §10.6:585 lets a decision "select only among statically declared
-        ;; branch keys", so a declared key with no target is a result the
-        ;; machine cannot route.
+        ;; A decision selects only among statically declared branch keys, so a
+        ;; declared key with no target is a result the machine cannot route.
         (check-equal "one finding, at the node"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                           (verification-diagnostics
@@ -2527,19 +2443,19 @@
                      '((duplicate-branch-key . inv)))))
     (harness-case "an optional decision callback's node must give the default branch a target"
       (lambda ()
-        ;; The check that makes `normalize-machine`'s own raise unreachable:
-        ;; §9.3:419 takes the default branch with no callback to ask, so a node
-        ;; with no target for it has nothing to lower.
+        ;; The check that makes `normalize-machine`'s own raise unreachable: an
+        ;; absent optional callback takes the default branch with no callback
+        ;; to ask, so a node with no target for it has nothing to lower.
         (check-equal "the missing key is reported"
                      (codes (cb-machine (make-callback-declaration 'decide 'decision #f
                                                                    '(keep skip) 'skip #f)
                                         '((keep stop)) 'decide))
                      '(invalid-callback-invocation))))))
 
-;; --- PASS 7: the span-state lattice (Milestone 5 Slice ③, decision 0029) -----
+;; --- PASS 7: the span-state lattice --------------------------------------------
 ;;
-;; The five rejections §16.2:899 names, §16.2:900's pause/callback rule and
-;; §16.2:907's span half, each driven from one machine that is otherwise valid --
+;; The five span-state rejections, the span-active-at-pause rule and the
+;; span-active-at-exit rule, each driven from one machine that is otherwise valid --
 ;; so the codes asserted are the WHOLE verification result and not a subset of a
 ;; machine that was broken three ways.
 (define sd-decl (make-callback-declaration 'on-data 'span-data #t '() #f #f))
@@ -2557,14 +2473,13 @@
                            (if (null? eof) #f (car eof)) #f))
 (define (span-tail) (list (make-stop-node 'done #f)
                           (make-error-node 'reject 'rejected #f)))
-;; *** THE TAIL A CLOSING SPAN NEEDS, and Slice ③ shipped without it. *** A span
-;; end is a PARKED state: its data callback's pause parks the parser on that
-;; node's completion substep, so §16.2:909's EOF walk starts at the node's
-;; SUCCESSOR. With `cl` continuing straight into a stop, every fixture that
-;; closed a span was a machine `parser-finish!` could answer `stopped` from after
-;; a span-data pause -- which is exactly what :909 forbids, and the verifier now
-;; says so. The stop keeps its place behind a dispatch whose own EOF route
-;; reaches a finish, which is also where §16.2:908 wants a finish.
+;; *** THE TAIL A CLOSING SPAN NEEDS. *** A span end is a PARKED state: its data
+;; callback's pause parks the parser on that node's completion substep, so the
+;; EOF walk starts at the node's SUCCESSOR. With `cl` continuing straight into a
+;; stop, a fixture that closes a span is a machine `parser-finish!` could answer
+;; `stopped` from after a span-data pause -- which eof-reachable-stop forbids.
+;; The stop keeps its place behind a dispatch whose own EOF route reaches a
+;; finish, which is also the only legal way to reach a finish.
 ;;
 ;; Kept SEPARATE from `span-tail` rather than replacing it: a fixture whose span
 ;; path never reaches `exit` would report `unreachable-node` for it and for the
@@ -2602,16 +2517,17 @@
                                            (make-span-end-node 'cl 'body 'exit #f))
                                      (span-tail/exit))))
                      '())))
-    ;; --- the two holes Slice ③'s own census reconciliation found -------------
+    ;; --- a closing span's EOF tail, and the span-name cross-reference --------
     (harness-case "a span end continuing into a STOP is rejected (§16.2:909)"
       (lambda ()
         ;; *** THE REASON `span-tail/exit` EXISTS, stated as a rejection so the
-        ;; tail change above cannot be mistaken for cosmetics. *** A span end is
-        ;; a PARKED state: its data callback's pause parks the parser on that
+        ;; tail above cannot be mistaken for cosmetics. *** A span end is a
+        ;; PARKED state: its data callback's pause parks the parser on that
         ;; node's completion substep, and a `parser-finish!` from there resumes
-        ;; past the span end. Reaching a stop that way is what §16.2:909 forbids,
-        ;; and it is reachable -- measured before the fix, this machine verified
-        ;; CLEAN and then answered `stopped` from `parser-finish!`.
+        ;; past the span end. Reaching a stop that way is what
+        ;; eof-reachable-stop forbids, and it is reachable: without the check
+        ;; this machine verifies CLEAN and then answers `stopped` from
+        ;; `parser-finish!`.
         ;;
         ;; The diagnostic is reported at `cl`, not at `done`: the parked node is
         ;; what a caller can be sitting on, and `parked-eof-start` is where its
@@ -2625,8 +2541,8 @@
                                            (make-span-start-node 'op 'body 'cl #f)
                                            (make-span-end-node 'cl 'body 'done #f))
                                      (span-tail))))))
-                     ;; *** AND EXACTLY ONE FINDING, which is the other half of
-                     ;; the edit. *** A span START is not a parked state: it
+                     ;; *** AND EXACTLY ONE FINDING. *** A span START is not a
+                     ;; parked state: it
                      ;; calls nothing, so nothing can pause there, and it stays
                      ;; flow-through like a field action. `op` reaches the same
                      ;; stop, so a parked set widened to BOTH span kinds would
@@ -2635,12 +2551,11 @@
                      '((eof-reachable-stop . cl)))))
     (harness-case "a span node naming an UNDECLARED span is rejected (§16.2:901)"
       (lambda ()
-        ;; The second hole. `make-span-start-node` stores its span as a bare
-        ;; symbol and its own comment assigns the cross-reference to the
-        ;; verifier; nothing did it. Measured before the fix: this machine
-        ;; verified CLEAN and then raised `assertion-violation` out of
-        ;; `normalize-machine` -- a verified machine crashing the normalizer,
-        ;; which §9.2:368 forbids.
+        ;; `make-span-start-node` stores its span as a bare symbol and its own
+        ;; comment assigns the cross-reference to the verifier. Without the
+        ;; check this machine verifies CLEAN and then raises
+        ;; `assertion-violation` out of `normalize-machine` -- a verified
+        ;; machine crashing the normalizer, which must never happen.
         ;;
         ;; BOTH kinds, because each carries its own accessor and a fix reaching
         ;; only one would be invisible to a single-node fixture.
@@ -2681,8 +2596,8 @@
                      '((invalid-span-state . op2)))))
     (harness-case "span OVERLAP: a start for a different span while one is open"
       (lambda ()
-        ;; §10.4:519's *nested* gets no row of its own in decision 0029's table:
-        ;; with one span permitted active, nesting IS a start on (active t).
+        ;; Nesting gets no row of its own: with one span permitted active,
+        ;; nesting IS a start on (active t).
         (check-equal "one finding, at the second start"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                           (verification-diagnostics
@@ -2719,8 +2634,8 @@
                      '((invalid-span-state . cl)))))
     (harness-case "INCONSISTENT: two branches disagree at a merge"
       (lambda ()
-        ;; Decision 0029 item 2, and the row that makes the flat lattice the
-        ;; right domain rather than the powerset: the two branches AGREE that
+        ;; The row that makes the flat lattice the right domain rather than the
+        ;; powerset: the two branches AGREE that
         ;; the machine is well formed under a path-existential reading, and
         ;; disagree about the state at `mrg`. Reported where it arises.
         (check-equal "one finding, at the merge"
@@ -2737,10 +2652,9 @@
                      '((inconsistent-span-state . mrg)))))
     (harness-case "a span open at an ERROR terminal is ACCEPTED"
       (lambda ()
-        ;; Decision 0029's own worked example, and §14:839 contemplates it in
-        ;; words -- errors do not flush a final fragment or synthesize a
-        ;; completion. Only the SUCCESSFUL terminals are rejected, which is why
-        ;; decision 0023 item 5 kept `finish` distinguished from `error`.
+        ;; Errors do not flush a final fragment or synthesize a completion, so a
+        ;; span may be open at one. Only the SUCCESSFUL terminals are rejected,
+        ;; which is why `finish` stays distinguished from `error`.
         (check-equal "no diagnostics"
                      (codes (span-machine
                              (append (list (entry-fork 'op 'done)
@@ -2760,10 +2674,9 @@
                      '((span-active-at-exit . done)))))
     (harness-case "a span open at an EOF-ONLY finish is rejected too"
       (lambda ()
-        ;; *** THE ROW DECISION 0029 COULD NOT REACH. *** Its item 3 fixes the
-        ;; pass's NODE DOMAIN and says nothing about its EDGE set; a dataflow
-        ;; over `node-out-targets` alone never arrives at a finish node that is
-        ;; only EOF-reachable, because that accessor excludes eof-targets by
+        ;; *** The pass's EDGE set must include eof-targets. *** A dataflow over
+        ;; `node-out-targets` alone never arrives at a finish node that is only
+        ;; EOF-reachable, because that accessor excludes eof-targets by
         ;; construction. This machine has no byte path to `fin` at all.
         (check-equal "one finding, at the finish"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
@@ -2785,8 +2698,8 @@
                              ;; `cl` continues to the ERROR node and not the
                              ;; stop: a byte-reachable pause is a parked state,
                              ;; so its own EOF walk runs, and a stop on that
-                             ;; chain is §16.2:909 -- a second finding this case
-                             ;; is not about. Found by building it.
+                             ;; chain is an eof-reachable-stop -- a second
+                             ;; finding this case is not about.
                              (append (list (entry-fork 'op 'done)
                                            (make-span-start-node 'op 'body 'p #f)
                                            (make-pause-node 'p 'cl #f)
@@ -2795,9 +2708,9 @@
                      '((span-active-at-pause . p)))))
     (harness-case "a CALLBACK invocation reachable with a span active is the same finding"
       (lambda ()
-        ;; §13:826's exception -- "Only the active span's own data callback may
-        ;; pause before the span closes" -- cannot apply to a NODE: §16.2:901's
-        ;; node half admits only `event` and `decision` callbacks there, and a
+        ;; The one exception -- only the active span's own data callback may
+        ;; pause before the span closes -- cannot apply to a NODE: a callback
+        ;; node admits only `event` and `decision` callbacks, and a
         ;; span-data callback is reached through a span declaration and the
         ;; runtime's flush, never through a callback node.
         (check-equal "one finding, at the invocation"
@@ -2820,29 +2733,25 @@
                      '((span-active-at-pause . inv)))))
     (harness-case "a node no execution can occupy contributes no state (0029 item 3)"
       (lambda ()
-        ;; *** THE MACHINE DECISION 0027's CONTEXT DERIVES, and it is the only
-        ;; shape that separates the two relations. *** The entry's byte edges go
+        ;; *** The only shape that separates the two relations. *** The entry's
+        ;; byte edges go
         ;; to the error node and its EOF route goes to `t`; `t` is reachable ONLY
         ;; that way, and `cl` -- an unmatched span end -- hangs off `t`'s BYTE
         ;; edge. No execution can occupy `cl`: once an execution takes an
-        ;; eof-target it can never feed again (§12.2's finish-ready row), so
-        ;; `cl`'s byte edge is untakeable and pass 7 must not report its
-        ;; unmatched end.
+        ;; eof-target it can never feed again, so `cl`'s byte edge is
+        ;; untakeable and pass 7 must not report its unmatched end.
         ;;
-        ;; Re-baselined by Milestone 7 Slice ⓪ (decision 0031 item 5). Until then
-        ;; `pass-reachability` walked a relation that crossed the eof-target and
-        ;; then kept taking byte edges and called `cl` reached; it
-        ;; now walks the occupiable relation, so `cl` and everything behind it --
-        ;; `exit`, `done`, `fin` -- are reported `unreachable-node`, in
-        ;; machine-node order. The property this case owns is the OTHER half and
-        ;; is unchanged: whatever pass 4 says about the node domain, pass 7 must
-        ;; not report an unmatched end there. The second check below asserts that
-        ;; half on its own, so a span code appearing here fails a check whose
-        ;; label says span.
+        ;; `pass-reachability` walks the occupiable relation, so `cl` and
+        ;; everything behind it -- `exit`, `done`, `fin` -- are reported
+        ;; `unreachable-node`, in machine-node order. The property this case
+        ;; owns is the OTHER half: whatever pass 4 says about the node domain,
+        ;; pass 7 must not report an unmatched end there. The second check below
+        ;; asserts that half on its own, so a span code appearing here fails a
+        ;; check whose label says span.
         ;;
         ;; An orphan with no in-edges at all does NOT test this -- it receives
-        ;; no state under either relation -- which is what the first draft of
-        ;; this case used, and its mutation shipped UNCAUGHT and said so.
+        ;; no state under either relation, so a mutation of the relation
+        ;; survives it.
         (let ((ds (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                        (verification-diagnostics
                         (verify-machine
@@ -2868,23 +2777,11 @@
             (check-equal "and pass 7 says nothing about the span: pass 4 is the only reporter here"
                          others '())))))))
 
-;; --- §16.2:898's reachability gate (Milestone 5 Slice ③, decision 0027 item 3)
+;; --- the label clause of the portability check ---------------------------------
 ;;
-;; The bullet reads "reachable zero-progress cycles" and the pass applied NO
-;; relation: measured by 0027 against the shipped file, neither `reached` nor
-;; `byte-reached` occurred as an identifier anywhere in it.
-
-;; --- §16.2:886's label clause, Milestone 5 Slice ④ (design §4.12 item 2) -----
-;;
-;; The owner approved this on 2026-09-04 and no slice picked it up; Milestone 5's
-;; close-out found it and built it. `§16.2:886` requires the verifier to reject
-;; "nonportable names, codes, branch keys, labels, or reasons" -- the label half
-;; had never been implemented for anything.
-;;
-;; The two NAME arms these cases share were themselves unwitnessed until now: no
-;; verify-tests case, no mutation pin, while `ir-tests.sps` claimed coverage in
-;; prose. They are closed here rather than recorded, because a guard shown not to
-;; guard gets closed.
+;; The verifier rejects "nonportable names, codes, branch keys, labels, or
+;; reasons". These cases cover declaration labels, and the two declaration NAME
+;; arms the label fixtures share.
 (define (label-machine cb-label sp-label)
   (make-machine 'labm 'start '()
                 (list (make-callback-declaration 'on-data 'span-data #t '() #f cb-label))
@@ -2921,13 +2818,13 @@
                      (codes (label-machine 'the-label 'other-label)) '())
         (check-equal "a portable STRING is accepted too"
                      (codes (label-machine "Span: body (outer)" #f)) '())
-        ;; §10.1:480 says nothing about length, and the empty reason is accepted
-        ;; on that ground already.
+        ;; The repertoire says nothing about length, and the empty reason is
+        ;; accepted on that ground already.
         (check-equal "and the empty string" (codes (label-machine "" #f)) '())))
     (harness-case "a nonportable CALLBACK label is rejected"
       (lambda ()
         ;; A tab is the sharp case: it is ASCII, it is invisible, and it is
-        ;; outside `§10.1:480`'s "printable ASCII plus LF" -- `reason-char?`'s
+        ;; outside the "printable ASCII plus LF" repertoire -- `reason-char?`'s
         ;; range starts at space (0x20), so 0x09 fails. A test using a
         ;; non-ASCII character would pass against a mutant that only checked the
         ;; high bit.
@@ -2940,7 +2837,7 @@
       (lambda ()
         ;; BOTH families, because each reads its own accessor and a fix reaching
         ;; only one would be invisible to a single-family fixture -- the same
-        ;; argument Slice ③'s undeclared-span case makes.
+        ;; argument the undeclared-span case makes.
         (check-equal "one finding, on the span"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                           (verification-diagnostics
@@ -2959,21 +2856,17 @@
                      '(invalid-name))))
     (harness-case "a nonportable STRING label is rejected too"
       (lambda ()
-        ;; The string arm, which had a case asserting it ACCEPTS a portable
-        ;; string and nothing asserting it rejects a nonportable one -- an arm
-        ;; witnessed in one direction only. Both directions belong here for the
-        ;; same reason the liveness probe gives: either alone is satisfied by a
-        ;; constant.
+        ;; The string arm's rejecting direction; the negative control asserts
+        ;; it ACCEPTS a portable string. Both directions are needed: either
+        ;; alone is satisfied by a constant.
         (check-equal "a tab in a string label"
                      (codes (label-machine "a\tb" #f)) '(invalid-name))))
     (harness-case "a label of the wrong SHAPE is rejected, not ignored"
       (lambda ()
-        ;; No constructor validates this field and the plan gives it no type --
-        ;; §10.3:506 and §10.4:517 say only "optional diagnostic label". A label
-        ;; the diagnostic reporter cannot render is not a machine that verified
-        ;; clean, so it is reported; that it is reported under a PORTABILITY code
-        ;; is the one judgment design §4.12 item 2 does not settle, and it is
-        ;; recorded at the predicate.
+        ;; No constructor validates this field, and its only stated type is
+        ;; "optional diagnostic label". A label the diagnostic reporter cannot
+        ;; render is not a machine that verified clean, so it is reported; why it
+        ;; is reported under a PORTABILITY code is recorded at the predicate.
         (check-equal "an integer on the callback"
                      (codes (label-machine 42 #f)) '(invalid-name))
         ;; *** BOTH FAMILIES, and this one is load-bearing for the PINS. *** The
@@ -2981,17 +2874,18 @@
         ;; `valid-label?`'s `(else #f)` rejects an integer without consulting the
         ;; repertoire at all -- so it is the case that gives a per-family
         ;; conjunct mutant a record of its own. With the integer only on the
-        ;; callback, a mutant dropping the SPAN family's label conjunct was
-        ;; wholly nested inside the shipped permissive-`reason-char?` mutant and
-        ;; could not be pinned; measured, and this line is the fix.
+        ;; callback, a mutant dropping the SPAN family's label conjunct would be
+        ;; wholly nested inside the permissive-`reason-char?` mutant and could
+        ;; not be pinned; this line separates them.
         (check-equal "an integer on the span"
                      (codes (label-machine #f 42)) '(invalid-name))))
     (harness-case "a declaration bad in BOTH name and label reports ONCE"
       (lambda ()
         ;; The fold's own assertion, and the reason the label clause went into
-        ;; the name clause's `and` rather than into an arm of its own: Milestone
-        ;; 4 established the shape for the reason clause and `verify-tests.sps`
-        ;; witnesses it there. Two arms would report this declaration twice.
+        ;; the name clause's `and` rather than into an arm of its own -- the
+        ;; same shape as the reason clause, witnessed by "one declaration bad in
+        ;; every field still yields a single finding". Two arms would report
+        ;; this declaration twice.
         (check-equal "one finding, not two"
                      (codes (make-machine 'labm 'start '()
                               (list (make-callback-declaration
@@ -3005,12 +2899,12 @@
                               'default-eof #f))
                      '(invalid-name))))))
 
-;; --- every label carrier (Milestone 6 Slice ⓪; §16.2:886) --------------------
+;; --- every label carrier -------------------------------------------------------
 ;;
-;; Nineteen constructors take a `source-label`. The two declaration families got
-;; their check in Milestone 5 Slice ④ (the group above); the other SEVENTEEN are
-;; driven here from one table, each built with the label under test and nothing
-;; else wrong, each asserted in BOTH directions -- an integer label is rejected
+;; Nineteen constructors take a `source-label`. The two declaration families are
+;; checked in the group above; the other SEVENTEEN are driven here from one
+;; table, each built with the label under test and nothing else wrong, each
+;; asserted in BOTH directions -- an integer label is rejected
 ;; under the carrier's own name (a byte case's or sequence case's under the
 ;; OWNING NODE, because a case has no name), and a portable symbol and a portable
 ;; string are accepted -- so an arm rejecting every carrier fails as loudly as
@@ -3018,10 +2912,10 @@
 ;;
 ;; The rejection fixture is a wrong-SHAPE label, not a bad character, and that is
 ;; a constraint the pins impose: every label conjunct is nested inside the
-;; shipped permissive-`reason-char?` mutant unless the fixture carries a value
-;; that mutant cannot accept, and `valid-label?`'s `(else #f)` rejects an
-;; integer without consulting the repertoire (the span-family pin's own measured
-;; reason, one group up).
+;; permissive-`reason-char?` mutant unless the fixture carries a value that
+;; mutant cannot accept, and `valid-label?`'s `(else #f)` rejects an integer
+;; without consulting the repertoire (the span-family pin's own reason, one
+;; group up).
 (define (labelled-machine name fields cbs sps errors nodes)
   (make-machine name 'start fields cbs sps errors nodes 'default-eof #f))
 (define (plain-entry . eof)
@@ -3029,7 +2923,7 @@
                            (if (null? eof) #f (car eof)) #f))
 ;; Byte 0 into the node under test, byte 1 into the stop, so `done` stays
 ;; byte-reachable in every row -- a parked node's continuation cannot be the
-;; stop (§16.2:909), so the stop is reached from the entry instead.
+;; stop (eof-reachable-stop), so the stop is reached from the entry instead.
 (define (entry-into target)
   (make-byte-dispatch-node 'start
                            (list (case-to target)
@@ -3040,11 +2934,11 @@
 (define reject (make-error-node 'reject 'rejected #f))
 (define count-field (make-uint-field 'count 8 0 #f))
 (define (with-nodes . ns) (labelled-machine 'labm '() '() '() errs ns))
-;; The span rows carry member3-drift-tests.sps's span shape, measured there: a
+;; The span rows carry member3-drift-tests.sps's span shape: a
 ;; consuming node INSIDE the span with its own EOF terminal (the shared `reject`
 ;; is reached with no span open, and merging `(active sp)` with `none` at one
 ;; node is a rejection), and a DISPATCH after the span end, never the stop,
-;; because a span end is a parked state (§16.2:909).
+;; because a span end is a parked state.
 (define span-chain-cbs (list (make-callback-declaration 'on-data 'span-data #t '() #f #f)))
 (define span-chain-sps (list (make-span-declaration 'sp 'on-data #f #f)))
 (define (span-nodes start-label end-label)
@@ -3102,7 +2996,8 @@
    (list 'finish 'fin
          (lambda (l) (with-nodes (plain-entry 'fin) done reject (make-finish-node 'fin l))))
    ;; A pause's continuation is the ERROR node and not the stop: a parser parked
-   ;; there resumes on that one edge, so a stop there is §16.2:909's finding.
+   ;; there resumes on that one edge, so a stop there is an eof-reachable-stop
+   ;; finding.
    (list 'pause 'p
          (lambda (l) (with-nodes (entry-into 'p) (make-pause-node 'p 'reject l) done reject)))
    (list 'field-action 'fa
@@ -3125,7 +3020,8 @@
                                              done reject))))
    ;; The pause continuation is the ERROR node and not the stop: a byte-reachable
    ;; callback is a parked state whose walk starts on that one edge, and a stop
-   ;; there is §16.2:909's finding -- the t2-hop row records the same choice.
+   ;; there is an eof-reachable-stop finding -- the t2-hop row records the same
+   ;; choice.
    (list 'callback 'cn
          (lambda (l) (labelled-machine 'labm '()
                                        (list (make-callback-declaration 'cb 'event #t '() #f #f))
@@ -3204,10 +3100,8 @@
   (lambda ()
     (harness-case "a nonportable callback name and a nonportable span name"
       (lambda ()
-        ;; These two arms shipped in Slice ①b and had no case and no pin until
-        ;; Milestone 5's close-out; `ir-tests.sps` asserted in PROSE that they
-        ;; were covered. Uppercase is the grammar's own boundary: `valid-name?`
-        ;; requires `[a-z]` first.
+        ;; Uppercase is the grammar's own boundary: `valid-name?` requires
+        ;; `[a-z]` first.
         (check-equal "the callback"
                      (map (lambda (d) (cons (diagnostic-code d) (diagnostic-node d)))
                           (verification-diagnostics
@@ -3222,32 +3116,26 @@
       (lambda ()
         (check-equal "no diagnostics" (codes (named-machine 'on-data 'body)) '())))))
 
-;; *** THIS IS A RELAXATION, and the ground the design gave for calling it
-;; benign does not hold. *** Design §3.2 item 4 said such a machine "is rejected
-;; by `unreachable-node` regardless". It is not, and it still is not after
-;; decision 0031 narrowed `pass-reachability` -- for a different and now true
-;; reason. `t` is the entry's eof-target, so it is OCCUPIABLE: the EOF walk
-;; starts at the parked entry and visits it. What no execution can take here is
-;; an EDGE, `t`'s own self-loop, and `unreachable-node` quantifies over nodes.
-;; The machine below is a COLLAPSED VARIANT of 0027's -- decision 0031's words,
-;; and Milestone 7's Gate 0 corrected the design for calling it that machine.
-;; 0027's machine as written has `Z` a third node, distinct from `T`; here `t`
-;; plays both, its case edge the self-loop. That is exactly why it does not
-;; flip: the family the narrowing rejects needs a `Z` the walk cannot reach, and
-;; this fixture has none. It is asserted BOTH ways -- the cycle is real, and no
-;; execution can enter it.
+;; *** Gating zero-progress cycles on byte-reachability is a RELAXATION, and
+;; `unreachable-node` does not make it benign. *** The machine below is not
+;; rejected by `unreachable-node`: `t` is the entry's eof-target, so it is
+;; OCCUPIABLE -- the EOF walk starts at the parked entry and visits it. What no
+;; execution can take here is an EDGE, `t`'s own self-loop, and
+;; `unreachable-node` quantifies over nodes. This is a COLLAPSED variant of the
+;; `E ->(eof) T ->(byte) Z` family in the occupiable-relation group below: here
+;; `t` plays both T and Z, its case edge the self-loop. That is exactly why
+;; `unreachable-node` does not fire: the family needs a `Z` the walk cannot
+;; reach, and this fixture has none. It is asserted BOTH ways -- the cycle is
+;; real, and no execution can enter it.
 
 (harness-group "zero-progress cycles are gated on byte-reachability (§16.2:898)"
   (lambda ()
     (harness-case "a BYTE-reachable pause cycle is still a zero-progress cycle"
       (lambda ()
-        ;; *** The witness the gate MOVED, and moving it is a strict
-        ;; improvement. *** The REPORT set's pause clause was witnessed by an
-        ;; EOF-ONLY pause cycle, which §16.2:898's gate now excludes on purpose
-        ;; -- so the clause needed a byte-reachable cycle to be witnessed at
-        ;; all, which is what a check about byte reachability should always have
-        ;; had. `pa` and `pb` are entered by a byte edge and cycle through each
-        ;; other's continuations.
+        ;; *** The REPORT set's pause clause needs a BYTE-reachable cycle to be
+        ;; witnessed at all, *** because the gate excludes an EOF-ONLY pause
+        ;; cycle on purpose. `pa` and `pb` are entered by a byte edge and cycle
+        ;; through each other's continuations.
         (check "zero-progress-cycle is reported"
                (memq 'zero-progress-cycle
                      (codes (machine*
@@ -3265,8 +3153,7 @@
         ;; `e`'s byte edges all reach the error node and its EOF route reaches
         ;; `t`; `t` is a byte-dispatch reachable only that way, holding a
         ;; reexecute self-loop. Once an execution takes an eof-target it can
-        ;; never feed again (§12.2's finish-ready row), so `t`'s self-loop is
-        ;; untakeable.
+        ;; never feed again, so `t`'s self-loop is untakeable.
         (check-equal "no diagnostics at all"
                      (codes (machine*
                              'gated
@@ -3283,9 +3170,9 @@
                      '())))
     (harness-case "and `unreachable-node` does NOT catch it, which is why the gate is not benign"
       (lambda ()
-        ;; The half design §3.2 item 4 got wrong, asserted rather than argued:
-        ;; the very same machine passes `pass-reachability` too, so before this
-        ;; gate the ONLY thing rejecting it was the ungated cycle check.
+        ;; Asserted rather than argued: the very same machine passes
+        ;; `pass-reachability` too, so an ungated cycle check would be the ONLY
+        ;; thing rejecting it.
         (check "t is not reported unreachable"
                (not (memq 'unreachable-node
                           (codes (machine*
@@ -3322,19 +3209,19 @@
                              'default-eof))))
                      '((zero-progress-cycle . t)))))))
 
-;; --- reachability is the occupiable relation (decision 0031) -----------------
+;; --- reachability is the occupiable relation -----------------------------------
 ;;
 ;; `pass-reachability` walks byte-reached ∪ the EOF walk from the parked set --
-;; the relation §16.2:908/:909 and pass 7 already use -- and no longer the walk
-;; decision 0031 retired, which crossed an eof-target and then kept taking byte
-;; edges. The family whose verdict changes is `E ->(eof) T ->(byte) Z`: T
+;; the relation the EOF checks and pass 7 use -- not a walk that crosses an
+;; eof-target and then keeps taking byte edges. The family that separates the
+;; two is `E ->(eof) T ->(byte) Z`: T
 ;; reachable only through an EOF route and one of the three kinds whose byte
 ;; edges are dead at EOF, Z distinct from T and reachable only through such an
 ;; edge. Each kind is asserted BOTH ways -- Z dead, rejected by name; the same
 ;; machine with Z also byte-reachable from the entry, accepted -- and the two
 ;; shapes a reader will try are ACCEPTED controls: Z = T (a self-loop; T is
 ;; occupiable through the EOF route) and T a counted consume (its `next` is an
-;; EOF successor, decision 0030 item 5).
+;; EOF successor).
 
 ;; Z: a byte-dispatch whose case and fallback edges land on the error node and
 ;; which carries NO EOF route of its own. It has no finding of its own under
@@ -3412,9 +3299,10 @@
           (check-equal "all three input-reading kinds driven" driven 3))))
     (harness-case "and transitively, through Z's own EOF route"
       (lambda ()
-        ;; Z here carries an EOF route to a finish nothing else names. The
-        ;; retired walk reached both; the occupiable relation reaches neither,
-        ;; and they are reported in machine-node order.
+        ;; Z here carries an EOF route to a finish nothing else names. A walk
+        ;; that crosses an eof-target and keeps taking byte edges reaches both;
+        ;; the occupiable relation reaches neither, and they are reported in
+        ;; machine-node order.
         (check-equal "Z and the finish behind its EOF route are both unreachable"
                      (occ-findings
                       (occ-machine
@@ -3426,18 +3314,18 @@
                      '((unreachable-node . z) (unreachable-node . fin)))))
     (harness-case "an orphan beside the family, so the two ways of breaking pass 4 differ"
       (lambda ()
-        ;; *** COUNT, DON'T WITNESS (AGENTS.md). *** Every check above that
-        ;; expects a FINDING -- the three REJECTED halves and the transitive
-        ;; case; not the three ACCEPTED twins, which answer `()` under both, nor
-        ;; the sentinel -- is reddened by "pass 4 walks the retired relation"
-        ;; AND by "pass 4 never reports an unreachable node at all", with the
-        ;; identical `got ()` --
+        ;; *** COUNT, DON'T WITNESS. *** Every check above that expects a
+        ;; FINDING -- the three REJECTED halves and the transitive case; not the
+        ;; three ACCEPTED twins, which answer `()` under both, nor the sentinel
+        ;; -- is reddened by "verify: pass 4 walks the retired relation instead
+        ;; of the occupiable one" AND by "verify: reachability never reports an
+        ;; unreachable node", with the identical `got ()` --
         ;; the second mutant suppresses a SUPERSET of what the first suppresses,
         ;; on every machine, so no check whose expectation is a family finding
         ;; alone can tell them apart. This machine carries BOTH kinds of
         ;; unoccupiable node: `z`, dead only under the narrowing, and `orphan`,
         ;; an error node with no in-edge at all, dead under either relation. The
-        ;; retired walk therefore leaves `orphan` reported and the suppressed
+        ;; eof-crossing walk therefore leaves `orphan` reported and the suppressed
         ;; emission leaves nothing, and the two mutants produce different `got`
         ;; lists from this one check.
         (check-equal "both unoccupiable nodes, the family's and the orphan's"
@@ -3451,9 +3339,8 @@
       (lambda ()
         ;; The first shape a reader will try, and it is NOT the family: T is
         ;; occupiable through the entry's EOF route, so an edge back to itself
-        ;; reaches nothing new. `verify-tests.sps`'s §16.2:898 gate fixture has
-        ;; exactly this shape, which is why the pricing that predicted it would
-        ;; flip was wrong (0031's Context).
+        ;; reaches nothing new. The zero-progress gate fixture above has exactly
+        ;; this shape, which is why `unreachable-node` does not fire on it.
         (check-equal "T's self-loop reaches nothing the EOF walk has not visited"
                      (occ-findings
                       (occ-machine
@@ -3466,8 +3353,8 @@
                      '())))
     (harness-case "control: a counted consume as T"
       (lambda ()
-        ;; The fourth input-reading kind is NOT in the family: decision 0030
-        ;; item 5 makes a counted consume's `next` an EOF successor, so the walk
+        ;; The fourth input-reading kind is NOT in the family: a counted
+        ;; consume's `next` is an EOF successor, so the walk
         ;; from the entry visits Z through it. Z stays a dispatch with a #f EOF
         ;; route -- `default-error`, tier 0 -- because a STOP there would be
         ;; `eof-reachable-stop` at the entry and this control would stop being
@@ -3480,9 +3367,9 @@
                              occ-z occ-reject)))
                      '())))))
 
-;; --- the thirteenth kind in the verifier census (Milestone 6 Slice ①) ---------
+;; --- the counted-consume kind in the verifier census ---------------------------
 ;;
-;; Decision 0030's fixtures, by shape. `done` and `reject` are the shared stop
+;; Fixtures by shape. `done` and `reject` are the shared stop
 ;; and error nodes defined for the label group above; `entry-into` reaches the
 ;; node under test on byte 0 and the stop on byte 1, so every node is reachable.
 (define len-field (list (make-uint-field 'len 8 0 #f)))
@@ -3494,9 +3381,9 @@
     (harness-case "the flow-through zero-count stop at the ENTRY is rejected (0030 item 5)"
       (lambda ()
         ;; A fresh parser is parked at the entry with the field's initial, 0; a
-        ;; zero count transitions to `next` at finish (§10.6:600), and `next` is
-        ;; a stop -- §16.2:909's prohibition. A dispatch-shaped classify arm
-        ;; never sees `next` and this machine verified clean under it.
+        ;; zero count transitions to `next` at finish, and `next` is a stop --
+        ;; the eof-reachable-stop prohibition. A dispatch-shaped classify arm
+        ;; never sees `next`, and this machine verifies clean under one.
         (let ((m (cc-machine 'body len-field
                              (list (make-counted-consume-node 'body 'len 'done #f #f) done))))
           (check-equal "eof-reachable-stop, at the entry"
@@ -3515,8 +3402,8 @@
     (harness-case "the one-shot length, body, stop grammar is ACCEPTED (0030 item 6)"
       (lambda ()
         ;; A parser parked on `body` by need-input holds a positive count and
-        ;; takes the error at EOF; no EOF path reaches the stop. The design's
-        ;; first draft parked the kind by kind and rejected this machine.
+        ;; takes the error at EOF; no EOF path reaches the stop. Parking the
+        ;; kind by kind, rather than by need-input, would reject this machine.
         (let ((m (cc-machine 'start len-field
                              (list (entry-to 'body)
                                    (make-counted-consume-node 'body 'len 'done 'reject #f)
@@ -3558,10 +3445,10 @@
       (lambda ()
         ;; records := 3, size := 2. `[branch zero? records -> done] -> consume(size)
         ;; -> decrement records -> branch` terminates whenever `records` does,
-        ;; and the verifier cannot see that it does (§11.4:654); §16.2:913 bounds
-        ;; the over-rejection to loops with no consuming node. The loop sits
-        ;; behind a byte dispatch so the entry, not the branch, is the parked
-        ;; node, and the finding is item 7's alone.
+        ;; and the verifier cannot see that it does; the over-rejection is
+        ;; bounded to loops with no consuming node. The loop sits behind a byte
+        ;; dispatch so the entry, not the branch, is the parked node, and the
+        ;; finding is the zero-progress cycle alone.
         (let* ((fields (list (make-uint-field 'records 8 3 #f) (make-uint-field 'size 8 2 #f)))
                (branch (make-field-branch-node 'br 'zero '(records) 'done 'body #f))
                (dec (make-field-action-node 'dec 'decrement '(records) 'br 'reject #f))
@@ -3603,15 +3490,14 @@
           (check-equal "no diagnostics" (codes m) '()))))))
 
 ;; ============================================================================
-;; Milestone 7 Slice ①: the diagnostic record's four new fields (decision 0032)
+;; The diagnostic record's severity, machine, declarations and path fields
 ;; ============================================================================
-;; §16.4:937-943's seven fields now live in nine slots. These groups witness the
-;; four fields the 129 shipped accessor reads never touch -- severity (:938),
-;; machine (:939), declarations (:942), path (:943). Paths are compared by SHAPE
-;; only -- first element, last element, membership (§16.4:945, 0032 item 5),
-;; never as a whole list -- through #f-tolerant guards, so an absent path fails
-;; by comparison (`got #f`) rather than raising in `car`; that is what makes
-;; Task 6's empty-path mutants comparison catches too.
+;; A diagnostic's seven fields live in nine slots. These groups witness the
+;; four fields the code/node/edge reads above never touch -- severity, machine,
+;; declarations, path. Paths are compared by SHAPE only -- first element, last
+;; element, membership, never as a whole list -- through #f-tolerant guards, so
+;; an absent path fails by comparison (`got #f`) rather than raising in `car`;
+;; that is what makes the empty-path mutants comparison catches too.
 (define (s1-diags m) (verification-diagnostics (verify-machine m)))
 (define (s1-diag m code)
   (let loop ((ds (s1-diags m)))
@@ -3628,7 +3514,7 @@
 (define (path-last  d) (let ((p (diagnostic-path d))) (and (pair? p) (car (reverse p)))))
 (define (path-has?  d n) (let ((p (diagnostic-path d))) (and (pair? p) (memq n p) #t)))
 
-;; Fresh fixtures, so the widening stays invisible: not one shipped line moves.
+;; Fixtures of their own, so these groups share no fixture with the groups above.
 (define (s1-error n) (make-error-node n 'rejected #f))
 (define (s1-one-case name target mode eof-target)
   (make-byte-dispatch-node name
@@ -3680,8 +3566,8 @@
     (harness-case "a single-finding machine stamps that one diagnostic once"
       (lambda ()
         ;; One finding, so each stamp assertion fires EXACTLY ONCE -- the single
-        ;; record Task 6's machine-stamp (got a wrong constant) and severity (got
-        ;; a warning) mutations each need to pin without matching the multi-fault
+        ;; record the machine-stamp (got a wrong constant) and severity (got a
+        ;; warning) mutations each need to pin without matching the multi-fault
         ;; loop's several identical records.
         (let ((d (s1-diag (s1-mach 'solo 'start '()
                                    (list (s1-one-case 'start 'stop 'advance #f)
@@ -3692,7 +3578,7 @@
           (check-equal "single severity" (diagnostic-severity d) 'error)
           (check-equal "single machine stamp" (diagnostic-machine d) 'solo))))))
 
-;; --- declarations, one per family (decision 0032 item 3, F12) ----------------
+;; --- declarations, one per family ----------------------------------------------
 (define (s1-cb name kind req keys default) (make-callback-declaration name kind req keys default #f))
 (define (s1-sp name data complete) (make-span-declaration name data complete #f))
 (define (s1-ok-nodes) (list (s1-one-case 'start 'stop 'advance #f)
@@ -3716,8 +3602,8 @@
                                          errs (s1-ok-nodes))
                                'duplicate-span-declaration))
                      '(body))
-        ;; Label carries no diagnostic-code token, so no shipped pin's
-        ;; output-match resolves onto this case's FAIL line (Task 2 Step 9).
+        ;; Label carries no diagnostic-code token, so no pin's output-match
+        ;; resolves onto this case's FAIL line.
         (check-equal "the error family names its duplicated declaration"
                      (diagnostic-declarations
                       (s1-diag (make-machine 'a 'start '() '() '() (list eof-decl rej-decl rej-decl)
@@ -3742,10 +3628,8 @@
                      '(body ondata))))
     (harness-case "F12: the two span missing-callback-declaration sites name their callback"
       (lambda ()
-        ;; Written under F12 ACCEPTED (the two span sites become two-element,
-        ;; matching the callback-node's missing-callback-declaration which item 3
-        ;; already gives its callback). If the reviewer overturns F12 these become
-        ;; one-element and the site records the asymmetry's reason.
+        ;; The span sites carry two names, matching the callback node's
+        ;; missing-callback-declaration, which also names its callback.
         (check-equal "span data callback: span then the undeclared name"
                      (diagnostic-declarations
                       (s1-diag (s1-decls 'a '() (list (s1-sp 'body 'nosuch #f)) errs (s1-ok-nodes))
@@ -3753,8 +3637,8 @@
                      '(body nosuch))))
     (harness-case "the duplicate-branch-key PAIR: a list at the declaration, '() at the node"
       (lambda ()
-        ;; The case that makes the per-site policy visible rather than accidental
-        ;; (F12's mirror): the declaration's key list is the subject there, while
+        ;; The case that makes the per-site policy visible rather than
+        ;; accidental: the declaration's key list is the subject there, while
         ;; at the callback NODE the fault is the node's own key list and the
         ;; callback resolved, so it carries no declaration.
         (check-equal "declaration site names the callback"
@@ -3775,10 +3659,10 @@
 
 ;; --- the eight path-bearing codes, one loop with an observed-count sentinel --
 ;; Each row: (label code fixture expected-first expected-last expected-member
-;;            expected-count). Compared by shape only (0032 item 5), and the
-;; finding COUNT rides beside the path so an empty-path mutant (same count, `#f`
-;; path) is told apart from an emission-deleting one (one fewer) -- the widening
-;; mutant nesting inside the deleting one (Task 6 Steps 6-8).
+;;            expected-count). Compared by shape only, and the finding COUNT
+;; rides beside the path so an empty-path mutant (same count, `#f` path) is told
+;; apart from an emission-deleting one (one fewer) -- the widening mutant
+;; nesting inside the deleting one.
 (define s1-path-table
   (list
    (list "zero-progress-cycle" 'zero-progress-cycle
@@ -3796,7 +3680,7 @@
          'start 'x 'y 1)
    ;; TWO hops (entry -> mid -> fin), so the byte-edge path is not the trivial
    ;; one the entry already carries: this is what catches "a byte parent is not
-   ;; recorded" (Task 6 Step 7), which leaves a source==entry fixture unchanged.
+   ;; recorded", which leaves a source==entry fixture unchanged.
    (list "non-eof-into-finish (edge)" 'non-eof-into-finish
          (s1-mach 'a 'start '() (list (s1-one-case 'start 'mid 'advance #f)
                                       (s1-one-case 'mid 'fin 'advance #f)
@@ -3849,10 +3733,9 @@
           (check-equal "the table has eight rows" (length s1-path-table) driven))))
     (harness-case "a parked callback's path starts at its pause continuation, not the node"
       (lambda ()
-        ;; 0032's Consequences: for a parked callback the walk starts at
-        ;; `parked-eof-start`'s answer -- the pause continuation -- and NOT at the
-        ;; reporting node. A test asserting the reporting node would pass for a
-        ;; dispatch and fail here; the design's first draft made that error.
+        ;; For a parked callback the walk starts at `parked-eof-start`'s answer
+        ;; -- the pause continuation -- and NOT at the reporting node. A test
+        ;; asserting the reporting node would pass for a dispatch and fail here.
         (let ((d (s1-diag
                   (make-machine 'a 'start '()
                     (list (make-callback-declaration 'ev 'event #f '() #f #f)) '() errs
@@ -3937,9 +3820,9 @@
         ;; stop nodes: the distinctness is the whole fixture -- one shared stop
         ;; makes the second branch a memo hit that returns the first's path, and
         ;; `>=` vs `>` become uncatchable. `s1`(true) is the LEFT operand of the
-        ;; join, so the shipped `>=` reports the path through it; `>` would report
-        ;; the path through `s2`. This is the witness 0032 item 5's determinism
-        ;; sentence never had (F10).
+        ;; join, so `>=` reports the path through it; `>` would report the path
+        ;; through `s2`. This is the witness for the join's deterministic
+        ;; tie-break.
         (let ((d (s1-diag
                   (make-machine 'j 's0 (list (make-uint-field 'n 8 0 #f)) '() '()
                     (list eof-decl rej-decl)

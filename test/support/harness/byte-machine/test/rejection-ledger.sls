@@ -1,26 +1,22 @@
-;;; The rejection ledger (decision 0033 item 1; Milestone 7 Slice ④, F13).
+;;; The rejection ledger.
 ;;;
 ;;; A record of ONE rejected draw -- its index, the machine, its diagnostics, and
 ;;; the two derived views the catalogue and the independent oracle read: the sorted
 ;;; unique code set and the sorted unique (code . node) pairs.
 ;;;
-;;; WHY ITS OWN LIBRARY, AND EXECUTOR-FREE. The ledger was born inside
-;;; `property-driver.sls` (Slice ②'s "8. rejection ledger" block), which imports
+;;; WHY ITS OWN LIBRARY, AND EXECUTOR-FREE. `property-driver.sls` imports
 ;;; (byte-machine interpret), (byte-machine compile) and (byte-machine runtime) --
-;;; it RUNS the differential, so it is executor-bound by construction. Slice ④'s
-;;; rejections program must have NO executor in scope (§4.5 / §22.6:1297, F7): the
-;;; corrupted machine is never handed to an executor, and the enforcement is
-;;; structural -- the program's lane manifest simply does not carry the three
-;;; executor libraries, so under the AOT lane the program CANNOT import them. A
-;;; ledger left in the driver would drag all three into that manifest and the
-;;; structural assertion would be gone. So the record and `make-rejection*` move
-;;; here, importing only (rnrs) and (byte-machine verify)'s diagnostic accessors --
-;;; verify is not an executor. `property-driver.sls` imports this library and
-;;; RE-EXPORTS the seven bindings, so its export list is byte-identical and nothing
-;;; that reads the driver moves; the rejections program imports this library
-;;; directly and never mentions the driver. One body, two consumers -- the
-;;; `error-projection` precedent the driver's own header cites ("eight local copies
-;;; ... is eight places for it to drift").
+;;; it RUNS the differential, so it is executor-bound by construction. The
+;;; rejections program must have NO executor in scope: the corrupted machine is
+;;; never handed to an executor, and the enforcement is structural -- the
+;;; program's lane manifest does not carry the three executor libraries, so under
+;;; the AOT lane the program CANNOT import them. A ledger defined in the driver
+;;; would drag all three into that manifest and the structural assertion would be
+;;; gone. So the record and `make-rejection*` live here, importing only (rnrs) and
+;;; (byte-machine verify)'s diagnostic accessors -- verify is not an executor.
+;;; `property-driver.sls` imports this library and RE-EXPORTS the seven bindings;
+;;; the rejections program imports this library directly and never mentions the
+;;; driver. One body, two consumers.
 
 (library (byte-machine test rejection-ledger)
   (export make-rejection* rejection? rejection-index rejection-machine

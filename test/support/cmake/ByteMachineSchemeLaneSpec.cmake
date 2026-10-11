@@ -131,8 +131,8 @@ spec_check_equal("${command}"
 
 # The guard directory is the entire mechanism that stops a stale .so from being
 # loaded in a lane that calls itself source. Asserted through its flag rather
-# than by position: with a repeatable-flag protocol a position is no longer
-# stable, and a lane that dropped the guard would still run.
+# than by position: with a repeatable-flag protocol a position is not stable,
+# and a lane that dropped the guard would still run.
 list(FIND command "--object-guard" guard_index)
 math(EXPR guard_value_index "${guard_index} + 1")
 list(GET command "${guard_value_index}" guard)
@@ -150,8 +150,7 @@ spec_check_equal("${dups}" "x.sls" "a repeated basename is reported once, howeve
 # CMake resolves an unset local through the calling scope, so if the
 # detector ever loses its own accumulator initialization, it inherits
 # whatever `duplicates` the caller has lying around. Seeded here so that
-# hazard has a witness -- the same assertion the retired repository-wide
-# guard's specification carried for the same two lines.
+# hazard has a witness.
 set(duplicates "stale-from-caller")
 byte_machine_lane_duplicate_basenames(dups "/a/x.sls" "/b/y.sls")
 spec_check_equal("${dups}" "" "the detector does not inherit the caller's ambient duplicates")
@@ -183,8 +182,8 @@ spec_check_equal("${message}"
 # "source" (see that file's own comment on this exact hazard), so a mutation
 # that reverted ${mode} back to a hardcoded "source" would pass every
 # assertion above -- every one of them calls with mode source. Asserted here
-# with mode aot instead, the one mode value able to tell the fixed code from
-# the reverted one.
+# with mode aot instead, the one mode value able to tell ${mode} from a
+# hardcoded "source".
 byte_machine_scheme_lane_command(byte-machine.harness.example.chez.aot
   chez aot "/h/self/p.sps" command measured status message)
 spec_check_equal("${status}" "no-runtime" "a chez aot lane without a chez is not registered")
@@ -210,8 +209,9 @@ spec_check_equal("${measured}" "/h/shared/a.scm;/h/shared/b.scm"
 
 # The aot half of the same rule, over two sources, because a one-source
 # manifest cannot witness order: the measured list must be the fingerprint/
-# copies, in the declared order. This is the assertion mutations C1 (measured
-# collapses to declared) and C2 (measured built in reverse) break.
+# copies, in the declared order. This is the assertion that the
+# MutationSuite.cmake mutations collapsing the measured list to the declared one,
+# and building it in reverse, break.
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 byte_machine_scheme_lane_command(byte-machine.harness.example-two.chez.aot
   chez aot "/h/self/p.sps"
@@ -282,7 +282,7 @@ endfunction()
 # scriptable under cmake -P), so it is stubbed the same way the two
 # registrars are: recorded, not run. What the spec can see is the routing
 # decision -- an aot registration must reach it, a source registration must
-# not -- and the arguments it was reached with, which is where Task 3's
+# not -- and the arguments it was reached with, which is where the
 # stale-root forwarding becomes assertable with no Scheme present.
 function(byte_machine_lane_chez_aot_artifacts name program stale_library_root)
   set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_NAME "${name}")
@@ -290,7 +290,7 @@ function(byte_machine_lane_chez_aot_artifacts name program stale_library_root)
 endfunction()
 
 # byte_machine_expected_fingerprint and byte_machine_wrong_fingerprint are
-# defined in test/CMakeLists.txt (Task 3, M0 slice 5a), which this standalone
+# defined in test/CMakeLists.txt, which this standalone
 # script does not include, so they are stubbed for the same reason the two
 # registrars above are: every direct registration below sets
 # BYTE_MACHINE_CHEZ_EXECUTABLE, which is exactly what makes
@@ -349,11 +349,11 @@ spec_check_equal("${environment}"
 
 # --- The mode is the name's, not a literal ---------------------------------
 #
-# A lane that declares a mode it is not running is the defect this whole slice
+# A lane that declares a mode it is not running is the defect this section
 # exists to prevent, and the declaration is what every other lane's evidence
-# is labelled with. Asserted over a name that is not `source`, because the
-# literal it replaced was `source`: a mutation restoring the literal passes
-# every assertion written over a source lane.
+# is labelled with. Asserted over a name that is not `source`, because a
+# hardcoded literal would be `source`: a mutation substituting that literal
+# passes every assertion written over a source lane.
 set(BYTE_MACHINE_CHEZ_EXECUTABLE "/opt/chez")
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_REGISTRAR "none")
 set_property(GLOBAL PROPERTY BYTE_MACHINE_SPEC_AOT_BUILDER_NAME "none")
@@ -373,8 +373,7 @@ spec_check_equal("${mode_entry}" "BYTE_MACHINE_EXECUTION_MODE=aot"
 # BYTE_MACHINE_EXPECT_FINGERPRINT_FILE is still keyed by the lane's own name --
 # the expectation comes from the declared source, the run's environment from
 # the measured one. This assertion is the declared/measured asymmetry itself,
-# the whole mechanism this task adds, visible here with no Scheme runtime
-# present.
+# visible here with no Scheme runtime present.
 spec_check_equal("${environment}"
   "BYTE_MACHINE_EXECUTION_MODE=aot;BYTE_MACHINE_FINGERPRINT_SAMPLE=${CMAKE_SOURCE_DIR}/test/fixtures/fingerprint-sample.bin;BYTE_MACHINE_FINGERPRINT_FILES=/objects/byte-machine_harness_example_chez_aot/fingerprint/ByteMachineSchemeLaneSpec.cmake;BYTE_MACHINE_EXPECT_FINGERPRINT_FILE=/fingerprints/byte-machine.harness.example.chez.aot.fingerprint"
   "an aot lane's environment carries the measured copy's path in BYTE_MACHINE_FINGERPRINT_FILES, not the declared source's own path")

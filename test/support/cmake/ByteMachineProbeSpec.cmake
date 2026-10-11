@@ -6,7 +6,7 @@
 # captures in CMAKE_MATCH_1, so a reader that does not first check the match
 # gets a plausible wrong answer -- a machine type belonging to another question
 # -- rather than an error. That is why this helper exists, and why it is
-# specified before either runtime module relies on it.
+# specified on its own rather than only through the modules that rely on it.
 #
 # Two modes. Positive assertions run inline. Each rejection is proved by a child
 # `cmake -P` of this same file, which must exit nonzero *and* print its declared
@@ -82,8 +82,8 @@ spec_check_equal("${v}" "CC=gcc-16" "value containing an equals sign")
 # previous lookup's value. CMAKE_MATCH_1 is deliberately dirtied first.
 # The dirtying regex must populate the *same* capture index the accessor reads
 # (CMAKE_MATCH_2), or this assertion proves nothing: a stale-returning accessor
-# would hand back an unset variable and look correct. Mutation testing caught
-# exactly that when the precondition only dirtied CMAKE_MATCH_1.
+# would hand back an unset variable and look correct. A precondition that
+# dirtied only CMAKE_MATCH_1 lets that mutation survive.
 #
 # MEASURED LIMIT OF THIS ASSERTION
 #
@@ -98,8 +98,7 @@ spec_check_equal("${v}" "CC=gcc-16" "value containing an equals sign")
 # only *what value* the branch writes. It does not cover whether the branch runs
 # at all: deleting it leaves the output variable untouched, which is a
 # version-independent defect and is caught here by the seeding above. Widening
-# the recorded limitation to "the clear cannot be tested" would have hidden
-# that.
+# the recorded limitation to "the clear cannot be tested" would hide that.
 string(REGEX MATCH "(machine-type)=(tarm64osx)" _ "${good_output}")
 spec_check_equal("${CMAKE_MATCH_2}" "tarm64osx" "precondition: CMAKE_MATCH_2 is dirty")
 # Seeded first. Asserting that an output is empty proves nothing when an unset

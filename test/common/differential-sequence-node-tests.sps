@@ -1,8 +1,7 @@
-;;; interpreter ≡ generated over a single-alternative SEQUENCE NODE (parent §18,
-;;; §22.4, §22.5). This lane is the slice's independent oracle: the construct is
-;;; new, but the expected behaviour is not. Milestone 2's sequence-machine.sls
-;;; built the same four-byte accept from four CHAINED DISPATCH NODES, and the
-;;; tuples below were measured against it before this node kind existed
+;;; interpreter ≡ generated over a single-alternative SEQUENCE NODE. The
+;;; expected behaviour has an independent oracle: sequence-machine.sls builds
+;;; the same four-byte accept from four CHAINED DISPATCH NODES, and the tuples
+;;; below are the ones measured against that machine
 ;;; (test/common/differential-sequence-tests.sps).
 ;;;
 ;;; Agreement alone cannot carry the lane -- both executors read the same source
@@ -21,8 +20,8 @@
         (byte-machine runtime)
         (byte-machine compile))
 
-;; Slice ①a task 5: the error slot now holds a parser-error, and the tuple
-;; carries its §22.4:1271 projection. A rejected byte at offset k reports the
+;; The error slot holds a parser-error, and the tuple carries its position
+;; projection. A rejected byte at offset k reports the
 ;; machine domain, the resolved code and reason, the public source-node name of
 ;; the error node, that same absolute offset, and `byte` -- the reexecute edge's
 ;; kind, since a mismatch does not consume the offending byte.
@@ -30,9 +29,9 @@
 ;; reached by an ADVANCE edge and reports `boundary` after the committed byte --
 ;; the same node, a different arriving transition, a different position kind.
 ;; That contrast is the clearest in-tree evidence that the kind is a property of
-;; the transition rather than of the state (decision 0022).
+;; the transition rather than of the state.
 ;; The last two members are the span the error abandoned and where its withheld
-;; bytes begin (decision 0056) -- #f here, where no span is ever open.
+;; bytes begin -- #f here, where no span is ever open.
 (define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte #f #f))
 (define (advance-reject-at k)
   (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary #f #f))
@@ -49,12 +48,12 @@
 ;; <machine-name>-parser, is derived from this function's own `name` argument.
 ;; The library name, (generated <machine-name>), is NOT: emit-machine draws it
 ;; from the compiled machine's own `machine-name` field, set inside
-;; sequence-node-machine.sls at construction time. The two agree today only
+;; sequence-node-machine.sls at construction time. The two agree only
 ;; because this fixture's `build` helper reuses the identical symbol for both
 ;; its `name` argument here (`'seqnode`/`'advseq`) and the name passed to
 ;; `make-machine` -- an invariant held by convention, asserted nowhere, and
 ;; enforced only by `environment` (below) failing loudly with a
-;; library-not-found error if a future fixture's label and machine-name ever
+;; library-not-found error if a fixture's label and machine-name ever
 ;; diverge: `load` installs whatever library name the generated file declares
 ;; and succeeds regardless; it is `(environment (list 'generated name))`, the
 ;; only form that consumes this function's own `name` argument, that raises
@@ -99,7 +98,7 @@
 (define ad-ref (make-interpreted-machine (verify-machine adv-machine)))
 (define ad-gen (generated-machine 'advseq adv-machine))
 
-;; --- the Milestone 2 tuples, reproduced by a sequence node ---
+;; --- the chained-dispatch tuples, reproduced by a sequence node ---
 (harness-group "the M2 chained-dispatch tuples are reproduced exactly"
   (lambda ()
     (harness-case "the full sequence in one slice stops after four bytes in both"
@@ -149,7 +148,7 @@
                      (run-slices cm-gen (list (list padded 1 3) (list padded 3 3)))
                      '(need-input 3 0 2 #f))))))
 
-;; --- fragmentation (§22.5) ---
+;; --- fragmentation ---
 (define seq-input (u8v 1 2 3 4))
 (define (slices-for cuts)
   (let ((bounds (append '(0) cuts '(4))))
@@ -189,15 +188,15 @@
            all-cut-sets expected-tuples)
           (check-equal "no split misbehaved" bad 'none)
           (check-equal "all eight cut-sets ran" sets 8))))
-    ;; with-empties (above, inherited verbatim from the M2 oracle) inserts
+    ;; with-empties (above, identical to the chained-dispatch oracle's) inserts
     ;; an empty feed before every real slice, including the last -- so its
     ;; schedule is EMPTY (0 1) EMPTY (1 2) EMPTY (2 3) EMPTY EMPTY (3 4): the
     ;; final feed is still a DATA slice, and the case below exercises leading
     ;; and intermediate empties only. A genuinely trailing empty -- fed after
     ;; the sequence has already stopped -- is a separate scenario, covered by
     ;; the next case; do not fold the two, and do not change with-empties'
-    ;; shape (it must keep reproducing the M2 oracle's own gap, not diverge
-    ;; from it).
+    ;; shape (it must keep reproducing the chained-dispatch oracle's own gap,
+    ;; not diverge from it).
     (harness-case "leading / intermediate empty feeds still accept"
       (lambda ()
         (check-equal "interpreter with empties"
@@ -209,7 +208,7 @@
                      (run-slices cm-gen (with-empties (slices-for '(1 2 3)))))))
     ;; A genuinely trailing empty feed: fed AFTER the sequence has already
     ;; reached 'stopped, not before the final data slice. The parser is
-    ;; already sticky by then (§12.2), so this pins the sticky-stopped
+    ;; already sticky by then, so this pins the sticky-stopped
     ;; short-circuit's own tuple for this fixture, absolutely, on both
     ;; executors -- measured, not assumed.
     (harness-case "a trailing empty feed after the sequence completes stays stopped"
@@ -220,20 +219,20 @@
                      (run-slices cm-ref after-complete) '(stopped 0 0 4 #f))
         (check-equal "generated after completion"
                      (run-slices cm-gen after-complete) '(stopped 0 0 4 #f))))
-    ;; Re-review, Task 5 fix wave 2: the case above feeds from start 0, so its
+    ;; The case above feeds from start 0, so its
     ;; assertion cannot separate the correct decision (next = start) from a
     ;; mutant that hardcodes next to a literal 0, OR from one that confuses
     ;; start with the sticky arm's OTHER in-scope value, (parser-offset
-    ;; parser) -- all three read 0 there. This is the same trap the sticky
-    ;; error arm's `next` field and the pause arm's `next` field each already
-    ;; needed a dedicated nonzero-start fixture to close (runtime-tests.sps's
-    ;; "the error row returns the stored error after a feed error" and "a
-    ;; nonzero-start feed pause separates next, consumed, and stream offset",
-    ;; :411-431); the sticky-STOPPED arm had never had its own. padded's
+    ;; parser) -- all three read 0 there. The sticky error arm's `next` field
+    ;; and the pause arm's `next` field each have a dedicated nonzero-start
+    ;; fixture for the same reason (runtime-tests.sps's "the error row returns
+    ;; the stored error after a feed error" and "a nonzero-start feed pause
+    ;; separates next, consumed, and stream offset"); this is the
+    ;; sticky-STOPPED arm's. padded's
     ;; [1,5) slice completes the sequence with stream-offset 4, then the
     ;; empty [5,5) feed lands on the sticky-stopped arm at a DIFFERENT
     ;; nonzero start (5) -- start, the literal 0, and (parser-offset parser)
-    ;; are now pairwise distinct, so any of the three wrong answers reddens
+    ;; are pairwise distinct, so any of the three wrong answers reddens
     ;; this case. Absolute on both executors, not just agreement: parser-
     ;; feed!'s sticky arms run before either executor variant is dispatched
     ;; to, so a mutation here would make interpreted and generated wrong
@@ -273,15 +272,15 @@
   (lambda ()
     (harness-case "256 x 4 positions match, in both mismatch modes"
       (lambda ()
-        ;; SENTINEL: ONE counter over both loops, not one per loop. The shape
-        ;; this replaced -- a `last-byte` slot shared across the four positions
-        ;; plus a `positions` counter incremented from the literal '(0 1 2 3)
-        ;; the for-each walks -- asserted nothing about the nesting. `positions`
-        ;; was 4 by construction, so its check could only fail if the literal
-        ;; itself were edited; and `last-byte` reaches 255 as soon as ANY one
-        ;; inner loop completes, so "256 bytes at position 3 and none at 0-2"
-        ;; passed green. That is AGENTS.md's fixture-integrity check wearing a
-        ;; behavioural sentinel's label. Counting (position byte) drives closes
+        ;; SENTINEL: ONE counter over both loops, not one per loop. A
+        ;; `last-byte` slot shared across the four positions plus a `positions`
+        ;; counter incremented from the literal '(0 1 2 3) the for-each walks
+        ;; would assert nothing about the nesting: `positions` is 4 by
+        ;; construction, so its check could only fail if the literal itself
+        ;; were edited; and `last-byte` reaches 255 as soon as ANY one inner
+        ;; loop completes, so "256 bytes at position 3 and none at 0-2" would
+        ;; pass green -- a fixture-integrity check wearing a behavioural
+        ;; sentinel's label. Counting (position byte) drives closes
         ;; it: 4 x 256 = 1024 is exactly what the group name claims, and no
         ;; partial run reaches it. Same remedy, same reasoning as
         ;; differential-http-version-tests.sps's 8 x 256 = 2048 sentinel.
@@ -302,9 +301,9 @@
           (check-equal "the loops ran all 4 x 256 (position byte) drives"
                        drives 1024))))))
 
-;; §11.5:664 -- the advance path had no coverage anywhere in this tree before
-;; Slice ②, and an advance-mode mismatch shifts every reported position by one.
-;; Asserted absolutely on the GENERATED side, not only as agreement.
+;; The two mismatch modes: an advance-mode mismatch shifts every reported
+;; position by one. Asserted absolutely on the GENERATED side, not only as
+;; agreement.
 (harness-group "both mismatch modes, absolutely, on the generated executor"
   (lambda ()
     (harness-case "reexecute keeps next and consumed at zero"
@@ -317,14 +316,13 @@
         (check-equal "k=3" (drive ad-gen '(1 2 3) 200) (list 'error 1 1 4 (advance-reject-at 4)))))
     (harness-case "both modes accept the sequence identically"
       (lambda ()
-        ;; advseq's accept path had no absolute (literal-tuple) assertion
-        ;; anywhere in the tree before this line -- neither interpreted nor
-        ;; generated (Task 4's sequence-interpret-tests.sps only asserts a
-        ;; status class for its accepting byte, and this file's own accept-
-        ;; path coverage of ad-gen was agreement-only: the 256-byte loop
-        ;; compares ad-ref to ad-gen, and this case compared cm-gen to
-        ;; ad-gen -- both agreement, never a literal). Measured against the
-        ;; real tree, not copied from cm-gen's tuple.
+        ;; This is advseq's only absolute (literal-tuple) accept-path
+        ;; assertion, interpreted or generated: sequence-interpret-tests.sps
+        ;; asserts only a status class for its accepting byte, and the rest of
+        ;; this file's accept-path coverage of ad-gen is agreement-only (the
+        ;; 256-byte loop compares ad-ref to ad-gen, and the second check below
+        ;; compares cm-gen to ad-gen). Measured against the real tree, not
+        ;; copied from cm-gen's tuple.
         (check-equal "advance accept"
                      (run-slices ad-gen (list (list (u8v 1 2 3 4) 0 4)))
                      '(stopped 4 4 4 #f))
@@ -332,15 +330,14 @@
                      (run-slices cm-gen (list (list (u8v 1 2 3 4) 0 4)))
                      (run-slices ad-gen (list (list (u8v 1 2 3 4) 0 4))))))))
 
-;; --- Milestone 5 Slice ②: `parser-state-name` at an INTERNAL prefix state ----
+;; --- `parser-state-name` at an INTERNAL prefix state ----------------------
 ;;
-;; §13:820 requires "the source callback/span node, not a generated internal
-;; continuation", and this is the one machine shape in the tree where the two
-;; lanes hold structurally different things there: the interpreter parks on the
-;; compound `(seq . consumed-bytes)` and the generated lane on an integer id
-;; that names no source node at all. That is exactly why Slice ①b deferred the
-;; accessor whole -- the generated lane could not answer -- and why ABI payload
-;; member 2's table is total over internal prefix states.
+;; The accessor names the source callback/span node, not a generated
+;; internal continuation, and this is the one machine shape in the tree where
+;; the two lanes hold structurally different things there: the interpreter
+;; parks on the compound `(seq . consumed-bytes)` and the generated lane on an
+;; integer id that names no source node at all. That is why ABI payload member
+;; 2's table is total over internal prefix states.
 (harness-group "parser-state-name names the SOURCE node mid-sequence"
   (lambda ()
     (harness-case "both lanes answer the declaring node at every prefix depth"

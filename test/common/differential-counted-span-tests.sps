@@ -1,18 +1,17 @@
-;;; Milestone 6 Slice ②: the counted body INSIDE A SPAN, in both lanes -- the
-;;; fragment trace with per-feed event placement over every schedule (design §7;
-;;; decision 0030 item 2). No mechanism is added by this slice: every rule here
-;;; already runs at the parser-feed! seam or in the span-end substeps. What this
-;;; lane adds is the oracle: the six §14 rules over a counted body (rules 2, 4, 5,
-;;; 8, 9, 10), the §10.6:603 PLACEMENT of the completion event asserted as a value
-;;; per feed against a table derived from the schedule before the run (the one
-;;; value lane agreement cannot see -- a symmetric wrong reading of 0030 item 2
-;;; puts the completion in the delimiter's feed in both lanes), §22.5's schedules
-;;; with same-schedule exactness and cross-schedule coalesced invariance, the
-;;; error path, and §25:1609's span variant.
+;;; The counted body INSIDE A SPAN, in both lanes -- the fragment trace with
+;;; per-feed event placement over every schedule. Every rule here runs at the
+;;; parser-feed! seam or in the span-end substeps; this lane is the oracle: six
+;;; span rules over a counted body (the "rule N" groups: 2, 4, 5, 8, 9, 10), the
+;;; PLACEMENT of the completion event asserted as a value per feed against a
+;;; table derived from the schedule before the run (the one value lane agreement
+;;; cannot see -- a symmetric wrong reading puts the completion in the
+;;; delimiter's feed in both lanes), the schedule alphabet with same-schedule
+;;; exactness and cross-schedule coalesced invariance, the error path, and both
+;;; machine variants (with and without the completion callback).
 ;;;
 ;;; Every feed is driven by an explicit left-to-right loop, never `map` (R6RS
-;;; leaves map's order unspecified; Slice ① lost an afternoon to it). One recorder
-;;; per lane, each with its own accumulator.
+;;; leaves map's order unspecified). One recorder per lane, each with its own
+;;; accumulator.
 (import (rnrs) (rnrs eval) (only (chezscheme) load)
         (byte-machine test harness)
         (byte-machine test counted-machine)
@@ -147,11 +146,11 @@
               (list (obs 'need-input 3 3 #f 'ready 'idle #f 0 '((data 0) complete))))))
     (harness-case "0:, byte at a time: the empty fragment and completion land in the : feed, the , feed records nothing"
       (lambda ()
-        ;; The zero count takes its route at once (decision 0030 item 1): the `:`
-        ;; feed opens the span, transitions, and the span END delivers the one
-        ;; empty fragment (decision 0042 -- the body delivered nothing, so the
-        ;; empty fragment is the span's only fragment) before firing the
-        ;; completion and parking on the delimiter dispatch.
+        ;; The zero count takes its route at once: the `:` feed opens the span,
+        ;; transitions, and the span END delivers the one empty fragment (the
+        ;; body delivered nothing, so the empty fragment is the span's only
+        ;; fragment) before firing the completion and parking on the delimiter
+        ;; dispatch.
         (both "zero body, byte at a time" 'full '((feed "0") (feed ":") (feed ",")) '() callback-continue
               (list (obs 'need-input 1 1 #f 'ready 'len #f 0 '())
                     (obs 'need-input 1 2 #f 'ready 'comma #f 0 '((data 0) complete))
@@ -194,10 +193,10 @@
       (lambda ()
         (both "two messages, two completions" 'full '((feed "3:abc,0:,")) '() callback-continue
               ;; The second message's body is empty, so its span delivers one
-              ;; empty fragment (data 0) before its completion (decision 0042).
+              ;; empty fragment (data 0) before its completion.
               (list (obs 'need-input 9 9 #f 'ready 'idle #f 0 '((data 3) complete (data 0) complete))))))))
 
-;; --- the placement oracle, per schedule (§10.6:603; decision 0030 item 2) ---------
+;; --- the placement oracle, per schedule ------------------------------------------
 ;;
 ;; The payload is `3:abc,` -- stream offsets 0..5, the body at 2, 3 and 4. For a
 ;; schedule (a list of (bv start end) slices) the expected per-feed record is
@@ -263,8 +262,9 @@
   (lambda ()
     (harness-case "the byte-at-a-time schedule, per feed, in each lane"
       (lambda ()
-        ;; The schedule decision 0030 item 2 was written for, spelled out: a
-        ;; wrong reading puts the completion in the `,` feed in BOTH lanes.
+        ;; The schedule that separates the placement rule from its misreading,
+        ;; spelled out: a wrong reading puts the completion in the `,` feed in
+        ;; BOTH lanes.
         (let ((sched (list (list pay 0 1) (list pay 1 2) (list pay 2 3) (list pay 3 4) (list pay 4 5) (list pay 5 6)))
               (want '((() 3 #f) (() 3 sp) (((data 1)) 2 sp) (((data 1)) 1 sp) (((data 1) complete) 0 #f) (() 0 #f))))
           (check-equal "derived table" (expected-per-feed sched #t) want)

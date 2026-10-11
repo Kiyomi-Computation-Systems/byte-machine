@@ -1,14 +1,12 @@
-;;; D6 (parent §22.9, §20) over the Milestone 4 Slice ③ accumulate machine:
-;;; deterministic emission proved against a committed golden, and the emitted
-;;; library's accumulate walks proved directly. Byte-identity in this process AND
-;;; equality to the golden give cross-process, cross-lane and cross-cell identity
-;;; transitively, exactly as the three shipped determinism lanes do.
+;;; Deterministic emission of the accumulate machine, proved against a committed
+;;; golden, and the emitted library's accumulate walks proved directly.
+;;; Byte-identity in this process AND equality to the golden give cross-process,
+;;; cross-lane and cross-cell identity transitively, exactly as the other
+;;; determinism lanes do.
 ;;;
-;;; The fourth golden. §8 asks for both this lane and an empty `test/fixtures`
-;;; diff; those are incompatible, and this file is the reason the gate was
-;;; reworded rather than the lane dropped -- an INPUT-READING node renders an arm
-;;; no existing golden contains, and a determinism claim about emission that
-;;; excludes the milestone's own new node kind is a claim about the other three.
+;;; An INPUT-READING node renders an arm no other golden contains, so a
+;;; determinism claim about emission that excluded it would be a claim about the
+;;; other node kinds only; this golden carries it.
 ;;;
 ;;; Comparison is over raw bytes through the project-owned writer, never via
 ;;; implementation `write`.

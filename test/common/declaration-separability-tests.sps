@@ -1,13 +1,11 @@
-;;; Milestone 5 Slice ①b's oracle: a machine that DECLARES callbacks and spans
-;;; and contains no callback or span NODE must verify, normalize, emit and run
-;;; identically in both lanes, with the differential's existing value tuple
-;;; unchanged.
+;;; A machine that DECLARES callbacks and spans and contains no callback or span
+;;; NODE must verify, normalize, emit and run identically in both lanes, with
+;;; the differential's value tuple unchanged.
 ;;;
-;;; *** NO LATER SLICE CAN ESTABLISH THIS. *** Once a callback-invocation node
-;;; exists, a declaration is no longer separable from its use by construction,
-;;; and a test asserting they are separable would be asserting something about
-;;; the fixture rather than about the design. Slice ①b is the only slice in which
-;;; "declared but unused" is the ONLY thing a declaration can be.
+;;; A machine with no callback or span node is the one shape in which
+;;; "declared but unused" is the ONLY thing a declaration can be; once a
+;;; callback-invocation node is present, declaration and use are no longer
+;;; separable by construction.
 ;;;
 ;;; The tuple is asserted UNCHANGED rather than merely equal across lanes: two
 ;;; lanes that both moved the same way agree, and a differential comparing only
@@ -100,7 +98,7 @@
       (lambda ()
         ;; The literal is the point. Comparing the two lanes to each other would
         ;; pass if both moved together; comparing them to a value written down
-        ;; before this slice is what makes "unchanged" mean something.
+        ;; independently is what makes "unchanged" mean something.
         (let* ((expected '(stopped 1 1 1 stopped))
                (ref-bare (make-interpreted-machine (verify-machine bare)))
                (ref-decl (make-interpreted-machine (verify-machine declaring)))
@@ -131,7 +129,7 @@
   (lambda ()
     (harness-case "an optional declared callback needs no binding, in either lane"
       (lambda ()
-        ;; §9.3:419's defaulting, witnessed by observed behaviour: every
+        ;; Optional-callback defaulting, witnessed by observed behaviour: every
         ;; declaration above is optional, so a parser must build with NO
         ;; bindings at all -- and the generated lane resolves against ABI member
         ;; 1 rather than against the source machine.

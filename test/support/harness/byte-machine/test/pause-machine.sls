@@ -1,18 +1,17 @@
-;;; The pause/resume proving machine for Milestone 2 Slice ③, built only
-;;; through (byte-machine graph). Feed: byte 1 advances into pause p1
+;;; The pause/resume proving machine, built only through
+;;; (byte-machine graph). Feed: byte 1 advances into pause p1
 ;;; (continuation s1); after resume, byte 2 stops. EOF at entry routes to the
 ;;; eof-path pause pe (continuation done/finish): finish! pauses, resume,
 ;;; finish! -> finished. EOF after byte 1 (at s1) is truncation ('trunc ->
-;;; error). Shared by the Slice ③ interpreter tests, the pause differential,
+;;; error). Shared by the pause interpreter tests, the pause differential,
 ;;; and the pause determinism golden so the graph is written once.
 ;;;
-;;; Milestone 12: p1 and pe carry DISTINCT optional reason declarations
-;;; (`paused-cont` on the feed pause, `paused-eofr` on the EOF pause) so the pause
-;;; lanes prove a pause reports its own (code, reason) -- two different nodes, two
-;;; different reasons, the error slot still #f. Adding the reasons does not change
-;;; the graph shape, so the existing pause-interpret assertions (which read only
-;;; status/offset/lifecycle, not the pause slot) are unaffected; the differential
-;;; lane gains the pause-slot projection, and the determinism golden re-baselines.
+;;; p1 and pe carry DISTINCT optional reason declarations (`paused-cont` on the
+;;; feed pause, `paused-eofr` on the EOF pause) so the pause lanes prove a pause
+;;; reports its own (code, reason) -- two different nodes, two different reasons,
+;;; the error slot still #f. The pause-interpret assertions read only
+;;; status/offset/lifecycle, not the pause slot; the differential lane projects
+;;; the pause slot.
 (library (byte-machine test pause-machine)
   (export make-pause-machine)
   (import (rnrs) (byte-machine graph))

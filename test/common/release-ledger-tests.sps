@@ -1,11 +1,11 @@
-;;; Milestone 9 Slice ⓪: the release ledger, read by a lane (decision 0038).
-;;; The two totality rows re-read §26 and §27 from the parent plan as DATA and
-;;; set-compare against the ledger, so a drift in either side fails by name
+;;; The release ledger, read by a lane. The two totality rows re-read the
+;;; implementation plan's release criteria (§26) and deliverables (§27) as DATA
+;;; and set-compare against the ledger, so a drift in either side fails by name
 ;;; (self-ratcheting; no mutation entry). Mechanical rows are executed here;
-;;; judgement rows are recorded, not re-checked. The §4.5 version surface is
+;;; judgement rows are recorded, not re-checked. The version surface is
 ;;; checked: `release-version` is the single owner (each release moves it with
-;;; its five mirror surfaces; the §26/§27 census stays the still-met v0.1
-;;; criteria), the export is declined, and no public library exports a
+;;; its five mirror surfaces; the §26/§27 census stays the v0.1 criteria, all
+;;; still met), the export is declined, and no public library exports a
 ;;; `version` name.
 (import (rnrs)
         (only (chezscheme) directory-list)
@@ -93,7 +93,7 @@
         (lambda ()
           (check-equal "set-equal (plan vs ledger)" ledger-set plan-set))))))
 
-;; ---- the disposition partition (the design Appendix, authoritative) --------
+;; ---- the disposition partition --------------------------------------------
 (define (refs-with-state st)
   (sort-strings (map criterion-ref (filter (lambda (r) (eq? (criterion-state r) st)) release-criteria))))
 (harness-group "the disposition partition (the release criteria, met through v0.7.0: 13 met, 2 amended, 0 open)"
@@ -184,28 +184,22 @@
         (check "kind mechanical" (mechanical? "§26:1684"))
         (let ((cl (string-append repo "/CHANGELOG.md")))
           (check "CHANGELOG.md exists" (file-exists? cl))
-          ;; §26:1684 is the v0.1 criterion; its [0.1.0] entry is kept in history.
+          ;; Every release's entry stays in the changelog, oldest to newest.
           (check "has the [0.1.0] entry"
                  (harness-string-contains? (file-string cl) "[0.1.0]"))
-          ;; Milestone 10's entry, kept in history.
           (check "has the [0.2.0] entry"
                  (harness-string-contains? (file-string cl) "[0.2.0]"))
-          ;; Milestone 11's entry, kept in history.
           (check "has the [0.3.0] entry"
                  (harness-string-contains? (file-string cl) "[0.3.0]"))
-          ;; Kept in history through Milestone 12.
           (check "has the [0.4.0] entry"
                  (harness-string-contains? (file-string cl) "[0.4.0]"))
-          ;; Kept in history through Milestone 14.
           (check "has the [0.5.0] entry"
                  (harness-string-contains? (file-string cl) "[0.5.0]"))
-          ;; Milestone 14's entry, kept in history.
           (check "has the [0.6.0] entry"
                  (harness-string-contains? (file-string cl) "[0.6.0]"))
-          ;; Issue #139's patch, kept in history.
           (check "has the [0.6.1] entry"
                  (harness-string-contains? (file-string cl) "[0.6.1]"))
-          ;; The current release's own entry (release-version 0.7.0, issue #145).
+          ;; The current release's own entry (release-version 0.7.0).
           (check "has the [0.7.0] entry"
                  (harness-string-contains? (file-string cl) "[0.7.0]")))))
     (harness-case "§26:1685 no native artifact is tracked; the leak lane guards HTTP re-export"
@@ -258,7 +252,7 @@
       (lambda ()
         (check-equal "exists count" (length (filter deliverable-exists? release-deliverables)) 11)))))
 
-;; ---- §4.5 the version surface ----------------------------------------------
+;; ---- the version surface ---------------------------------------------------
 ;; Read the public libraries as data (the http-leak technique) and assert none
 ;; exports a `version` name — the declined export made observable.
 (define (read-library-datum path)

@@ -1,5 +1,6 @@
-;;; parser-field-ref across both executors (§9.3:410, §13:801; Milestone 4 Slice
-;;; ①b tasks 6 and 7). The generated library is emitted at run time, loaded, and
+;;; parser-field-ref across both executors, and the field operations, predicates
+;;; and checked multiply-add that write fields. The generated library is emitted
+;;; at run time, loaded, and
 ;;; its compiled machine obtained by environment/eval, exactly as the
 ;;; differential lanes do — because the two executors reach the field
 ;;; declarations by DIFFERENT routes and only running both proves they agree.
@@ -30,19 +31,17 @@
 (define eof-decl (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
 (define rej-decl (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
 
-;; *** The fixture the design asks for (milestone-4-design.md:1208-1218), which
-;; Slice ①b first shipped without and the whole-branch review restored. ***
-;;
 ;; A DISTINCT NON-ZERO INITIAL PER WIDTH, so a lane that zero-fills, reads the
 ;; wrong slot or transposes two slots gives a wrong answer rather than a
 ;; coincidentally right one -- an all-zero fixture passes under every one of
-;; those defects, and the first version of this file had a zero among its three.
+;; those defects.
 ;;
 ;; A U64 INITIAL AT OR ABOVE 2^60, which is exactly the bignum boundary on this
 ;; host: under the project's Chez, (fixnum-width) is 61 and (greatest-fixnum) is
 ;; 2^60 - 1, so 2^60 is the first non-fixnum while u32's own maximum 4294967295
 ;; is still a fixnum. Without it all four widths exercise the FIXNUM path only
-;; and §15:856's "must not rely on host fixnum width" is untested end to end --
+;; and the rule that field arithmetic must not rely on host fixnum width is
+;; untested end to end --
 ;; the initial has to survive make-uint-field, the normalizer's field table,
 ;; put-u64be in the encoding, number->string in the emitter, the reader on the
 ;; way back in, and parser-field-ref.
@@ -85,11 +84,10 @@
 (define cm-ref (make-interpreted-machine (verify-machine m)))
 (define cm-gen (emit-and-load m 'field-access 'field-access-parser genfile))
 
-;; --- Slice ② task 6+7: a machine that WRITES fields ---
+;; --- A machine that WRITES fields ---
 ;; Byte 0 increments `count` and stops; byte 1 runs `count` up against its u8
-;; ceiling through a branch. This is the first fixture in the tree whose fields
-;; a parse actually changes, which is what makes the two obligations Slice ①b
-;; deferred witnessable at last.
+;; ceiling through a branch. Because a parse changes its fields, per-parser
+;; storage isolation and parser-reset!'s restore are witnessable here.
 (define wm
   (make-machine 'writer 'start
     (list (make-uint-field 'count 8 254 #f) (make-uint-field 'seen 16 0 #f))
@@ -103,13 +101,13 @@
           (make-field-action-node 'bump 'increment '(count) 'note 'over #f)
           (make-field-action-node 'note 'add '(seen 1) 'chk 'over #f)
           ;; A field BRANCH, so the emitted branch arm is exercised too. Without
-          ;; one, mutations of that arm survive the whole lane -- measured.
+          ;; one, mutations of that arm survive the whole lane.
           (make-field-branch-node 'chk 'zero '(count) 'odd 'start #f)
           (make-field-action-node 'odd 'add '(seen 100) 'start 'over #f)
           ;; Overflows from BELOW the ceiling: 254 + 10 = 264 > 255. Without this
           ;; the only overflow in the fixture starts AT 255, where "leaves the
           ;; prior value unchanged" and "clamps to the maximum" coincide -- and a
-          ;; mutant that clamps survives. Measured: it did.
+          ;; mutant that clamps survives.
           (make-field-action-node 'big 'add '(count 10) 'start 'over #f)
           (make-error-node 'over 'rejected #f)
           (make-error-node 'reject 'rejected #f))
@@ -133,14 +131,14 @@
     (harness-case "a failed operation leaves the prior value unchanged (§25:1569)"
       (lambda ()
         ;; 254 -> 255 on the first byte; the second increment overflows a u8 and
-        ;; must route to the error target WITHOUT writing. §10.6:568 and
-        ;; §15:870: overflow leaves the prior value alone.
+        ;; must route to the error target WITHOUT writing: overflow leaves the
+        ;; prior value alone.
         (let ((p (feed-bytes wm-ref '(0 0))))
           (check-equal "count held at its maximum" (parser-field-ref p 'count) 255)
           (check-equal "lifecycle" (parser-lifecycle p) 'error))))
     (harness-case "an overflow from BELOW the ceiling does not clamp"
       (lambda ()
-        ;; §10.6:568 and §15:870 say the prior value is unchanged -- not
+        ;; A failed operation leaves the prior value unchanged -- not
         ;; saturated. 254 + 10 overflows a u8, and `count` must still read 254.
         (let ((p (feed-bytes wm-ref '(1))))
           (check-equal "unchanged, not clamped" (parser-field-ref p 'count) 254)
@@ -152,10 +150,10 @@
           (check-equal "status" (parser-result-status r) 'error))))
     (harness-case "a failure after a zero-width hop on an EOF chain reports eof, not boundary"
       (lambda ()
-        ;; *** H7: the design never poses this, and §12.7:777 makes position kind
-        ;; differential-compared, so the two lanes disagreeing is a lane failure
-        ;; rather than a cosmetic one. *** The ruling: a zero-width step does not
-        ;; move the parser in the input, so `pk` is carried THROUGH. On an EOF
+        ;; Position kind is differential-compared, so the two lanes disagreeing
+        ;; here is a lane failure rather than a cosmetic one. The rule: a
+        ;; zero-width step does not move the parser in the input, so `pk` is
+        ;; carried THROUGH. On an EOF
         ;; chain it is already 'eof by the time the hop happens, and a failure
         ;; reached one hop later is still at end of input -- resetting it to
         ;; 'boundary would claim the parser is between bytes when there are none.
@@ -167,7 +165,7 @@
                             (make-edge 'reject 'reexecute) 'bump #f)
                           ;; `next` must NOT return to the chain: routed back to
                           ;; `start` this is an EOF cycle, and the verifier
-                          ;; rejects it -- which is task 2 and task 3 working.
+                          ;; rejects it.
                           (make-field-action-node 'bump 'increment '(count) 'done 'over #f)
                           (make-finish-node 'done #f)
                           (make-error-node 'over 'rejected #f)
@@ -178,18 +176,14 @@
           (check-equal "status" (parser-result-status r) 'error)
           (check-equal "position kind"
                        (parser-error-position-kind (parser-result-error r)) 'eof))))
-    ;; *** Slice ①b's DEFERRED isolation case, now writable. *** ①b declined it
-    ;; with a written reason -- parser-field-ref was read-only and nothing wrote
-    ;; a field, so two parsers sharing one vector and two holding their own were
-    ;; observationally identical. A writer exists now, so the case can fail.
+    ;; Per-parser isolation of field storage. Without a write, two parsers
+    ;; sharing one vector and two holding their own are observationally
+    ;; identical; feeding one of them is what lets this case fail.
     (harness-case "two parsers from one compiled machine do not share field storage"
       (lambda ()
         (let ((a (feed-bytes wm-ref '(0))) (b (make-parser wm-ref '() #f)))
           (check-equal "the one that fed" (parser-field-ref a 'count) 255)
           (check-equal "the one that did not" (parser-field-ref b 'count) 254))))
-    ;; *** Slice ①b's parser-reset! EXPECT_SURVIVES, now closable. *** Its own
-    ;; reason names this exact condition: the restore becomes witnessable the
-    ;; moment a writer exists, and the mutation must be re-pinned in that commit.
     ;; *** The GENERATED lane runs the same schedule. *** Everything above drives
     ;; the interpreter; these drive the emitted library, and the last case
     ;; compares them. Without this the emitter's arms -- a separate
@@ -213,24 +207,22 @@
         ;; agree on the field values AND the status for each byte, not merely on
         ;; the one byte a hand-written case happens to name.
         ;;
-        ;; *** Slice ③: each lane is also asserted against an EXPECTED value, not
-        ;; only against the other lane. *** Agreement is symmetric, so breaking
-        ;; either implementation of the same decision produces the SAME record --
-        ;; which is why Slice ②'s whole-pass sweep found the emitter's
-        ;; zero-width-consumes-a-byte pin nesting inside the interpreter's, with
-        ;; no record of its own, and recorded per-lane expected values as the
-        ;; fix it was owed. This is that fix. The table is MEASURED from the
-        ;; green tree, not asserted from the design: `count` is a u8 declared at
-        ;; 254, byte 0 increments it to 255 and byte 1 runs it up against the
-        ;; ceiling until the failure branch fires.
+        ;; *** Each lane is also asserted against an EXPECTED value, not only
+        ;; against the other lane. *** Agreement is symmetric, so breaking
+        ;; either implementation of the same decision produces the SAME record,
+        ;; and a mutant of the emitter would nest inside the matching mutant of
+        ;; the interpreter with no record of its own. Per-lane expected values
+        ;; separate them. The table is MEASURED from the green tree: `count` is
+        ;; a u8 declared at 254, byte 0 increments it to 255 and byte 1 runs it
+        ;; up against the ceiling until the failure branch fires.
         (let ((seen 0))
           (for-each
            (lambda (row)
              (set! seen (+ seen 1))
              ;; The check label names the WHOLE schedule, not just its first
              ;; byte. With `(0)` and `(0 0)` both labelled "0", two different
-             ;; mutants produced byte-identical FAIL records and no pin could
-             ;; tell them apart -- measured by this task's own sweep.
+             ;; mutants would produce byte-identical FAIL records and no pin
+             ;; could tell them apart.
              (let* ((bs (car row)) (want-count (cadr row))
                     (want-seen (caddr row)) (want-life (cadddr row))
                     (a (feed-bytes wm-ref bs)) (b (feed-bytes wm-gen bs))
@@ -268,11 +260,11 @@
           (check-equal "restored to the declared initial" (parser-field-ref p 'count) 254)
           (check-equal "and the other field too" (parser-field-ref p 'seen) 0))))))
 
-;; The zero-field control exists PER LANE. It was one interpreted machine shared
-;; by both groups, so the case inside "parser-field-ref (generated)" ran the
-;; interpreter and the v2 arm's empty-member-0 path was never executed anywhere
-;; in the tree -- measured by the whole-branch review, which made the two lanes
-;; disagree on a §9.3:410 accessor while the whole suite stayed green.
+;; The zero-field control exists PER LANE. With one interpreted machine shared
+;; by both groups, the case inside "parser-field-ref (generated)" would run the
+;; interpreter, and the generated lane's empty-member-0 path would execute
+;; nowhere: the two lanes could disagree on parser-field-ref with the suite
+;; green.
 (define cm-zero-ref (make-interpreted-machine (verify-machine zero)))
 (define cm-zero-gen
   (emit-and-load zero 'field-access-zero 'field-access-zero-parser
@@ -291,8 +283,8 @@
       (harness-case "a fresh parser reads the declared initial at every width"
         (lambda ()
           ;; A LOOP over all four widths, carrying a completion sentinel that
-          ;; reads the OBSERVED count rather than the test's own expectation
-          ;; (AGENTS.md:188-196). No suite here declares an expected case count,
+          ;; reads the OBSERVED count rather than the test's own expectation.
+          ;; No suite here declares an expected case count,
           ;; so an exhaustive loop that never executes otherwise passes
           ;; vacuously -- and a sentinel computed from the expectation asserts
           ;; nothing, which is why `seen` counts what the loop actually did.
@@ -317,12 +309,9 @@
       (harness-case "an undeclared field name is accessor-misuse"
         (lambda ()
           ;; A caller mistake, not a machine outcome: it must not arrive as a
-          ;; parser-error, which is §9.3's record describing what the INPUT did.
-          ;; Not §13:801 -- that line makes field access READ-ONLY and says
-          ;; nothing about how a bad name is reported; the earlier version of
-          ;; this comment cited it for a claim it does not make. The reporting
-          ;; channel follows the existing contract-violation convention
-          ;; (`invalid-slice`, `lifecycle-violation`), under a new
+          ;; parser-error, which is the record describing what the INPUT did.
+          ;; The reporting channel follows the contract-violation convention
+          ;; (`invalid-slice`, `lifecycle-violation`), under the
           ;; `accessor-misuse` code.
           (check-equal "code" (caught (lambda () (parser-field-ref (make-parser cm '() #f)
                                                                    'nosuch)))
@@ -331,17 +320,11 @@
         (lambda ()
           (check-equal "code" (caught (lambda () (parser-field-ref 'not-a-parser 'count)))
                        'invalid-argument)))
-      ;; *** Per-parser ISOLATION of the value storage has no witness in this
-      ;; slice, and no test is written for it. *** The reason the values are a
-      ;; parser slot rather than closure state is that the op/exec closure is
-      ;; built once per compiled machine and every parser copies the same
-      ;; reference into slot 2 -- but parser-field-ref is read-only (§13:801) and
-      ;; nothing in ①b ever writes a field, so two parsers sharing one vector and
-      ;; two parsers holding their own are observationally identical through the
-      ;; whole public API. A case here could only assert vector identity through
-      ;; a probe the library does not export, or assert equality of two values
-      ;; that are equal either way. Slice ② adds the writer, and the isolation
-      ;; case belongs in the same commit as that writer, where it can fail.
+      ;; The values are a parser slot rather than closure state because the
+      ;; op/exec closure is built once per compiled machine and every parser
+      ;; copies the same reference into slot 2. This machine never writes a
+      ;; field, so isolation is not observable here; the writer group above
+      ;; witnesses it.
       (harness-case "two parsers from one compiled machine each read the initials"
         (lambda ()
           (let ((a (make-parser cm '() #f)) (b (make-parser cm '() #f)))
@@ -349,7 +332,7 @@
             (check-equal "b" (parser-field-ref b 'count) 7))))
       (harness-case "parser-reset! restores the declared initials, not zero"
         (lambda ()
-          ;; §12.5:738 returns the parser to its just-constructed state, and a
+          ;; parser-reset! returns the parser to its just-constructed state, and a
           ;; just-constructed parser holds the DECLARED initials. Zeroing would
           ;; make `u8 count = 7` mean 7 before the first reset and 0 after it.
           (let ((p (make-parser cm '() #f)))
@@ -405,9 +388,9 @@
                      '(count limit seen total))))))
 
 
-;; Milestone 4 Slice ② task 9: the OPERATION MATRIX (§25:1568's operation share,
-;; §25:1569 whole). Underflow at `decrement` from 0, overflow at `increment` and
-;; `add` from each width's maximum, at ALL FOUR widths, through BOTH executors.
+;; The OPERATION MATRIX. Underflow at `decrement` from 0, overflow at
+;; `increment` and `add` from each width's maximum, at ALL FOUR widths, through
+;; BOTH executors.
 ;;
 ;; One machine per width rather than one per (width, operation): each carries a
 ;; field at its maximum and a field at zero, and the byte chooses the operation.
@@ -447,8 +430,8 @@
     (harness-case "overflow, underflow and success agree across widths and lanes"
       (lambda ()
         ;; A loop with a sentinel reading the OBSERVED count, over widths AND
-        ;; over the schedules within each -- AGENTS.md's rule, and the reason an
-        ;; exhaustive loop that never executes cannot pass here.
+        ;; over the schedules within each, so an exhaustive loop that never
+        ;; executes cannot pass here.
         (let ((widths 0) (checks 0))
           (for-each
            (lambda (row)
@@ -465,8 +448,8 @@
                   (let* ((bs (car spec)) (fld (cadr spec)) (want (caddr spec)) (life (cadddr spec))
                          (a (feed-bytes ref bs)) (b (feed-bytes gen bs)))
                     ;; The value, in BOTH lanes, and the lifecycle -- a failed
-                    ;; operation must both leave the value alone (§25:1569) and
-                    ;; route to its error target.
+                    ;; operation must both leave the value alone and route to
+                    ;; its error target.
                     (check-equal (tag (string-append "interp " (symbol->string fld)) bs)
                                  (parser-field-ref a fld) want)
                     (check-equal (tag (string-append "gen " (symbol->string fld)) bs)
@@ -502,7 +485,7 @@
           (check-equal "every schedule was exercised" checks 16))))
     (harness-case "the u64 maximum is a bignum, so the matrix is not fixnum-only"
       (lambda ()
-        ;; §15:856's "must not rely on host fixnum width", asserted rather than
+        ;; "Must not rely on host fixnum width", asserted rather than
         ;; assumed: without this the u64 row could silently be a fixnum row on a
         ;; host with a wider fixnum, and would stop testing what it exists for.
         (check "above greatest-fixnum" (> (- (expt 2 64) 1) (greatest-fixnum)))
@@ -512,18 +495,12 @@
                        18446744073709551615))))))
 
 
-;; *** COVERAGE GAP found by Slice ②'s whole-branch review, and closed here. ***
-;;
-;; The design says the seven operations and seven predicates are written TWICE on
-;; purpose (§18:970-972) and that the interpreter≡generated differential is what
-;; catches a divergence -- "the single class of defect this milestone
-;; introduces". But a differential only compares what a fixture EXERCISES, and
-;; before this group six of the fourteen appeared in no fixture at all:
-;; `clear-mask`, `equal`, `nonzero`, `mask-any`, `mask-all` and `mask-none`.
-;;
-;; Measured, not inferred: inverting the EMITTER's `mask-none` alone -- so that
-;; the two lanes compute opposite answers -- left every one of the 92 lanes at
-;; status 0. Two independent implementations, silently disagreeing.
+;; The seven operations and seven predicates are written TWICE on purpose, once
+;; per executor, and the interpreter≡generated differential is what catches a
+;; divergence. But a differential only compares what a fixture EXERCISES: with
+;; no fixture reaching `mask-none`, inverting the EMITTER's `mask-none` alone
+;; leaves the two lanes silently disagreeing with every lane green. This group
+;; reaches all fourteen.
 ;;
 ;; One byte per operation and one per predicate, all fourteen, driven through
 ;; BOTH executors. The values are chosen so that no operation overflows: this
@@ -555,14 +532,13 @@
            ;; The seven predicates, each routing to a shared pair of markers so
            ;; the ARM TAKEN is observable as a value: true writes 1, false 2.
            ;; *** The operands are chosen so each predicate is distinguishable
-           ;; from its SIBLINGS, not merely exercised. *** Measured: with
-           ;; `equal 12` on f=12 the answer is true, and an implementation that
-           ;; computed `nonzero` instead would also answer true -- the case would
-           ;; pass on the wrong predicate. `equal 99` is false where `nonzero` is
-           ;; true, so the two are separated. Same reasoning for `mask-all 14`
-           ;; below, which an implementation computing `mask-any` gets wrong;
-           ;; `mask-all 12` on f=12 does not separate them, and that mutation
-           ;; SURVIVED until this operand changed.
+           ;; from its SIBLINGS, not merely exercised. *** With `equal 12` on
+           ;; f=12 the answer is true, and an implementation that computed
+           ;; `nonzero` instead would also answer true -- the case would pass on
+           ;; the wrong predicate. `equal 99` is false where `nonzero` is true,
+           ;; so the two are separated. Same reasoning for `mask-all 14` below,
+           ;; which an implementation computing `mask-any` gets wrong;
+           ;; `mask-all 12` on f=12 does not separate them.
            (make-field-branch-node 'p-eq 'equal '(f 99) 'yes 'no #f)
            (make-field-branch-node 'p-zero 'zero '(f) 'yes 'no #f)
            (make-field-branch-node 'p-nz 'nonzero '(f) 'yes 'no #f)
@@ -616,13 +592,13 @@
           (check-equal "all seven predicates" seen 7))))))
 
 
-;; Milestone 4 Slice ③ task 4: the checked multiply-add, BOTH lanes.
+;; The checked multiply-add, BOTH lanes.
 ;;
-;; §15:864-868 gives the inequality as a check BEFORE the multiply-add --
-;; `current <= floor((maximum - digit) / base)` -- not a compute-then-check, and
-;; §15:856 says why: "must not rely on host fixnum width or silent wrapping".
-;; Computing the product first is safe under Chez's bignums and would not be
-;; safe under a host that wraps, so both lanes render the pre-check.
+;; The inequality is a check BEFORE the multiply-add --
+;; `current <= floor((maximum - digit) / base)` -- not a compute-then-check,
+;; because field arithmetic must not rely on host fixnum width or silent
+;; wrapping. Computing the product first is safe under Chez's bignums and would
+;; not be safe under a host that wraps, so both lanes render the pre-check.
 (define (acc-mach nm base width)
   (make-machine nm 'start (list (make-uint-field 'n width 0 #f)) '() '()
     (list eof-decl rej-decl)
@@ -675,7 +651,8 @@
           (check-equal "generated" (parser-field-ref g 'n) 1))))
     (harness-case "overflow leaves the value unchanged and does not consume the digit"
       (lambda ()
-        ;; §10.6:568, §15:870 and §12.7:772-773 together. A u8 field reaches 25,
+        ;; Overflow leaves the value unchanged and does not consume the
+        ;; offending digit. A u8 field reaches 25,
         ;; and the next digit would make 255 -- legal -- while a further one
         ;; would not. "999" therefore overflows at the third byte with n = 99.
         (let ((a (run-acc (car acc8bit) "999")) (g (run-acc (cdr acc8bit) "999")))
@@ -685,9 +662,9 @@
           (check-equal "lifecycle" (parser-lifecycle a) 'error))))
     (harness-case "an overflow reports position kind BYTE, at the offending digit"
       (lambda ()
-        ;; §12.7:768's row, and §12.7:773's "does not consume" made observable:
-        ;; the kind is `byte` rather than `boundary` precisely because the
-        ;; offending byte was not consumed. §12.7:777 makes it comparable.
+        ;; "Does not consume" made observable: the kind is `byte` rather than
+        ;; `boundary` precisely because the offending byte was not consumed.
+        ;; Position kind is compared across lanes.
         (let* ((a (run-acc (car acc8bit) "999")) (g (run-acc (cdr acc8bit) "999"))
                (ra (parser-feed! a (make-bytevector 0) 0 0))
                (rg (parser-feed! g (make-bytevector 0) 0 0)))
@@ -703,7 +680,7 @@
           (check-equal "not an error" (parser-lifecycle a) 'stopped))))
     (harness-case "the u64 path crosses the bignum boundary in both lanes"
       (lambda ()
-        ;; §15:856's "must not rely on host fixnum width", end to end: 2^60 has
+        ;; "Must not rely on host fixnum width", end to end: 2^60 has
         ;; nineteen decimal digits and the accumulated value passes
         ;; (greatest-fixnum) partway through.
         (let* ((l (acc-lanes 'acc64 10 64))
@@ -714,12 +691,11 @@
           (check "above greatest-fixnum" (> (parser-field-ref a 'n) (greatest-fixnum))))))))
 
 
-;; Milestone 4 Slice ③ task 5: need-input resumption and split-point fragmentation.
+;; Need-input resumption and split-point fragmentation.
 ;;
-;; *** The finding this task exists to record: an accumulate node needs NO state
-;; of its own across a feed boundary. *** The recon asked where the
-;; partially-consumed-digits state would live, since it is "not obviously a
-;; field". It is: the accumulated value IS the field, which is parser slot 8 and
+;; *** An accumulate node needs NO state of its own across a feed boundary. ***
+;; The partially-consumed-digits state is the field itself: the accumulated
+;; value IS the field, which is parser slot 8 and
 ;; already survives a feed, and `current` stays parked on the accumulate node
 ;; because the arm returns `need-input` without moving it -- exactly what the
 ;; dispatch arm does. The split-point behaviour is INHERITED, not invented, and
@@ -741,7 +717,7 @@
           (check-equal "generated" (parser-field-ref g 'n) 12345))))
     (harness-case "every split point of the same input gives the same answer"
       (lambda ()
-        ;; EVERY split, not one: the shipped split-point idiom elsewhere in the
+        ;; EVERY split, not one: the split-point idiom elsewhere in the
         ;; tree is hardcoded for a four-byte input, and a single split cannot see
         ;; a defect that only appears when the boundary lands on the first or
         ;; last byte. A sentinel reads the OBSERVED count of splits.
@@ -783,14 +759,12 @@
                        (parser-error-position-kind (parser-result-error r)) 'byte))))))
 
 
-;; Milestone 4 Slice ③ task 6: bases 10 and 16 over ALL 256 byte values, both
-;; lanes. The partition is the point -- every byte is either a digit for that
-;; base or it is not, and the two lanes must agree on which, byte by byte, with
-;; no byte untested. A fixture naming a handful of digits and a handful of
-;; delimiters cannot see a boundary error at `/`, `:`, `@`, `G`, backtick or `g`
-;; -- the SIX ASCII neighbours of the three digit ranges, two per range. (This
-;; sentence said "four" and listed five until the whole-branch review counted
-;; them against the case below, which has always driven six.)
+;; Bases 10 and 16 over ALL 256 byte values, both lanes. The partition is the
+;; point -- every byte is either a digit for that base or it is not, and the two
+;; lanes must agree on which, byte by byte, with no byte untested. A fixture
+;; naming a handful of digits and a handful of delimiters cannot see a boundary
+;; error at `/`, `:`, `@`, `G`, backtick or `g` -- the SIX ASCII neighbours of
+;; the three digit ranges, two per range.
 (define (byte-answer cm b)
   ;; Feed exactly one byte and report (field . lifecycle): a digit accumulates
   ;; and leaves the parser ready, a non-digit takes the fallback to `done`.
@@ -803,7 +777,7 @@
     (harness-case "base 10 partitions every byte identically in both lanes"
       (lambda ()
         ;; A sentinel over the OBSERVED count of bytes compared, and a single
-        ;; first-divergence report rather than 256 failures -- the shipped
+        ;; first-divergence report rather than 256 failures -- the
         ;; all-256 lanes' own idiom.
         (let ((seen 0) (bad 'none))
           (let loop ((b 0))
@@ -851,8 +825,8 @@
         ;; at a bound from every other way the arm can break: a mutation that
         ;; stops the whole node from running leaves these unread, while a
         ;; mutation that moves one bound by one changes exactly one of these
-        ;; numbers. The whole-pass sweep is what showed the difference matters --
-        ;; asserted as lifecycles, the `f` bound's pin owned no record of its own.
+        ;; numbers. Asserted as lifecycles instead, the `f` bound's mutation
+        ;; would own no FAIL record of its own.
         (let ((seen 0))
           (for-each
            (lambda (spec)
@@ -883,18 +857,18 @@
           (check-equal "all six neighbours" seen 6))))))
 
 
-;; Milestone 4 Slice ③ task 8, found by the PROPERTY GENERATOR: the emitter's
-;; reached-declaration walk credited only `dispatch` states with the default-EOF
-;; route, so a machine whose ONLY default-eof consumer is an accumulate node had
-;; that declaration filtered out of the emitted errs table, and index-of then
-;; raised "no error declaration for code" while rendering a machine the verifier
-;; had just accepted with zero diagnostics.
+;; An accumulate node is a default-EOF consumer. The emitter's
+;; reached-declaration walk must credit it with the default-EOF route: if only
+;; `dispatch` states were credited, a machine whose ONLY default-eof consumer is
+;; an accumulate node would have that declaration filtered out of the emitted
+;; errs table, and index-of would raise "no error declaration for code" while
+;; rendering a machine the verifier accepts with zero diagnostics.
 ;;
-;; Every accumulate fixture in this file misses it by construction: each has an
-;; entry dispatch that also defaults its eof route, so the pair was in the
-;; reached set for another state's sake. Separating them takes an entry whose eof
-;; goes somewhere ELSE -- here a finish node -- which is what the generator drew
-;; as soon as the eof draw and the accumulate draw fired together.
+;; Every other accumulate fixture in this file misses it by construction: each
+;; has an entry dispatch that also defaults its eof route, so the pair is in the
+;; reached set for another state's sake. Separating them takes an entry whose
+;; eof goes somewhere ELSE -- here a finish node. The property generator reaches
+;; this shape when its eof draw and accumulate draw fire together.
 ;;
 ;; Kept as a fixed fixture rather than left to the property lane: the generated
 ;; sequence re-rolls whenever any draw changes, and a defect whose only witness
@@ -943,7 +917,7 @@
   (lambda ()
     (harness-case "the verifier accepts a machine whose only default-eof consumer is the accumulate node"
       (lambda ()
-        ;; Stated first and separately: if a later slice decides this shape is
+        ;; Stated first and separately: if this shape is ever made
         ;; illegal, THIS is the check that should fail and say so, rather than
         ;; the emission below failing for a reason that reads like an emitter
         ;; defect.
@@ -953,8 +927,8 @@
     (harness-case "the accumulate node's own eof route resolves the default declaration"
       (lambda ()
         ;; The route that actually asks index-of for the default-eof declaration,
-        ;; and the reason the emission used to RAISE rather than fail a
-        ;; comparison. A digit leaves the parser parked on `acc`, whose eof-target
+        ;; and the reason a missing declaration makes emission RAISE rather than
+        ;; fail a comparison. A digit leaves the parser parked on `acc`, whose eof-target
         ;; is #f; finishing there takes the machine default.
         (let* ((pair (acc-eof-pair)) (a (car pair)) (g (cdr pair))
                (pa (make-parser a '() #f)) (pg (make-parser g '() #f)))
@@ -990,21 +964,16 @@
                        (parser-result-status ra)))))))
 
 
-;; *** Whole-branch review, 2026-09-03: FOUR operands of the accumulate node
-;; that no executing fixture reached. *** Every accumulate machine in the tree
-;; declared exactly ONE field (so the slot was always 0 and the width always the
-;; only width), named ITSELF as its digit-target (so nothing checked the operand
-;; was read at all), gave its non-digit edge mode `advance` (so §10.6:567's
-;; "normally reexecuting the delimiter" -- the NORMAL case -- ran nowhere), and
-;; overflowed only in base 10 IN THIS FILE (so `base` in the bound's divisor was
-;; indistinguishable from the literal 10 here).
+;; *** FOUR operands of the accumulate node that the fixtures above leave
+;; unwitnessed. *** Each of them declares exactly ONE field (so the slot is
+;; always 0 and the width always the only width), names ITSELF as its
+;; digit-target (so nothing checks the operand is read at all), gives its
+;; non-digit edge mode `advance` (so the NORMAL case, reexecuting the delimiter,
+;; runs nowhere), and overflows only in base 10 (so `base` in the bound's
+;; divisor is indistinguishable from the literal 10 here).
 ;;
-;; *** That fourth conjunct needs its qualifier and did not have it until
-;; 2026-09-03. *** determinism-accumulate-tests.sps had been driving a base 16
-;; overflow since six commits earlier -- but only through the GENERATED lane, so
-;; no interpreter-side divisor mutation was ever caught by it, and the case below
-;; was still owed. "No fixture reaches this" is a claim about the whole TREE, and
-;; it had been checked against one file.
+;; determinism-accumulate-tests.sps drives a base 16 overflow, but only through
+;; the GENERATED lane, so it cannot catch an interpreter-side divisor mutation.
 ;;
 ;; One machine separates all four, because they are four operands of one node and
 ;; a fixture per operand would share every other operand's blind spot:
@@ -1057,7 +1026,7 @@
   (lambda ()
     (harness-case "the machine verifies clean"
       (lambda ()
-        ;; First and separately: if a later slice decides this shape is illegal,
+        ;; First and separately: if this shape is ever made illegal,
         ;; THIS is the check that should fail and say so, rather than the four
         ;; below failing for a reason that reads like an executor defect.
         (let ((v (verify-machine two-field-acc)))
@@ -1089,8 +1058,7 @@
           (check-equal "generated one digit, one hop" (parser-field-ref g 'pad) 1))))
     (harness-case "the non-digit edge REEXECUTES, so the delimiter is read again"
       (lambda ()
-        ;; §10.6:567's normal case, and the whole tree's first execution of it.
-        ;; `tail` matches only `x`. Reaching `sawx` means `x` was still in hand
+        ;; The normal case for a non-digit edge. `tail` matches only `x`. Reaching `sawx` means `x` was still in hand
         ;; when the fallback edge was taken; under mode `advance` it would have
         ;; been consumed at `acc` and `tail` would have run out of input.
         (let* ((ra (car (tf-run (car tf-pair) "#1aFx")))
@@ -1104,11 +1072,10 @@
           (check-equal "generated consumed" (parser-result-consumed rg) 5))))
     (harness-case "the overflow bound divides by the node's OWN base, at base 16"
       (lambda ()
-        ;; *** MEASURED, and the first shape did not work. *** `#FFFFF` does not
-        ;; separate a divisor of 16 from a divisor of 10: at the fourth digit
-        ;; 0xFFF = 4095 passes both bounds ((65535-15)/16 = 4095 and /10 = 6552),
-        ;; and at the fifth 0xFFFF = 65535 fails both. A mutant dividing by 10
-        ;; survived it.
+        ;; `#FFFFF` does not separate a divisor of 16 from a divisor of 10: at
+        ;; the fourth digit 0xFFF = 4095 passes both bounds ((65535-15)/16 = 4095
+        ;; and /10 = 6552), and at the fifth 0xFFFF = 65535 fails both. A mutant
+        ;; dividing by 10 survives it.
         ;;
         ;; The separating value has to land BETWEEN the two bounds, so
         ;; `#1000F` is the case: after four digits n = 0x1000 = 4096, which is
@@ -1140,12 +1107,12 @@
                        (parser-error-reason (parser-result-error ra))))))))
 
 ;; The same two claims again on a machine with NO zero-width node, because the
-;; whole-pass sweep showed the fixture above cannot attribute them. Its evidence
-;; for the digit-target hop is a count `bump` writes, and its evidence for the
-;; reexecute mode is a consumed count `bump` also affects -- so every pin that
-;; breaks a zero-width action or an increment breaks those cases too, and the
-;; three new pins nested inside three older ones that have nothing to do with
-;; accumulation. Here the digit target is a STOP node and the delimiter path
+;; fixture above cannot attribute them. Its evidence for the digit-target hop is
+;; a count `bump` writes, and its evidence for the reexecute mode is a consumed
+;; count `bump` also affects -- so every mutant that breaks a zero-width action
+;; or an increment breaks those cases too, and the accumulate mutants' pins
+;; would nest inside mutants that have nothing to do with accumulation. Here the
+;; digit target is a STOP node and the delimiter path
 ;; carries no action at all, so the only machinery either case can blame is the
 ;; accumulate arm itself.
 (define lone-acc

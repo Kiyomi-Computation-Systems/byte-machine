@@ -1,17 +1,16 @@
-;;; interpreter ≡ generated over a MULTI-ALTERNATIVE sequence node (parent §18,
-;;; §22.4, §22.5). Slice ② pinned the trie merge structurally (normal-ir-tests)
-;;; and executed it through the interpreter (interpret-tests), but its
-;;; DIFFERENTIAL drove a single alternative -- so no lane has compared the two
-;;; EXECUTORS across a branch: two alternatives sharing `HTTP/1.` descend into
-;;; one chain and part at one state, and a lowering that LOSES one of them --
-;;; leaving the interpreter accepting what the emitted library rejects -- is
-;;; caught here and not by the single-alternative differential, where a one-arm
-;;; state and a truncated one-arm state are the same state. Measured, not
-;;; assumed: SchemeMutationSuite Pass 48's two mutants leave
+;;; interpreter ≡ generated over a MULTI-ALTERNATIVE sequence node. The trie
+;;; merge is pinned structurally (normal-ir-tests) and executed through the
+;;; interpreter (interpret-tests), and the sequence-node DIFFERENTIAL drives a
+;;; single alternative -- so this is the lane that compares the two EXECUTORS
+;;; across a branch: two alternatives sharing `HTTP/1.` descend into one chain
+;;; and part at one state, and a lowering that LOSES one of them -- leaving the
+;;; interpreter accepting what the emitted library rejects -- is caught here and
+;;; not by the single-alternative differential, where a one-arm state and a
+;;; truncated one-arm state are the same state. Measured, not assumed:
+;;; SchemeMutationSuite Pass 48's two mutants leave
 ;;; differential-sequence-node-tests.sps at failures=0 status=0.
 ;;; The narrower claim is deliberate. A lowering defect that resumed into the
-;;; wrong prefix state across a feed boundary is NOT this lane's alone -- an
-;;; earlier draft of this header said it was, and measurement says otherwise:
+;;; wrong prefix state across a feed boundary is NOT this lane's alone:
 ;;; rendering the need-input resume id as the entry state instead of the
 ;;; current one reddens differential-sequence-node-tests.sps as well
 ;;; (failed-cases=9 failures=10), because a single-alternative chain has prefix
@@ -33,12 +32,12 @@
         (byte-machine runtime)
         (byte-machine compile))
 
-;; Slice ①a task 5: the tuple carries the §22.4:1271 projection. A reexecute
-;; mismatch reports `byte` AT the offending byte; an advance mismatch reports
-;; `boundary` after the committed one. Same error node, different arriving
-;; transition, different position kind -- which is decision 0022's whole point.
-;; The last two members are the span the error abandoned and where its withheld
-;; bytes begin (decision 0056) -- #f here, where no span is ever open.
+;; The tuple carries the error's position projection. A reexecute mismatch
+;; reports `byte` AT the offending byte; an advance mismatch reports `boundary`
+;; after the committed one. Same error node, different arriving transition,
+;; different position kind. The last two members are the span the error
+;; abandoned and where its withheld bytes begin -- #f here, where no span is
+;; ever open.
 (define (reject-at k) (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'byte #f #f))
 (define (advance-reject-at k)
   (list 'machine 'unexpected-byte "unexpected byte" 'reject k 'boundary #f #f))
@@ -231,7 +230,7 @@
           (check-equal "no (mode position byte) disagreed" bad 'none)
           (check-equal "the loops ran all 8 x 256 (position byte) drives" drives 2048))))))
 
-;; §11.5:664, asserted ABSOLUTELY on the generated side rather than as agreement:
+;; The two mismatch modes, asserted ABSOLUTELY on the generated side rather than as agreement:
 ;; the branch byte is where the two modes visibly differ on a multi-alternative
 ;; node, and agreement between two wrong executors would look identical.
 (harness-group "both mismatch modes at the branch, absolutely, on the generated executor"

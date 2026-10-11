@@ -1,26 +1,23 @@
-;;; The Milestone 3 Slice ② sequence-dispatch proving machines, shared by the
-;;; absolute interpreter lane and the interpreter≡generated differential so each
-;;; graph descriptor is written once. Built only through (byte-machine graph).
+;;; The sequence-dispatch proving machines, shared by the absolute interpreter
+;;; lane and the interpreter≡generated differential so each graph descriptor is
+;;; written once. Built only through (byte-machine graph).
 ;;;
 ;;; Both accept the same single alternative 1 2 3 4 and differ only in their
-;;; mismatch MODE. The reexecute machine is the shape Milestone 2's
-;;; sequence-machine.sls built from four chained dispatch nodes, so its behaviour
-;;; is pinned by tuples measured before this node kind existed. The advance
-;;; machine exists because every shipped fixture in this tree uses reexecute, so
-;;; the advance path has no coverage at all -- and §11.5:664 requires the choice
-;;; to be explicit, because an advance-mode mismatch shifts every reported
+;;; mismatch MODE. The reexecute machine is the shape sequence-machine.sls
+;;; builds from four chained dispatch nodes, so its behaviour is pinned by
+;;; tuples measured independently of this node kind. The advance machine gives
+;;; the advance path coverage of its own -- the mismatch mode must be an
+;;; explicit choice, because an advance-mode mismatch shifts every reported
 ;;; position by one and nothing would look obviously wrong.
 ;;;
-;;; One alternative, not several: what this fixture reproduces is a
-;;; single-alternative oracle, and it stays one -- Milestone 3 closed without
-;;; widening it. The LOWERING is trie-shaped and multi-alternative-capable, and
-;;; Slice ②'s own Tasks 2-3 pin that at unit level: normal-ir-tests.sps asserts
-;;; the merge structurally, and interpret-tests.sps executes AB/AC through the
-;;; interpreter. Slice ③'s multi-alternative fixture is http-version-machine.sls,
-;;; and what it added over the two lanes above is depth (a seven-byte shared
-;;; prefix), absolute tuples, both mismatch modes, and the
-;;; interpreter≡generated DIFFERENTIAL across a branch -- not the first
-;;; execution of a shared prefix, which is Slice ②'s.
+;;; One alternative, not several: this fixture reproduces a
+;;; single-alternative oracle. The LOWERING is trie-shaped and
+;;; multi-alternative-capable, and that is pinned at unit level:
+;;; normal-ir-tests.sps asserts the merge structurally, and interpret-tests.sps
+;;; executes AB/AC through the interpreter. The multi-alternative fixture is
+;;; http-version-machine.sls, which adds depth (a seven-byte shared prefix),
+;;; absolute tuples, both mismatch modes, and the interpreter≡generated
+;;; DIFFERENTIAL across a branch.
 (library (byte-machine test sequence-node-machine)
   (export make-sequence-node-machine make-advance-mismatch-machine
           sequence-node-bytes)

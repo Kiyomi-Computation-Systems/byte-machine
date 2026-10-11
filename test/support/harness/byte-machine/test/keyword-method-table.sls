@@ -1,11 +1,12 @@
-;;; The Milestone 11 Slice ③ size-measurement fixture (brief §7 criterion 7 --
-;;; the change's whole justification). The 47 llhttp method names built TWO ways,
-;;; so the emitted size and node count of each can be measured through a lane:
+;;; The keyword-table size-measurement fixture. The 47 llhttp method names built
+;;; TWO ways, so the emitted size and node count of each can be measured through
+;;; a lane:
 ;;;
 ;;;   make-method-keyword-machine  -- ONE keyword-table node (the "after")
 ;;;   make-method-trie-machine     -- the equivalent trie of byte-dispatch nodes,
 ;;;                                   one node per distinct prefix (the "before",
-;;;                                   the shape the consumer ships today)
+;;;                                   the shape a grammar takes without a
+;;;                                   keyword table)
 ;;;
 ;;; Both route every keyword to an error node (`matched`) reached by REEXECUTING
 ;;; the non-continuing byte, and both take a distinct error node at EOF; a size

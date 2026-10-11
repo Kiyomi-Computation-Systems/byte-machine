@@ -1,21 +1,20 @@
-;;; The fixture lane (Milestone 7 Slice ③; design §4.7/§8, decision 0033 item 4).
-;;; Registered as byte-machine.property.fixture.chez.{source,aot} under label
-;;; `property`. It carries, in this slice's order of construction:
-;;;   - the PRINTER's proof (Task 2): the derived totality rows over `node?` and
+;;; The fixture lane. Registered as byte-machine.property.fixture.chez.{source,aot}
+;;; under label `property`. It carries:
+;;;   - the PRINTER's proof: the derived totality rows over `node?` and
 ;;;     `matcher?`, and the round trip byte-identical over every accepted machine
 ;;;     of the committed seed set;
-;;;   - the deliberate-failure PROBE (Task 6): a lying compiled lane driven through
+;;;   - the deliberate-failure PROBE: a lying compiled lane driven through
 ;;;     the saver and the minimizer, the raw fixture asserted to FAIL and the
 ;;;     minimized one strictly smaller and still failing, a passing pair writing
 ;;;     nothing.
 ;;; The printer's success groups and the probe's failure groups are kept in
-;;; SEPARATE harness-groups with distinct labels so the mutation pass (Task 8) can
+;;; SEPARATE harness-groups with distinct labels so the mutation pass can
 ;;; assert each pin's failure SIGNATURE rather than a bare nonzero exit.
 ;;;
-;;; Folded here rather than a separate machine-print-tests.sps (Task 6 Step 1):
-;;; §2 ships one new program and Task 7 registers one new lane pair, so folding
-;;; keeps the fingerprint and CMake surface the plan sized; the failure signatures
-;;; stay clean through group/label separation, not through a second program.
+;;; The printer's tests are folded here rather than into a separate
+;;; machine-print-tests.sps: one program and one lane pair keep the fingerprint
+;;; and CMake surface small, and the failure signatures stay clean through
+;;; group/label separation, not through a second program.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) command-line-arguments)
         (byte-machine test harness)
@@ -29,15 +28,15 @@
         (byte-machine runtime)
         (byte-machine compile))
 
-;; The committed seed (0033 item 3): the registrations pass nothing, so this
-;; governs. The same integer the differential lane commits (§8's seed set).
+;; The committed seed: the registrations pass nothing, so this governs. The
+;; same integer the differential lane commits.
 (define seed 20260823)
 (define machine-count 64)
-(define floor-literal 32)   ; 0033 item 2; 36 measured at this seed on this tree.
+(define floor-literal 32)   ; half of machine-count; 36 measured at this seed.
 
-;; ---- the totality rows read ir.sls AS A DATUM (F4 / design §4.10). The readers
-;; replicate the differential program's shape (property-differential-tests.sps
-;; :165-185) rather than import them -- they live in .sps programs, not libraries.
+;; ---- the totality rows read ir.sls AS A DATUM. The readers replicate the
+;; differential program's shape (property-differential-tests.sps) rather than
+;; import them -- they live in .sps programs, not libraries.
 ;; BYTE_MACHINE_SOURCE_ROOT is loud when unset (a census that silently read the
 ;; wrong tree would compare nothing and report the arm table load-bearing for no
 ;; reason).
@@ -77,9 +76,9 @@
 
 (harness-group "printer"
  (lambda ()
-   ;; (a) the derived totality rows (F4): the hand-written arm tables' kinds set-
-   ;; equal to ir.sls's node?/matcher? disjuncts. A fourteenth node kind added to
-   ;; ir.sls with no printer arm fails HERE (and print-node's own no-arm raise).
+   ;; (a) the derived totality rows: the hand-written arm tables' kinds set-
+   ;; equal to ir.sls's node?/matcher? disjuncts. A node kind added to ir.sls
+   ;; with no printer arm fails HERE (and print-node's own no-arm raise).
    (harness-case "totality"
     (lambda ()
       (check-equal "the node arm table has fourteen kinds"
@@ -93,7 +92,7 @@
                    (sortsym (map car matcher-print-arm-table))
                    (disjuncts-of ir-datum 'matcher? "-matcher?"))))
    ;; (b) the round trip byte-identical over EVERY accepted machine of the committed
-   ;; seed set (Step 5), not a hand-picked few. reset-draw-state! once before the
+   ;; seed set, not a hand-picked few. reset-draw-state! once before the
    ;; loop makes this a fresh-process draw (the coverage cycles are module-level);
    ;; the 64 are then drawn sequentially, exactly as the differential drive does.
    (harness-case "round trip byte-identical over the seed set"
@@ -123,7 +122,7 @@
                       (loop (+ i 1) s2 (+ drawn 1) (+ accepted 1) (if same (+ ok 1) ok)))
                     (loop (+ i 1) s2 (+ drawn 1) accepted ok))))))))))
 
-;; ---- run-one-trial (Task 3, F2): the single-trial entry the fixture asserts on
+;; ---- run-one-trial: the single-trial entry the fixture asserts on
 ;; and the minimizer uses as a boolean oracle. ----
 (harness-group "run-one-trial"
  (lambda ()
@@ -157,7 +156,7 @@
         ;; a run-schedule phase (feed / feed-ack / finish / finish-ack).
         (check "the verdict is a well-formed disagreement descriptor"
                (and (pair? v) (memq (car v) '(feed feed-ack finish finish-ack)))))))
-   ;; Step 5: run-one-trial's verdict is what run-machine folds for the same
+   ;; run-one-trial's verdict is what run-machine folds for the same
    ;; schedule. Over every accepted machine of the committed seed set, an honest
    ;; identical lane pair on a single-byte schedule the byte-sweep covers agrees:
    ;; both 'none. This also proves run-one-trial's agreement-gated Layer-3 arm is
@@ -182,9 +181,9 @@
                     (loop (+ i 1) s2 (+ accepted 1) (if none? (+ agreed 1) agreed)))
                   (loop (+ i 1) s2 accepted agreed)))))))))
 
-;; ---- the deliberate-failure probe (Task 6). §4.7: the lane cannot wait for a real
+;; ---- the deliberate-failure probe. The lane cannot wait for a real
 ;; interpreter/generated disagreement, so it ships a machine and a WRONG second lane
-;; -- a compiled machine whose op is wrapped to lie about one member (F7) -- drives
+;; -- a compiled machine whose op is wrapped to lie about one member -- drives
 ;; it through the saver and the minimizer, and asserts the saved fixture fails, the
 ;; minimized one is smaller and still fails, and a passing pair writes nothing. ----
 
@@ -206,7 +205,7 @@
 (define (file-exists-nonempty? path)
   (guard (e (#t #f)) (> (bytevector-length (adapter-file-bytes path)) 0)))
 
-;; The chosen reducible lie (F7 / Task 6 Step 2, measured 3/8): perturb the compiled
+;; The chosen reducible lie: perturb the compiled
 ;; op's accumulate-step so the digit loop-back target 'acc becomes 'stopped. As a
 ;; LIVE procedure for the in-lane trial/minimizer, and as DATUMS for the fixture the
 ;; saver writes (there it wraps the emitted `gen-honest`; here it wraps the interp op
@@ -214,7 +213,7 @@
 (define (perturb msg r)
   (if (and (eq? msg 'accumulate-step) (pair? r) (eq? (car r) 'acc)) (cons 'stopped (cdr r)) r))
 (define (lie-of m)
-  (let ((honest-op (vector-ref (interp m) 2)))          ; F7: reach slot 2 knowingly
+  (let ((honest-op (vector-ref (interp m) 2)))          ; reach slot 2 knowingly
     (make-compiled-machine (lambda (msg . args) (perturb msg (apply honest-op msg args))))))
 (define lie-preamble
   '((define (perturb msg r)
@@ -222,7 +221,7 @@
 (define lie-gen-expr
   '(make-compiled-machine (lambda (msg . args) (perturb msg (apply (vector-ref ref 2) msg args)))))
 
-;; F5 header: reconstruct the exact provenance-unset launcher command from
+;; The fixture header: reconstruct the exact provenance-unset launcher command from
 ;; (command-line-arguments) -- the two --library-root values, the --object-guard,
 ;; the launcher (derived from the src root), and --program <this fixture>.
 (define (flag-values cla flag)
@@ -259,7 +258,7 @@
 
 ;; The direct saver: build the fixture text (driver's fixture-text) with the lie
 ;; baked, write it, return its path. Used for the raw and the minimized fixtures --
-;; one writer, two calls (Task 5 Step 7).
+;; one writer, two calls.
 (define (save-fixture tag m script schedule input)
   (let* ((path (string-append (tmpdir-or-dot) "/probe-fixture-" tag ".sps"))
          (text (fixture-text (print-machine m) script schedule input
@@ -267,13 +266,13 @@
     (write-file! path text)
     path))
 
-;; Re-read a saved fixture in-process and run its trial exactly as the fixture would
-;; (Task 6 Step 4, "load the raw fixture in-process through eval"): evaluate the
+;; Re-read a saved fixture in-process and run its trial exactly as the fixture would,
+;; through eval: evaluate the
 ;; fixture's own top-level (define …) forms -- machine, script, schedule, input, ref,
 ;; the perturb definition, and gen (the EMBEDDED lie) -- in dependency order, then
 ;; run-one-trial over them. Because it evaluates the fixture's OWN gen wiring, a
 ;; mutation to the saver that writes a non-reproducing fixture (e.g. gen := ref) is
-;; caught here, not only by the by-hand standalone run (Step 8).
+;; caught here, not only by a by-hand standalone run.
 (define fx-env (environment '(rnrs) '(byte-machine graph) '(byte-machine verify)
                             '(byte-machine interpret) '(byte-machine runtime)
                             '(byte-machine test property-driver)))
@@ -292,9 +291,8 @@
 
 (harness-group "saver"
  (lambda ()
-   ;; Task 4 Step 1 / Step 7: on-first-disagreement fires AT MOST ONCE per machine
-   ;; when the lanes disagree, and NOT AT ALL when they agree (Step 6: a passing pair
-   ;; writes nothing). Driven through run-machine, which needs a manifest -- so a
+   ;; on-first-disagreement fires AT MOST ONCE per machine when the lanes
+   ;; disagree, and NOT AT ALL when they agree (a passing pair writes nothing). Driven through run-machine, which needs a manifest -- so a
    ;; DRAWN accepted machine with a field, and the field-initials +1 lie (measured
    ;; 8/8: it disagrees on the very first byte-sweep byte, which is all this wiring
    ;; test needs). A counting sentinel closure stands in for the file write.
@@ -380,7 +378,7 @@
     (lambda ()
       (let ((fail-oracle (lambda (m2 s2 i2 sch2) (run-one-trial m2 (interp m2) (lie-of m2) s2 sch2 i2))))
         (let-values (((m2 s2 i2 sch2) (minimize m script input schedule fail-oracle 64)))
-          ;; strictly smaller: fewer nodes OR a shorter input (§4.7 / Task 6 Step 5).
+          ;; strictly smaller: fewer nodes OR a shorter input.
           (check "the minimized trial is strictly smaller"
                  (or (< (machine-node-count m2) (machine-node-count m))
                      (< (bytevector-length i2) (bytevector-length input))))
@@ -393,7 +391,7 @@
    (harness-case "a PASSING pair reproduces nothing (honest gen agrees)"
     (lambda ()
       ;; the honest generated lane agrees with the reference, so run-one-trial is
-      ;; 'none and the saver's on-first-disagreement would never fire (Step 6).
+      ;; 'none and the saver's on-first-disagreement would never fire.
       (check-equal "run-one-trial is 'none for an honest pair"
                    (run-one-trial m (interp m) (interp m) script schedule input)
                    'none)))))

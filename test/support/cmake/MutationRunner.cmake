@@ -33,19 +33,17 @@ set(_bm_mutation_count 0)
 # and would break if the tree were flattened.
 set(BYTE_MACHINE_MUTATION_STAGE_DIRS "cmake" "test/support/cmake")
 
-# What decides whether a mutation was caught. Empty keeps the original
-# behaviour: run the named specification under `cmake -P` inside the stage. The
+# What decides whether a mutation was caught. Empty means the default: run the
+# named specification under `cmake -P` inside the stage. The
 # Scheme suite replaces it with a real execution lane, because a Scheme defect
 # is only visible to something that runs Scheme.
 set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND "")
 
 # Where the verify command runs. Empty means the stage directory, which is what
-# every pass wants. The one caller that ever set it was the include-era
-# working-directory matrix, which needed a pass per launch directory because
-# what it asserted was that the launch directory does not matter -- a claim no
-# command run from one fixed place can make. That matrix retired with the
-# include mechanism (decision 0006); the hook is kept for the next caller that
-# has to run a verify command from somewhere other than the stage.
+# every pass wants. The hook is for a caller that has to run a verify command
+# from somewhere other than the stage -- for instance, one asserting that the
+# launch directory does not matter, which no command run from one fixed place
+# can show.
 set(BYTE_MACHINE_MUTATION_VERIFY_WORKING_DIRECTORY "")
 
 # byte_machine_mutation(FILE <repo-relative> SPEC <spec basename> LABEL <text>
@@ -216,8 +214,8 @@ endfunction()
 #                 out_reason explains which one.
 #   caught        rc was nonzero and every declared expectation was met. With
 #                 neither EXPECT_STATUS nor EXPECT_OUTPUT_MATCHES given, this is
-#                 the whole rule: any nonzero result is caught, the ordinary,
-#                 pre-slice-3 way.
+#                 the whole rule: any nonzero result is caught, the ordinary
+#                 way.
 #
 # expect_status and expect_output_matches are both tested for "was this
 # declared at all" with STREQUAL "", not truthiness: a status is a small

@@ -1,6 +1,5 @@
-;;; The Milestone 4 Slice ③ proving machine: an integer-accumulate node, the
-;;; milestone's only INPUT-READING kind, in the shape whose EMISSION is worth
-;;; pinning against a committed golden.
+;;; A proving machine for the integer-accumulate node, an INPUT-READING kind,
+;;; in the shape whose EMISSION is worth pinning against a committed golden.
 ;;;
 ;;; Base 16 rather than base 10, deliberately. The emitter renders the digit
 ;;; test as a range comparison per base, and base 16 is the shape with three
@@ -10,10 +9,10 @@
 ;;; Both EOF routes appear, which is what makes the golden cover the routing the
 ;;; emitter chooses per state rather than per machine: the accumulate node names
 ;;; `done` explicitly, while the entry dispatch declares none and falls to the
-;;; machine default. Slice ③ found a defect that lived exactly in that
-;;; difference (compile.sls's reached-declaration walk credited only dispatch
-;;; states with the default route), so a golden that showed only one of the two
-;;; would have been a golden with a hole in the place a hole was already found.
+;;; machine default. A golden showing only one of the two would miss a defect
+;;; that lives exactly in that difference -- e.g. compile.sls's
+;;; reached-declaration walk crediting only dispatch states with the default
+;;; route.
 (library (byte-machine test accumulate-machine)
   (export make-accumulate-machine)
   (import (rnrs)

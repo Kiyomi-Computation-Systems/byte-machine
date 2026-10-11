@@ -1,16 +1,15 @@
 ;;; The public graph façade supplies every constructor these machines need;
 ;;; the three machine accessors (machine?, machine-entry,
-;;; machine-default-eof-error) are deliberately still private -- see the
+;;; machine-default-eof-error) are deliberately private -- see the
 ;;; import comment below.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine graph)
-        ;; Machine ACCESSORS are still private: §9.1 fixes the public
-        ;; CONSTRUCTION surface and lists no accessors, and Milestone 3 Slice ①
-        ;; declined to widen the façade past that list "for consistency" -- the
-        ;; same argument design §8 rejects for source-label. The matcher
-        ;; predicates below do come through the façade, because a grammar author
-        ;; needs to test the matchers they just built.
+        ;; Machine ACCESSORS are private: the public surface is CONSTRUCTION
+        ;; and carries no accessors, and the façade is not widened past it "for
+        ;; consistency". The matcher predicates below do come through the
+        ;; façade, because a grammar author needs to test the matchers they
+        ;; just built.
         (only (byte-machine private ir) machine? machine-entry machine-default-eof-error))
 
 (harness-begin "unit.graph")
@@ -95,10 +94,10 @@
           (check-equal "bytes" (sequence-case-bytes c) '(1 2))
           (check-equal "target" (sequence-case-target c) 'stop))))))
 
-;; Milestone 4 Slice ①b task 2: the field descriptor reaches grammar authors
-;; through the façade. Predicates and accessors come through on M3 Slice ①'s
-;; matcher precedent -- an author needs to test what they just built -- while
-;; machine ACCESSORS stay private, per §9.1's construction-only surface.
+;; The field descriptor reaches grammar authors through the façade. Its
+;; predicates and accessors come through as the matchers' do -- an author needs
+;; to test what they just built -- while machine ACCESSORS stay private: the
+;; public surface is construction-only.
 (harness-group "uint fields through the façade"
   (lambda ()
     (harness-case "a field-declaring machine is built from (byte-machine graph) alone"
@@ -120,7 +119,7 @@
           (check "the machine was built" (machine? m)))))))
 
 
-;; Milestone 4 Slice ② task 1: the façade reaches the two zero-width kinds.
+;; The façade reaches the two zero-width kinds.
 ;; Both lists in graph.sls are hand-maintained mirrors and a name missing from
 ;; EITHER makes the constructor unreachable to a grammar author, so both are
 ;; asserted from outside the library -- which is the only place the mirror is
@@ -129,8 +128,8 @@
   (lambda ()
     ;; The witness is EXPAND TIME, not run time: a name missing from either list
     ;; is an unbound identifier and this whole program fails to load. `node?` is
-    ;; deliberately not available here -- accessors stay private (§9.1 fixes a
-    ;; CONSTRUCTION surface) -- so the assertion is that a machine carrying both
+    ;; deliberately not available here -- accessors stay private (the public
+    ;; surface is CONSTRUCTION only) -- so the assertion is that a machine carrying both
     ;; kinds builds, which also proves make-machine's node guard admits them.
     (harness-case "a machine carrying both field kinds builds through the facade"
       (lambda ()

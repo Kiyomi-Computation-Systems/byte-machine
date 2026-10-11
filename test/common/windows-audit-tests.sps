@@ -1,11 +1,9 @@
-;;; Milestone 9 Slice ①: the DRY Windows-cell audit, as assertions about the
-;;; tree (design §6 item 2). Every question the Windows amd64 cell would answer is
-;;; written down BEFORE it runs, so whoever funds CI after v0.1 turns the cell on
-;;; against a written baseline, not a blank slate. Two of the rows are answerable
-;;; only from a runner (the discovered scheme.exe path; the AOT object extension
-;;; on ta6nt) and are DEFERRED past v0.1 with no CI (decision 0041) — they live in
-;;; .plans/milestone-9-windows-cell-audit.md, not here. The rows below are
-;;; answerable from the tree at this slice's base and are asserted, not narrated.
+;;; The dry Windows-cell audit, as assertions about the tree. Every question
+;;; the Windows amd64 cell would answer is written down BEFORE it runs, so a
+;;; Windows CI cell starts from a written baseline, not a blank slate. Two of
+;;; the questions are answerable only from a runner (the discovered scheme.exe
+;;; path; the AOT object extension on ta6nt) and are not asserted here. The
+;;; rows below are answerable from the tree and are asserted, not narrated.
 (import (rnrs)
         (byte-machine test harness))
 
@@ -25,8 +23,8 @@
 ;; Row 1 — the BYTE_MACHINE_EXPECT_OS / ARCH the Windows cell asserts. The
 ;; harness derives OS and architecture from Chez's machine-type; the Windows
 ;; amd64 build is `ta6nt` (threaded) or `a6nt`. `nt` -> windows and `a6` -> amd64
-;; are already in the harness's tables, so the identity assertion the cell runs
-;; is answerable now, without a runner.
+;; are in the harness's tables, so the identity assertion the cell runs is
+;; answerable without a runner.
 (harness-group "the Windows machine-type resolves to windows/amd64 (already in the harness tables)"
   (lambda ()
     (harness-case "ta6nt (threaded) -> windows / amd64"
@@ -41,7 +39,7 @@
 ;; Row 2 — the discovery names. find_program(NAMES scheme chez chezscheme) is what
 ;; the cell relies on to find the installed runtime; the candidate list is in the
 ;; toolchain module. (Whether the Windows installer puts one of these on PATH is
-;; the runner-only half — deferred.)
+;; answerable only from a runner.)
 (harness-group "the runtime discovery names include chez and chezscheme"
   (lambda ()
     (harness-case "ByteMachineChez.cmake carries the candidate names"

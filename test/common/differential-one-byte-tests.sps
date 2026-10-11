@@ -1,4 +1,4 @@
-;;; interpreter ≡ generated across all 256 byte values (parent §22.4). The
+;;; interpreter ≡ generated across all 256 byte values. The
 ;;; generated library is emitted at run time, loaded, and its compiled-machine
 ;;; obtained by environment/eval; both executors run through the shared
 ;;; make-parser/parser-feed! API and their parser-result fields are compared.

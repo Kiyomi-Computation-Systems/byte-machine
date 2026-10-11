@@ -1,18 +1,17 @@
-;;; interpreter ≡ generated over the span an error abandons (issue #145,
-;;; decision 0056; parent §14:839, §9.3).
+;;; interpreter ≡ generated over the span an error abandons.
 ;;;
-;;; §14:839 says an error neither flushes a final partial fragment nor
-;;; synthesizes a completion. So the bytes a span took in the feed that failed
-;;; are never handed to the application, and an embedder that counts a span's
-;;; bytes as they are delivered -- a size limit on a request target, say -- gets
-;;; an answer that depends on where the network split the input. Decision 0056
-;;; records on the error the span it abandoned and the stream offset where its
+;;; An error neither flushes a final partial fragment nor synthesizes a
+;;; completion. So the bytes a span took in the feed that failed are never
+;;; handed to the application, and an embedder that counts a span's bytes as
+;;; they are delivered -- a size limit on a request target, say -- would get an
+;;; answer that depends on where the network split the input. The error
+;;; therefore records the span it abandoned and the stream offset where its
 ;;; withheld bytes begin:
 ;;;
 ;;;   parser-error-span        -- the span active when the error stopped the parser
 ;;;   parser-error-span-offset -- where its withheld bytes begin
 ;;;
-;;; so `[span-offset, error-offset)` is exactly what §14:839 withheld, and every
+;;; so `[span-offset, error-offset)` is exactly what the error withheld, and every
 ;;; byte the span took before `span-offset` went out in an earlier fragment.
 ;;;
 ;;; THE PROPERTY THIS LANE EXISTS FOR is the last group: under every schedule of
@@ -96,9 +95,9 @@
     out))
 
 ;; One recorder per lane. The data callback COPIES its range inside its own
-;; dynamic extent (§13:799) and then answers from `answers`, one per data
-;; invocation, continuing once the list is spent; the completion callback
-;; answers `done-answer` every time.
+;; dynamic extent and then answers from `answers`, one per data invocation,
+;; continuing once the list is spent; the completion callback answers
+;; `done-answer` every time.
 (define (make-lane cm answers done-answer)
   (let* ((trace '()) (pending answers)
          (p (make-parser cm
@@ -115,7 +114,7 @@
                          'ctx)))
     (list p (lambda () (reverse trace)))))
 
-;; The compared tuple. `project-error` carries the two new members, so every
+;; The compared tuple. `project-error` carries the two span members, so every
 ;; tuple below compares the abandoned span across the lanes too.
 (define (rfields r p)
   (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
@@ -335,8 +334,8 @@
                          error)))))
     (harness-case "a completion callback that fails finds the span already closed"
       (lambda ()
-        ;; The span is made inactive BEFORE its completion callback runs
-        ;; (§13:823), so a failure there abandons nothing.
+        ;; The span is made inactive BEFORE its completion callback runs, so a
+        ;; failure there abandons nothing.
         (let ((r (both (list (list 'feed (b "AxZ."))) '() too-long)))
           (check-equal "the lanes agree" (caddr r) #t)
           (check-equal "the fragment, then the completion" (trace-of r ref) (list (b "x") 'complete))
@@ -449,9 +448,8 @@
 ;; sub-slice cases above. For each schedule, in each lane: the first error names
 ;; the span, and the delivered fragments followed by the withheld range
 ;; `[span-offset, error-offset)` are exactly the bytes the span took before the
-;; error. That is the sentence decision 0056 rests on, and it is the property
-;; the issue measured missing: without the two accessors the delivered bytes
-;; alone depend on the schedule.
+;; error. Without the two accessors the delivered bytes alone depend on the
+;; schedule.
 ;;
 ;; Three machines, because the bytes inside a span reach the parser through
 ;; different arms: `abm`'s byte dispatch, a keyword table that parks a matched

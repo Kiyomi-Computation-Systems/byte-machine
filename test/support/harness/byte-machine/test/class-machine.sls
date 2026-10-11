@@ -1,16 +1,16 @@
-;;; The Milestone 3 Slice ① byte-class proving machines, shared by the absolute
-;;; all-256 interpreter lane and the interpreter≡generated differential so each
-;;; graph descriptor is written once. Built only through (byte-machine graph).
+;;; The byte-class proving machines, shared by the absolute all-256
+;;; interpreter lane and the interpreter≡generated differential so each graph
+;;; descriptor is written once. Built only through (byte-machine graph).
 ;;;
-;;; Each machine has the same shape as the M1 one-byte machine -- one dispatch
+;;; Each machine has the same shape as the one-byte machine -- one dispatch
 ;;; node, one accepting case, a reexecute fallback into the reject error -- so
 ;;; the only variable under test is the matcher. Every fallback REEXECUTES, so a
-;;; rejected byte's `next` points AT the offending byte (parent §11.5).
+;;; rejected byte's `next` points AT the offending byte.
 ;;;
 ;;; The five cover the matcher repertoire and its two hazards: a set given in
 ;;; non-ascending order WITH a duplicate (canonicalization must sort and
 ;;; de-duplicate, or the node overlaps itself); and a complement of a complement
-;;; (§9.1:294 complements a MATCHER, so canonicalization is recursive -- a
+;;; (a complement complements a MATCHER, so canonicalization is recursive -- a
 ;;; single-level complement cannot witness that).
 (library (byte-machine test class-machine)
   (export make-byte-set-machine make-byte-range-machine
@@ -29,8 +29,8 @@
               (make-error-node 'reject 'rejected #f))
         'default-eof #f)))
 
-  ;; Deliberately unsorted and holding a duplicate: decision 0017 point 3 leaves
-  ;; both to canonicalization rather than to the constructor.
+  ;; Deliberately unsorted and holding a duplicate: sorting and de-duplication
+  ;; are left to canonicalization rather than to the constructor.
   (define (make-byte-set-machine)
     (class-machine 'byte-set (make-byte-set-matcher '(254 1 0 1 255 2))))
   (define (make-byte-range-machine)

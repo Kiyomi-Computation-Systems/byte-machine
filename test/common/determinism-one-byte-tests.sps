@@ -1,7 +1,7 @@
-;;; D6 (parent §22.9, §20): deterministic emission proved against a committed
-;;; golden. Byte-identity in this process AND equality to the golden (which every
-;;; cell and lane compares against) give cross-process, cross-lane, and cross-cell
-;;; identity transitively; M9 completes the four-cell matrix with the same golden.
+;;; Deterministic emission proved against a committed golden. Byte-identity in
+;;; this process AND equality to the golden (which every cell and lane compares
+;;; against) give cross-process, cross-lane, and cross-cell identity
+;;; transitively.
 ;;; Comparison is over raw bytes through the project-owned writer, never via
 ;;; implementation `write`.
 (import (rnrs) (rnrs eval)
@@ -57,14 +57,12 @@
             (check-equal "status" (parser-result-status r) 'stopped)
             (check-equal "consumed" (parser-result-consumed r) 1)))))))
 
-;; Milestone 4, resolving decision 0022 item 7's open question. The IR
-;; fingerprint is what §20:1043 makes the determinism checks compare, and
-;; decision 0019 item 2 states the property it has to carry: "two machines
-;; differing only in a reason must differ in fingerprint, or the fingerprint
-;; stops identifying what was emitted." The converse is the half that was never
-;; asserted -- two machines the fingerprint calls IDENTICAL must emit identical
-;; bytes -- and it was false: the encoding carries only reasons the graph
-;; reaches, while the emitted errs table carried every declaration.
+;; The IR fingerprint is what the determinism checks compare, so it must
+;; identify what was emitted: two machines differing only in a reason must
+;; differ in fingerprint. These cases assert the converse -- two machines the
+;; fingerprint calls IDENTICAL must emit identical bytes. The encoding carries
+;; only reasons the graph reaches, so the emitted errs table must carry only
+;; reached declarations too.
 (define (one-byte/spare spare)
   (make-machine 'one-byte 'start '() '() '()
     (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
@@ -80,19 +78,18 @@
           (make-error-node 'reject 'rejected #f))
     'default-eof #f))
 
-;; Whole-branch review of Slice ①b, CRITICAL. The `spare` declaration above
-;; carries a DISTINCT code and distinct reasons, so the reached-declaration
-;; filter drops it from both machines and the case above passes. The filter does
+;; The `spare` declaration above carries a DISTINCT code and distinct reasons,
+;; so the reached-declaration filter drops it from both machines. The filter does
 ;; not test declaration identity -- the normalizer has already discarded the
 ;; declaration NAME, so it tests whether the declaration's (code . reason) pair
 ;; appears among the reached ones -- and an unreached declaration that DUPLICATES
-;; a reached pair therefore passes the filter and is emitted. Nothing rejects
-;; duplicate codes or duplicate reasons; both machines below verify clean.
+;; a reached pair therefore passes the filter; the emitter must drop the
+;; duplicate entry. Nothing rejects duplicate codes or duplicate reasons; both
+;; machines below verify clean.
 ;;
-;; This is the same defect commit 51fd5f3 was written to close, reached by a
-;; second construction that commit's own regression case cannot see. The
-;; difference is a declaration COUNT, not a reason string, so the two machines
-;; here differ only in whether the third declaration exists at all.
+;; This is a second construction of the same property, one the `spare` case
+;; cannot see: the difference is a declaration COUNT, not a reason string, so
+;; the two machines here differ only in whether the third declaration exists.
 (define (one-byte/dup extra)
   (make-machine 'one-byte 'start '() '() '()
     (append (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
@@ -130,8 +127,8 @@
       (lambda ()
         ;; Stated separately from the byte comparison because the two machines
         ;; could be made equal by emitting the duplicate in BOTH -- agreement
-        ;; bought by making the difference unobservable, which is the repair this
-        ;; project has recorded as disarming its own test.
+        ;; bought by making the difference unobservable, which would disarm the
+        ;; byte comparison.
         (check "one entry per reached pair"
                (harness-string-contains?
                 (utf8->string (render-machine (compile-machine (one-byte/dup #t) '())

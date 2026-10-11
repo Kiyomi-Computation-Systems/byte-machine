@@ -1,8 +1,7 @@
-;;; The rejection catalogue and the independent oracle (Milestone 7 Slice ④,
-;;; design §4.5 and §4.6; decision 0033 items 1-2). Two instruments in one program,
-;;; on §4.10's `byte-machine.property.rejections.chez.*` lane allocation.
+;;; The rejection catalogue and the independent oracle: two instruments in one
+;;; program, on the `byte-machine.property.rejections.chez.*` lanes.
 ;;;
-;;; IT IMPORTS NO EXECUTOR, AND THAT IS THE POINT (F7, §22.6:1297). The corrupted
+;;; IT IMPORTS NO EXECUTOR, AND THAT IS THE POINT. The corrupted
 ;;; machines are never handed to an executor: this program's own `import` form names
 ;;; NONE of (byte-machine interpret), (byte-machine compile) or (byte-machine
 ;;; runtime), and its lane's SOURCES omit them too (test/CMakeLists.txt), so under
@@ -12,25 +11,25 @@
 ;;; against `verification-diagnostics`. Neither instrument introduces a third notion
 ;;; of validity.
 ;;;
-;;; THE CATALOGUE (§4.5): for every accepted machine of the committed seed and every
+;;; THE CATALOGUE: for every accepted machine of the committed seed and every
 ;;; applicable entry, the corrupted machine's `(code . node)` set CONTAINS the
-;;; entry's expected pairs (collateral diagnostics are expected, F4), and the TWIN
+;;; entry's expected pairs (collateral diagnostics are expected), and the TWIN
 ;;; verifies and does not contain the entry's code. Two totality rows: the code
-;;; sentinel (F5 row 1) and the refusal table (F5 row 2).
+;;; sentinel (row 1) and the refusal table (row 2).
 ;;;
-;;; THE ORACLE (§4.6): over free draws ∪ the property lane's rejected draws ∪ the
+;;; THE ORACLE: over free draws ∪ the property lane's rejected draws ∪ the
 ;;; catalogue's corrupted machines, each rule's `(code . node)` set is compared to
 ;;; the verifier's for that rule's codes. Zero differences on the committed seed;
 ;;; every rule fires and stays silent. A reachability rule is not compared on a
 ;;; machine whose node names are not unique (reachability is ill-defined there --
 ;;; only the dup-node-name entry produces such a machine, and it is compared on the
-;;; :885 rule, which is its point).
+;;; `:885-duplicates` rule, which is its point).
 ;;;
-;;; THE SEED (0033 item 3): BYTE_MACHINE_PROPERTY_SEED, unset LEGAL (the committed
+;;; THE SEED: BYTE_MACHINE_PROPERTY_SEED, unset LEGAL (the committed
 ;;; default), malformed LOUD -- the parsing rule replicated from
 ;;; property-differential-tests.sps, with the same `(rnrs)`-has-no-`string-trim`
 ;;; note. BYTE_MACHINE_SOURCE_ROOT and BYTE_MACHINE_HARNESS_ROOT are loud when unset
-;;; (the census's reason): the code sentinel reads verify.sls as a datum and the
+;;; (as in the census lane): the code sentinel reads verify.sls as a datum and the
 ;;; matcher-bytes prohibition reads verify-oracle.sls as a datum.
 (import (rnrs)
         (byte-machine test harness)
@@ -44,7 +43,7 @@
         (byte-machine private conditions)
         (byte-machine verify))
 
-;; ---- the seed (0033 item 3), replicated from the differential lane -----------
+;; ---- the seed, replicated from the differential lane -------------------------
 (define committed-seed 20260823)
 (define (ws-char? c) (let ((b (char->integer c))) (or (= b 32) (= b 9) (= b 10) (= b 13))))
 (define (trim s)
@@ -68,7 +67,7 @@
 (define source-root (env-loud "BYTE_MACHINE_SOURCE_ROOT" 'rejections))
 (define harness-root (env-loud "BYTE_MACHINE_HARNESS_ROOT" 'rejections))
 
-;; printed once at the suite's start (0033 item 3), as the differential lane does.
+;; printed once at the suite's start, as the differential lane does.
 (display "property-rejections-tests: drawing seed ") (display seed) (newline)
 
 ;; ---- reading source files as data (the census technique) ---------------------
@@ -111,7 +110,8 @@
                    (loop (cdr x) (loop (car x) acc))))
                 ((vector? x) (loop (vector->list x) acc)) (else acc)))))
 
-;; make-stop-node's parameter list, read from ir.sls -- the :906 structural check.
+;; make-stop-node's parameter list, read from ir.sls -- the structural check for
+;; the `terminal-out-edge` refusal.
 (define (ctor-params datum name)
   (let loop ((x datum))
     (cond ((and (pair? x) (eq? (car x) 'define) (pair? (cdr x)) (pair? (cadr x))
@@ -129,8 +129,8 @@
 (define property-draws (draw-all property-steering))
 (define accepted (filter (lambda (m) (verification-ok? (verify-machine m))) property-draws))
 (define free-draws (draw-all free-steering))
-;; the property lane's REJECTED draws, wrapped through make-rejection* (F6 -- the
-;; shipped rejection ledger's first consumer, reached through F13's library).
+;; the property lane's REJECTED draws, wrapped through make-rejection* from the
+;; rejection-ledger library.
 (define rejections
   (let loop ((ds property-draws) (i 0) (acc '()))
     (if (null? ds) (reverse acc)
@@ -160,7 +160,7 @@
 
 (harness-begin "property.rejections")
 
-;; ---- the catalogue: positive half (Task 3 Step 2) ----------------------------
+;; ---- the catalogue: positive half --------------------------------------------
 (harness-group "the catalogue's positive half -- the corruption emits its diagnostic"
   (lambda ()
     (for-each
@@ -176,7 +176,7 @@
                           (applicable e))))))
      corruption-entries)))
 
-;; ---- the catalogue: negative half (Task 3 Step 3) ----------------------------
+;; ---- the catalogue: negative half --------------------------------------------
 (harness-group "the catalogue's negative half -- the twin verifies and does not"
   (lambda ()
     (for-each
@@ -194,7 +194,7 @@
                             (applicable e)))))))
      corruption-entries)))
 
-;; ---- never executed (Task 3 Step 4, F7) --------------------------------------
+;; ---- never executed ----------------------------------------------------------
 (harness-group "the corrupted machines are never handed to an executor"
   (lambda ()
     (harness-case "no executor is in scope; only verify-machine consumes a corrupted machine"
@@ -211,7 +211,7 @@
         ;; verify-machine, actually ran over it).
         (check "the corpus of corrupted machines is non-empty" (pair? corruptions))))))
 
-;; ---- per-entry application counts (Task 3 Step 5) ----------------------------
+;; ---- per-entry application counts --------------------------------------------
 (harness-group "every catalogue entry applied to at least one accepted machine"
   (lambda ()
     (harness-case (string-append "per-entry application counts" (seed-label seed))
@@ -226,7 +226,7 @@
                            (>= (length (applicable e)) 1)))
                   corruption-entries)))))
 
-;; ---- F5 row 1: the code sentinel ---------------------------------------------
+;; ---- totality row 1: the code sentinel ---------------------------------------
 (harness-group "the entry codes plus the unconstructible list equal the census"
   (lambda ()
     (harness-case "code sentinel"
@@ -240,7 +240,7 @@
           (check-equal "and the census derives exactly thirty-three codes" (length census) 33)
           (check-equal "and the sentinel is exactly thirty-three codes" (length sentinel) 33))))))
 
-;; ---- F5 row 2: the refusal table (Task 3 Step 7) -----------------------------
+;; ---- totality row 2: the refusal table ---------------------------------------
 (harness-group "the constructor refusals still refuse"
   (lambda ()
     (for-each
@@ -254,13 +254,13 @@
                                  (eq? (byte-machine-contract-condition-code ex) 'invalid-argument))
                                 (#t #f))
                        ((refusal-thunk r)) #f))
-              ;; :906 has no thunk: assert structurally that a terminal constructor
+              ;; `terminal-out-edge` has no thunk: assert structurally that a terminal constructor
               ;; has no out-edge slot -- make-stop-node takes (name source-label).
               (check-equal "make-stop-node takes name and source-label only -- no out-edge slot"
                            (ctor-params (car ir-src) 'make-stop-node) '(name source-label))))))
      constructor-refusals)))
 
-;; ---- Task 9 Step 3: the matcher-bytes prohibition, made checkable -------------
+;; ---- the matcher-bytes prohibition, made checkable ---------------------------
 (harness-group "the oracle's :893 row never reads matcher-bytes"
   (lambda ()
     (harness-case "matcher-bytes occurs zero times in verify-oracle.sls"
@@ -269,7 +269,7 @@
         (check-equal "the symbol matcher-bytes does not occur in the oracle"
                      (count-symbol 'matcher-bytes (car oracle-src)) 0)))))
 
-;; ---- the oracle: zero differences, fire and silent (Task 4) ------------------
+;; ---- the oracle: zero differences, fire and silent ---------------------------
 (define (compared-for rule)
   ;; the corpus machines this rule is compared on (reach? rules skip non-unique-name
   ;; machines, where reachability is ill-defined).
@@ -307,7 +307,7 @@
              (check (string-append (symbol->string (oracle-rule-name rule)) " stayed silent at least once") (>= silent 1))))
          oracle-rules)))))
 
-;; ---- the drive's own sentinels (Task 3 Step 8, Task 4 Step 7) ----------------
+;; ---- the drive's own sentinels -----------------------------------------------
 (harness-group "the drive's loop sentinels -- a literal and a derived total"
   (lambda ()
     (harness-case (string-append "sentinels" (seed-label seed))
@@ -321,7 +321,7 @@
         (check-equal "the (machine,entry) pairs driven equal the sum of per-entry counts"
                      (length corruptions)
                      (apply + (map (lambda (e) (length (applicable e))) corruption-entries)))
-        ;; the loop-over-the-loops (Task 4 Step 7): the comparisons actually performed
+        ;; the loop-over-the-loops: the comparisons actually performed
         ;; equal machines x rules, adjusted for the reach? skips -- computed by a
         ;; DIFFERENT formula (rule-counts times corpus sizes) than the observed sum of
         ;; per-rule |compared-for|, so a wrong filter in one rule separates the two.

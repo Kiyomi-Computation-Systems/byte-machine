@@ -1,7 +1,7 @@
-;;; Milestone 9 Slice ③: the allocation audit (decision 0040, §26:1680, §30 q5).
-;;; §26:1680 has a prohibition ("no deliberate list/vector/string/result
-;;; construction in generated per-byte paths") and a measurement ("fixnum-sized
-;;; allocation measurements recorded with callbacks disabled"). Measured as a
+;;; The allocation audit. It checks a prohibition ("no deliberate
+;;; list/vector/string/result construction in generated per-byte paths") and
+;;; records a measurement ("fixnum-sized allocation measurements recorded with
+;;; callbacks disabled"). Measured as a
 ;;; SLOPE, not a budget: the same machine fed two messages differing only in the
 ;;; length of one header value; allocation differenced and divided by the byte
 ;;; difference. Three properties make it an assertion, not an observation:
@@ -9,13 +9,11 @@
 ;;;      byte), asserted nonzero — without it, a slope of zero cannot be told
 ;;;      from a measurement apparatus that cannot move;
 ;;;   2. BOTH executors measured, only the generated one gated (the interpreter's
-;;;      per-byte allocation is recorded — §18 asks nothing of it);
+;;;      per-byte allocation is recorded, not constrained);
 ;;;   3. CALLBACKS DISABLED ('() bindings), with the callback-bound figure
 ;;;      recorded beside it so the difference is visible.
-;;; This slice RECORDS and does not act (§26:1679 "without speculative
-;;; optimization"; §23.3's admission rule is not met for anything and is not
-;;; pursued here). It answers §30 question 5 in a test; the documentation half is
-;;; Slice ④. The interpreter allocates ~17 900 B/byte, so it is measured at a low
+;;; The audit RECORDS and does not optimize. The interpreter allocates
+;;; ~17 900 B/byte, so it is measured at a low
 ;;; repetition count to bound its allocation churn; the generated executor is
 ;;; allocation-free per byte, so equality holds at any count.
 (import (rnrs) (rnrs eval)
@@ -50,8 +48,8 @@
 
 ;; Two valid no-body requests differing only in one header value's length. The
 ;; overhead ("GET / HTTP/1.1\r\nX-Pad: " + "\r\n\r\n") is 26 bytes; a value of 44
-;; gives a 70-byte message, a value of 40044 gives a 40070-byte message — the two
-;; sizes design §3.3 P2 measured, 40000 bytes apart.
+;; gives a 70-byte message, a value of 40044 gives a 40070-byte message — two
+;; sizes 40000 bytes apart.
 (define (bytes s) (map char->integer (string->list s)))
 (define (request value-len)
   (u8-list->bytevector
@@ -64,7 +62,7 @@
 (define interp-reps 3)   ; the interpreter is ~17 900 B/byte — a low count bounds its churn
 
 ;; Feed one whole request through a fresh parser and finish it. `bindings` is the
-;; callback binding list — '() disables callbacks (§26:1680's wording).
+;; callback binding list — '() disables callbacks.
 (define (feed-once! cm bindings req)
   (let ((p (make-parser cm bindings #f)))
     (parser-feed! p req 0 (bytevector-length req))
@@ -96,15 +94,14 @@
       (make-bytevector len 0))
     (- (sstats-bytes (statistics)) before)))
 
-;; --- Milestone 14: the second slope, per HEADER ------------------------------
+;; --- the second slope, per HEADER --------------------------------------------
 ;;
 ;; The slope above varies one header VALUE's length, so it holds the header
-;; count fixed and cannot see a cost paid once per header. There was one: the
-;; callback seam returned a freshly consed outcome list on every crossing, and
-;; an HTTP grammar crosses it about four times per header. It read as a
-;; per-MESSAGE intercept -- decision 0040 item 1 reports that separately and
-;; never divides it by anything -- so the audit was green while allocation grew
-;; linearly in the one dimension real traffic actually varies.
+;; count fixed and cannot see a cost paid once per header. An HTTP grammar
+;; crosses the callback seam about four times per header, so a seam that
+;; allocated on every crossing would read as a per-MESSAGE intercept -- which
+;; the per-byte slope reports separately and never divides by anything -- while
+;; allocation grew linearly in the one dimension real traffic actually varies.
 ;;
 ;; Two requests differing only in header COUNT. They differ in length too, of
 ;; course; what makes the difference attributable to headers is the slope above
@@ -149,8 +146,8 @@
   (lambda ()
     (harness-case "the interpreter's per-byte allocation is recorded, not asserted"
       (lambda ()
-        ;; Recorded so the baseline and §30 q5 can cite it; the interpreter is the
-        ;; oracle and §18 asks nothing of its allocation. The only assertion here
+        ;; Recorded so the baseline can cite it; the interpreter is the oracle
+        ;; and nothing constrains its allocation. The only assertion here
         ;; is that the measurement APPARATUS produced a positive number for it —
         ;; the interpreter DOES allocate per byte, unlike the generated executor.
         (let ((interp-slope (slope interpreted '() interp-reps)))
@@ -165,7 +162,7 @@
     (harness-case "the generated slope is zero with callbacks disabled AND with callbacks bound"
       (lambda ()
         ;; A binding list that fires on message-begin/complete but records nothing
-        ;; structural. §26:1680 gates the callbacks-disabled figure; the bound
+        ;; structural. The audit gates the callbacks-disabled figure; the bound
         ;; figure is recorded beside it so the difference is visible.
         (let* ((noop (lambda (ps ux) callback-continue))
                (bound (list (list 'message-begin noop) (list 'message-complete noop)))
@@ -184,7 +181,7 @@
   (lambda ()
     (harness-case "the live control proves the apparatus can see a per-header cost"
       (lambda ()
-        ;; Decision 0040 item 2, applied to the second dimension: a slope of zero
+        ;; The live control, applied to the second dimension: a slope of zero
         ;; is indistinguishable from a measurement that cannot move, so the
         ;; control moves first. It allocates in proportion to the header count.
         (let ((few  (control-alloc 1 gen-reps))
@@ -192,10 +189,10 @@
           (check "control: alloc(many headers) > alloc(few)" (> many few)))))
     (harness-case "the generated executor's allocation does not grow with header count"
       (lambda ()
-        ;; Both wordings, as the per-byte group does: §26:1680 gates the
-        ;; callbacks-disabled figure, and the bound figure is asserted here too
-        ;; because an UNBOUND callback crossed the same seam and paid the same
-        ;; cost -- the defect this leg was added for was visible in both.
+        ;; Both bindings, as the per-byte group does: the callbacks-disabled
+        ;; figure is the gated one, and the bound figure is asserted here too
+        ;; because an UNBOUND callback crosses the same seam and would pay the
+        ;; same per-crossing cost.
         (let* ((noop (lambda (ps ux) callback-continue))
                (bound (list (list 'message-begin noop) (list 'message-complete noop)))
                (disabled (header-slope generated '() gen-reps))
@@ -207,26 +204,25 @@
           (check-equal "bound: per-header slope zero" with-callbacks 0))))
     (harness-case "the interpreter's per-header allocation is recorded, not asserted"
       (lambda ()
-        ;; §18 asks nothing of the oracle's allocation here either.
+        ;; Nothing constrains the oracle's allocation here either.
         (let ((interp (header-slope interpreted '() interp-reps)))
           (check "the interpreter per-header slope is a measured number" (rational? interp))
           (say (string-append "byte-machine-alloc: interpreter B/header="
                               (adapter-value->string interp))))))))
 
-;; --- Issue #139: the third dimension, per MATCHED keyword byte ---------------
+;; --- the third dimension, per MATCHED keyword byte ---------------------------
 ;;
 ;; Neither slope above can see a keyword table: the HTTP fixture machine has
-;; none. The walk (`byte-machine-keyword-step/v1`, decision 0044) once copied the
-;; whole matched prefix for every byte it consumed, so a header name matching k
-;; bytes of a keyword allocated about k²/2 pairs -- measured downstream at 138
-;; times a request's own size for 97 `Transfer-Encodinx` fields. The claim here
+;; none. A walk (`byte-machine-keyword-step/v1`) that copied the whole matched
+;; prefix for every byte it consumed would allocate about k²/2 pairs for a
+;; header name matching k bytes of a keyword. The claim here
 ;; is a SHAPE, not a number: what one walk allocates does not depend on how much
 ;; of a keyword it matched, on how long a prefix it resumed with, or on how long
 ;; a prefix it parks unchanged. The op is driven directly, as the generated arm
 ;; calls it, so the figure is the walk's own and no executor's.
 ;;
 ;; The table is the five header names chez-httparse's parser reads by name,
-;; case-insensitive (decision 0045), with a reexecute no-match.
+;; case-insensitive, with a reexecute no-match.
 (define kw-entries
   (let loop ((ns '("connection" "content-length" "proxy-connection"
                    "transfer-encoding" "upgrade"))
@@ -237,7 +233,7 @@
 (define kw-reps 1000)
 
 ;; A 17-byte field name whose first k bytes are `Transfer-Encoding` and whose
-;; rest is `x`, then the `:` that ends it -- the downstream brief's k table.
+;; rest is `x`, then the `:` that ends it.
 (define (kw-field k)
   (u8-list->bytevector
    (bytes (string-append (substring "Transfer-Encoding" 0 k)
@@ -251,9 +247,8 @@
       (step kw-entries kw-no-match #t path bv 0 (bytevector-length bv)))
     (- (sstats-bytes (statistics)) before)))
 
-;; The live control: the walk as it stood before issue #139, copying its prefix
-;; on every consumed byte. Kept here verbatim so the apparatus is shown able to
-;; see the defect it guards against -- decision 0040 item 2, a third time.
+;; The live control: a walk that copies its prefix on every consumed byte. Kept
+;; here so the apparatus is shown able to see the defect it guards against.
 (define (copying-keyword-step entries no-match ci? path bv pos end)
   (define (fold b) (if (and ci? (>= b 65) (<= b 90)) (+ b 32) b))
   (define (prefix? p bs)
@@ -338,11 +333,11 @@
           (check-equal "need with the grown prefix at the feed's end"
                        r (list 'need (bytes "transfer-encoding") 3)))))))
 
-;; --- Decision 0055: the runtime op census ------------------------------------
+;; --- the runtime op census ---------------------------------------------------
 ;;
-;; Every slope above is a claim about the code its fixture RUNS, and issue #139
-;; was a runtime op no fixture here ran: the keyword walk, called from an arm the
-;; HTTP machine does not have. So the claim "generated per-byte paths allocate
+;; Every slope above is a claim about the code its fixture RUNS, and a runtime
+;; op no fixture runs is outside all of them -- the keyword walk, for one, is
+;; called from an arm the HTTP machine does not have. So the claim "generated per-byte paths allocate
 ;; nothing" is a census over the `(byte-machine runtime)` procedures emitted code
 ;; can call, and the lane must reach each one. Both halves are measured here,
 ;; neither declared:
@@ -411,7 +406,7 @@
     h))
 
 ;; The derived census, split by what the export IS: a procedure is an op emitted
-;; code calls; anything else (today `callback-pause`, compared by `eq?`) is a
+;; code calls; anything else (`callback-pause`, compared by `eq?`) is a
 ;; constant it reads and cannot allocate.
 (define derived
   (filter (lambda (x) (hashtable-contains? literal-tokens (symbol->string x)))
@@ -535,10 +530,10 @@
       (feed-only cm bindings req))
     (- (sstats-bytes (statistics)) before)))
 
-;; --- the three witnesses the census found missing ----------------------------
+;; --- the error, callback-failure and emitted-keyword witnesses ---------------
 ;;
-;; Measured before they existed: the HTTP slopes feed only valid messages, and
-;; the keyword group drives its op directly, so six ops had never run under this
+;; The HTTP slopes feed only valid messages, and the keyword group drives its op
+;; directly, so without these three witnesses six ops would never run under this
 ;; lane -- `byte-machine-make-parser-error/v1`, `byte-machine-make-callback-error/v1`,
 ;; the three `callback-failure` readers, and the keyword walk as EMITTED code
 ;; calls it. Each is an event, not a per-byte step: an error or a callback
@@ -733,7 +728,7 @@
     (harness-case "every derived op is reached by an audited input"
       (lambda ()
         ;; The totality row. An op here and not witnessed is code the allocation
-        ;; audit has never run -- issue #139's shape, found before a consumer.
+        ;; audit has never run.
         ;; One direction only: a witnessed op outside the census is a called op
         ;; outside it, which the called-ops case reports by name.
         (check-equal "census ops no witness reached"

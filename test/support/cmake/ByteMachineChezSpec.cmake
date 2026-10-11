@@ -67,8 +67,8 @@ spec_check_equal("${v}" "10.4.1" "bare version")
 spec_check_equal("${mt}" "tarm64osx" "machine type")
 spec_check_equal("${th}" "yes" "threaded flag is reported")
 
-# A newer release is accepted: the pin is a floor, not an equality. The parent
-# plan's Tier 2 matrix explicitly includes additional implementation versions,
+# A newer release is accepted: the pin is a floor, not an equality. The
+# portability matrix's Tier 2 cells include additional implementation versions,
 # so exact-matching here would contradict it.
 byte_machine_chez_identity(
   "full-version=Chez Scheme Version 11.0.0\nmachine-type=tarm64osx\nthreaded=yes"

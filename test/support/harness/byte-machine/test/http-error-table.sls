@@ -1,64 +1,45 @@
 ;;; The fixture-state -> expected-error table for the private HTTP fixture.
 ;;;
 ;;; *** THIS TABLE IS THE HTTP FIXTURE'S, AND IT NEVER BECOMES A GENERIC
-;;; BYTE-MACHINE ERROR CATALOG. *** §21.4:1177's second sentence is a scope
-;;; constraint in those words. §27:1696's diagnostic catalog is a different,
-;;; UNSCHEDULED document (Milestone 7 design §10 says so); this table is not its
-;;; first instalment. It lives beside the fixture, no `src/` library imports it
-;;; (§4.7's gate and Slice ⑤'s leak check assert that), and it carries no HTTP
-;;; vocabulary into any `(byte-machine ...)` name.
+;;; BYTE-MACHINE ERROR CATALOG. *** The verifier's diagnostic catalog is a
+;;; different document. This table lives beside the fixture, no `src/` library
+;;; imports it, and it carries no HTTP vocabulary into any `(byte-machine ...)`
+;;; name.
 ;;;
-;;; It discharges §21.4:1177's precondition, addressed to tests: "Before
-;;; Milestone 8 implementation begins, tests must expand this catalog into a
-;;; table mapping every fixture state family to its expected byte, boundary, or
-;;; EOF error." Slice ⓪ ships it FIRST, before any grammar node exists (decision
-;;; 0034): written after the fixture it would be a transcription of what the
-;;; fixture does; written first it is the thing the fixture is measured against,
-;;; and every slice from ① onward states which of these rows it makes true.
+;;; It maps every fixture state family to its expected byte, boundary, or EOF
+;;; error, and is written independently of the fixture: it is the thing the
+;;; fixture is measured against, not a transcription of what the fixture does.
 ;;;
 ;;; A row is (region trigger code position-kind offset-rule production):
-;;;   region       -- a §21.2 grammar region, NOT a node name, so a row survives
-;;;                   the node renames every later slice performs (decision 0034).
-;;;   trigger      -- `byte`, `boundary` or `eof`, matching §21.4:1175's three
-;;;                   sentences: what causes the error.
-;;;   code         -- one of §21.4:1156-1173's eighteen stable codes.
+;;;   region       -- an HTTP grammar region, NOT a node name, so a row survives
+;;;                   node renames.
+;;;   trigger      -- `byte`, `boundary` or `eof`: what causes the error.
+;;;   code         -- one of the eighteen stable HTTP error codes.
 ;;;   position-kind-- `byte`, `boundary` or `eof`, the parser-error-position-kind
-;;;                   the fixture reports (§12.7:405 `byte | boundary | eof`, and
-;;;                   §12.7:768-771). CORRECTED in Slice ① (2026-09-12): the eof
-;;;                   rows read `boundary` when Slice ⓪ shipped them; the built
-;;;                   fixture reports position-kind `eof` for an `unexpected-eof`
-;;;                   raised by `parser-finish!` (§12.7:771 "`eof` at the final
-;;;                   stream offset"), so every eof row is `eof`. This is the
-;;;                   table-measured-against-the-fixture process (decision 0034)
-;;;                   doing its job: the row is corrected in place with the reason
-;;;                   (design Appendix).
-;;;   offset-rule  -- §21.4:1175 restated for this row, as data.
-;;;   production   -- the §21.2 production the region guards.
+;;;                   the fixture reports (`byte | boundary | eof`). Every eof
+;;;                   row is `eof`: the fixture reports position-kind `eof` for an
+;;;                   `unexpected-eof` raised by `parser-finish!` ("`eof` at the
+;;;                   final stream offset").
+;;;   offset-rule  -- the error-position rule restated for this row, as data.
+;;;   production   -- the grammar production the region guards.
 ;;;
 ;;; A (region trigger) pair that CANNOT produce an error is an entry in
 ;;; http-error-inapplicable, carrying its reason as DATA (never as a comment or
 ;;; an omission), so the totality check can see it. Every (region x trigger) is
 ;;; covered by exactly one side: a row, or an inapplicable entry.
 ;;;
-;;; TWO ROWS THIS TABLE DECIDES WITH THE GRAMMAR IN FRONT OF IT (design
-;;; Appendix, "the two rows this table cannot fill from reading"):
-;;;  1. `forbidden-trailer`'s position. §21.4:1175 says "at the colon following
-;;;     the completed forbidden name". The name is completed (its bytes
-;;;     consumed); the colon is then the first offending UNCONSUMED byte, and
-;;;     §21.4:1175's first sentence ("lexical errors win at the first offending
-;;;     unconsumed byte") makes it a `byte` trigger with `byte` position-kind --
-;;;     NOT the `boundary` the Appendix skeleton guessed. framing-conflict, by
-;;;     contrast, is a genuine `boundary`: a zero-width decision after the later
-;;;     header line's LF, no byte of its own.
+;;; TWO ROWS THAT NEED THE GRAMMAR IN FRONT OF THEM:
+;;;  1. `forbidden-trailer`'s position: "at the colon following the completed
+;;;     forbidden name". The name is completed (its bytes consumed); the colon
+;;;     is then the first offending UNCONSUMED byte, and lexical errors win at
+;;;     the first offending unconsumed byte, which makes it a `byte` trigger with
+;;;     `byte` position-kind -- NOT a `boundary`. framing-conflict, by contrast,
+;;;     is a genuine `boundary`: a zero-width decision after the later header
+;;;     line's LF, no byte of its own.
 ;;;  2. Whether `fixed-body` and `chunk-data` can produce a non-EOF error. They
 ;;;     consume EXACTLY the counted number of octets and reject nothing once the
 ;;;     count is fixed, so the byte and boundary cells are inapplicable -- stated
 ;;;     as a claim, with the reason as data, not left as an empty cell.
-;;;
-;;; The "read from the machine" half of decision 0034's code set-equal has no
-;;; machine to read at Slice ⓪; the test asserts the code union against the
-;;; eighteen §21.4 names alone, and Slice ⑤ closes the set-equal once the
-;;; fixture's own error declarations exist.
 (library (byte-machine test http-error-table)
   (export http-error-rows
           http-error-inapplicable
@@ -67,8 +48,8 @@
           http-error-region-nodes)
   (import (rnrs))
 
-  ;; The regions of §21.2's grammar, in stream order. A region is a NAME, not a
-  ;; node: node names change as slices land, a region does not (decision 0034).
+  ;; The regions of the HTTP grammar, in stream order. A region is a NAME, not a
+  ;; node: node names can change, a region does not.
   (define http-error-regions
     '(idle
       method
@@ -89,14 +70,14 @@
       trailer-name
       trailer-value))
 
-  ;; The three triggers §21.4:1175's three position sentences name.
+  ;; The three triggers the error-position rule names.
   (define http-error-triggers '(byte boundary eof))
 
   ;; Every producible (region trigger code position-kind offset-rule production).
   ;; A cell with two codes (content-length-value, chunk-size, header-crlf's
   ;; boundary, trailer-name's byte) is two rows. `unexpected-eof` is one row per
-  ;; non-idle region: decision 0036 makes each an error node of its own, all
-  ;; naming one declaration; the row is keyed on the region, not the node.
+  ;; non-idle region: each is an error node of its own, all naming one
+  ;; declaration; the row is keyed on the region, not the node.
   (define http-error-rows
     '(;; --- request line -----------------------------------------------------
       (idle byte invalid-method byte
@@ -267,11 +248,9 @@
       (trailer-value boundary
             "a trailer value is a byte span; it takes no zero-width boundary decision")))
 
-  ;; §4.9 item 2 (owner-approved): the exported fixture-region -> node-name map.
-  ;; It lets a failure name the node without coupling the rows to node names. At
-  ;; Slice ⓪ NO grammar node exists, so every region maps to the empty list; the
-  ;; map grows a row's node list per slice as ① onward build the fixture, and its
-  ;; totality row ("every declared node is in exactly one region") is vacuously
-  ;; true here and bites once nodes exist.
+  ;; The exported fixture-region -> node-name map. It lets a failure name the
+  ;; node without coupling the rows to node names. Every region maps to the
+  ;; empty list, so its totality row ("every declared node is in exactly one
+  ;; region") is vacuously true and bites only once a region lists nodes.
   (define http-error-region-nodes
     (map (lambda (region) (cons region '())) http-error-regions)))

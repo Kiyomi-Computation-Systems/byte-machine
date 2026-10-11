@@ -3,10 +3,10 @@
 # WHY THIS FILE EXISTS
 #
 # Every positive assertion and every negative case in every other specification
-# routes through two functions in SpecSupport.cmake. Neither was tested. Breaking
-# either one left all four specifications green, which meant the whole suite
-# could report success while checking nothing -- the one failure mode that no
-# amount of care in the specifications themselves would reveal.
+# routes through two functions in SpecSupport.cmake. Breaking either one would
+# leave every other specification green, so the whole suite could report
+# success while checking nothing -- the one failure mode that no amount of care
+# in the specifications themselves would reveal.
 #
 # WHY IT CANNOT USE THE HELPERS IT TESTS
 #
@@ -93,8 +93,7 @@ set(spec_support_failures 0)
 # reason" -- and each is a different thing to tell whoever is debugging. Worse,
 # either one masks the loss of the other: disable the exit-status check and the
 # message check still rejects the case, so the case still exits nonzero and the
-# defect goes unnoticed. Mutation testing found exactly that. Pinning the
-# expected diagnostic is what separates them.
+# defect goes unnoticed. Pinning the expected diagnostic is what separates them.
 #
 # The local flatten is deliberate duplication of spec_flatten: this driver must
 # not depend on the file it is testing.

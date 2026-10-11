@@ -1,10 +1,10 @@
-;;; D6 (parent §22.9, §20) over the Milestone 6 Slice ① counted machine: deterministic
-;;; emission proved against a committed golden, and the emitted library's counted
-;;; walks proved directly. The FIFTH golden, on the accumulate lane's reasoning: a
-;;; counted-consume node renders an arm no other golden contains -- a zero-count
-;;; jump, a bulk commit through `min`, and an exhausted clause that is not the
-;;; shared preamble -- so a determinism claim that excluded it would be a claim
-;;; about the other four machines.
+;;; Deterministic emission over the counted machine: proved against a committed
+;;; golden, and the emitted library's counted walks proved directly. A golden of
+;;; its own, on the accumulate lane's reasoning: a counted-consume node renders
+;;; an arm no other golden contains -- a zero-count jump, a bulk commit through
+;;; `min`, and an exhausted clause that is not the shared preamble -- so a
+;;; determinism claim that excluded it would be a claim about the other
+;;; machines only.
 ;;;
 ;;; Comparison is over raw bytes through the project-owned writer, never via
 ;;; implementation `write`.

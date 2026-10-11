@@ -1,17 +1,15 @@
-;;; Milestone 11 Slice ③: the emitted-size measurement (brief §7 criterion 7 --
-;;; the change's whole justification). The 47 llhttp methods built as ONE
-;;; keyword-table node emit far less than the equivalent trie of byte-dispatch
-;;; nodes (one per distinct prefix, the shape the consumer ships today). Both are
-;;; rendered through the real emitter here; the win is asserted structurally (the
-;;; trie's node count and the compact table's single state) and by a robust byte
-;;; ratio, with the exact measured bytes recorded beside the assertion -- MEASURED
-;;; through this lane, never a prototype number copied.
+;;; The emitted-size measurement for the keyword table. The 47 llhttp methods
+;;; built as ONE keyword-table node emit far less than the equivalent trie of
+;;; byte-dispatch nodes (one per distinct prefix). Both are rendered through the
+;;; real emitter here; the win is asserted structurally (the trie's node count
+;;; and the compact table's single state) and by a robust byte ratio, with the
+;;; exact measured bytes recorded beside the assertion -- measured through this
+;;; lane.
 ;;;
-;;; MEASURED 2026-09-13 (this lane, both modes -- emitter output is
-;;; mode-independent): trie 245 source nodes / 242 byte-dispatch prefix nodes /
-;;; 96169 emitted bytes; keyword table 1 state / 2795 emitted bytes -- a 34.4x
-;;; reduction. The 242 is the brief §3's measured "before" node count, reproduced
-;;; exactly. Re-derive the bytes with:
+;;; MEASURED (this lane, both modes -- emitter output is mode-independent):
+;;; trie 245 source nodes / 242 byte-dispatch prefix nodes / 96169 emitted
+;;; bytes; keyword table 1 state / 2795 emitted bytes -- a 34.4x reduction.
+;;; Re-derive the bytes with:
 ;;;   chez --libdirs "src:test/support/harness" --script - <<< '(import (rnrs)
 ;;;     (byte-machine test keyword-method-table) (byte-machine compile))
 ;;;     (for-each (lambda (m n) (display (bytevector-length
@@ -60,7 +58,7 @@
       (lambda ()
         (let ((trie-bytes (emitted trie 'methodtrie))
               (kwt-bytes (emitted kwt 'methodkw)))
-          ;; recorded measurement (both modes, 2026-09-13): 96169 vs 2795 (34.4x).
+          ;; recorded measurement (both modes): 96169 vs 2795 (34.4x).
           ;; The assertion is a robust floor, not the exact bytes (those are not a
           ;; golden), so an unrelated emitter tweak does not redden the size win.
           (check "the trie emits more than ten times the compact table"

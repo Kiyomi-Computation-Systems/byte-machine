@@ -1,6 +1,6 @@
-;;; Milestone 8 Slice ⑤: the malformed sweep, pipelining, and the EOF rules
-;;; (§25:1641-1642). Every §21.4 code is produced at the position Slice ⓪'s table
-;;; states; pipelined requests each complete; EOF is clean only while idle.
+;;; The malformed sweep, pipelining, and the EOF rules. Every HTTP error code is
+;;; produced at the position the error table (http-error-table.sls) states;
+;;; pipelined requests each complete; EOF is clean only while idle.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test http-machine)
@@ -39,10 +39,10 @@
 (define (sortsym l) (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) l))
 (define (distinct xs) (let loop ((xs xs) (acc '())) (cond ((null? xs) (reverse acc)) ((member (car xs) acc) (loop (cdr xs) acc)) (else (loop (cdr xs) (cons (car xs) acc))))))
 
-;; --- the malformed sweep: every §21.4 code produced at its stated position ----
+;; --- the malformed sweep: every error code produced at its stated position ---
 
 ;; (input use code position offset) — `use` is 'feed (lexical, no finish needed)
-;; or 'finish (EOF). Positions match Slice ⓪'s table and the per-region lanes.
+;; or 'finish (EOF). Positions match the error table and the per-region lanes.
 (define cpre "GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")
 (define sweep
   (list
@@ -82,7 +82,7 @@
                      (sortsym (distinct (map caddr sweep)))
                      (sortsym (distinct (map (lambda (r) (caddr r)) http-error-rows))))))))
 
-;; --- pipelining: several complete requests in one feed (§25:1642) -------------
+;; --- pipelining: several complete requests in one feed -----------------------
 
 (harness-group "pipelined requests each complete, in every framing combination"
   (lambda ()
@@ -102,7 +102,7 @@
           (check-equal "finished" (car r) 'finished)
           (check-equal "two of each" (list (mb-count (cadr r)) (mc-count (cadr r))) '(2 2)))))))
 
-;; --- EOF: clean only while idle (decision 0037) -------------------------------
+;; --- EOF: clean only while idle ----------------------------------------------
 
 (harness-group "clean EOF only while idle; unexpected-eof from every non-idle region"
   (lambda ()

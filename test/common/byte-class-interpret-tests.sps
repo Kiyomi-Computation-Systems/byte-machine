@@ -1,5 +1,5 @@
-;;; All-byte class tests (parent §22.7:1299-1301; Milestone 3 exit :1537) run
-;;; through the reference interpreter with ABSOLUTE expected outcomes.
+;;; All-byte class tests, run through the reference interpreter with ABSOLUTE
+;;; expected outcomes.
 ;;;
 ;;; Absolute, not differential, on purpose: both executors canonicalize through
 ;;; the same `matcher-bytes`, so a defect there would make interpreter and
@@ -15,9 +15,9 @@
 
 (harness-begin "unit.byte-class")
 
-;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
-;; every non-error result. These are single-executor lanes, so they compare the
-;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; The error slot holds a parser-error record, and is #f on every non-error
+;; result. These are single-executor lanes, so they compare the CODE rather
+;; than the cross-lane error projection the differential lanes use --
 ;; but they must stay #f-tolerant, because the same accessor is read on results
 ;; that carry no error at all.
 (define (error-code-of r)
@@ -40,8 +40,8 @@
         (check-equal "fixture count" (length (class-machines)) 5)))))
 
 ;; Every machine must VERIFY clean first: a fixture that fails verification would
-;; make every behavioural case below meaningless, and §22.6 forbids using an
-;; invalid graph to test executor behaviour.
+;; make every behavioural case below meaningless: executor behaviour is tested
+;; only on a verified graph.
 (harness-group "every class fixture verifies clean"
   (lambda ()
     (for-each
@@ -91,7 +91,7 @@
                (check-equal "accepted exactly the class size" hits (length accepted)))))))
      (class-machines))))
 
-;; §22.7 and design §5 item 6: ascii-bytes cannot supply the high half of the
+;; ascii-bytes cannot supply the high half of the
 ;; universe -- that is make-byte-range-matcher's job -- so its all-byte test
 ;; asserts REJECTION across 0x80-0xFF rather than acceptance anywhere in it.
 (harness-group "the ASCII helper rejects the high half"

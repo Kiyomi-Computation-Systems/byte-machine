@@ -1,19 +1,18 @@
-;;; The Milestone 11 Slice ③ span-composition proving machine (brief §7
-;;; criterion 5): a method span opened BEFORE a keyword table closes at the
-;;; matched keyword's length, not at a delimiter. Built only through
-;;; (byte-machine graph); shared by the keyword-span lane.
+;;; A span-composition proving machine: a method span opened BEFORE a keyword
+;;; table closes at the matched keyword's length, not at a delimiter. Built only
+;;; through (byte-machine graph); shared by the keyword-span lane.
 ;;;
 ;;; Shape:  span-start(method) -> keyword-table -> span-end(method) -> tail -> done
 ;;;
-;;; The keyword table carries the brief's proper-prefix pair GET ⊂ GET-PARAMETER
-;;; (the sole such pair across the 47 llhttp methods) plus MKCOL. `MKCOLA` is NOT
-;;; a keyword -- it is the brief's failure/short-match input: the walk matches
+;;; The keyword table carries the proper-prefix pair GET ⊂ GET-PARAMETER (the
+;;; sole such pair across the 47 llhttp methods) plus MKCOL. `MKCOLA` is NOT a
+;;; keyword -- it is the failure/short-match input: the walk matches
 ;;; MKCOL (5 bytes), the sixth byte `A` does not extend toward any keyword, so the
 ;;; span closes at 5 and the parser reads on. Every keyword routes to the SAME
 ;;; span-end, so the delivered span DATA (not a distinct stop) witnesses which
 ;;; keyword matched and at what length.
 ;;;
-;;; Two details the Slice ③ prototype settled and that a reader must not "tidy":
+;;; Two details a reader must not "tidy":
 ;;;  - A byte-dispatch `tail` follows the span-end so no parked state EOF-walks to
 ;;;    a stop: routing span-end straight to a stop trips `eof-reachable-stop`
 ;;;    (a parser can park on a span-end's completion substep, and its EOF walk
@@ -21,7 +20,7 @@
 ;;;  - The span-ACTIVE region (kw) and the span-CLOSED region (tail) carry
 ;;;    SEPARATE error nodes (reject-in/eof-in vs reject-out/eof-out). Sharing one
 ;;;    error node across the two regions makes its incoming span-state disagree
-;;;    (`inconsistent-span-state`, decision 0029's merge rule).
+;;;    (`inconsistent-span-state`, the span-state merge rule).
 (library (byte-machine test keyword-span-machine)
   (export make-keyword-span-machine keyword-span-keywords)
   (import (rnrs) (byte-machine graph))

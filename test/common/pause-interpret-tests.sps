@@ -10,9 +10,9 @@
 
 (harness-begin "unit.pause-interpret")
 
-;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
-;; every non-error result. These are single-executor lanes, so they compare the
-;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; The error slot holds a parser-error record, and is #f on every non-error
+;; result. These are single-executor lanes, so they compare the CODE rather
+;; than the error projection the differential lanes use --
 ;; but they must stay #f-tolerant, because the same accessor is read on results
 ;; that carry no error at all.
 (define (error-code-of r)

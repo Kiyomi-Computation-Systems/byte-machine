@@ -1,30 +1,29 @@
-;;; The §22.4:1271 cross-lane error projection, with ONE owner.
+;;; The cross-lane error projection, with ONE owner.
 ;;;
-;;; The differential compares "error domain, code, public source-node name,
-;;; absolute position, and position kind" -- five members, to which this library
+;;; The differential compares error domain, code, public source-node name,
+;;; absolute position, and position kind -- five members, to which this library
 ;;; adds three (see `projected-members` below). It does NOT compare
-;;; parser-error-state-id: §12.7:777 says generated IDs "are deterministic for a
-;;; given normalized graph, but an independently interpreted machine need not
-;;; report the same ID. Differential tests do not compare that accessor across
-;;; executor kinds." Both lanes must still REPORT one; only the comparison omits
+;;; parser-error-state-id: generated state IDs are deterministic for a given
+;;; normalized graph, but an independently interpreted machine need not report
+;;; the same ID, so differential tests do not compare that accessor across
+;;; executor kinds. Both lanes must still REPORT one; only the comparison omits
 ;;; it.
 ;;;
 ;;; This lives in one library rather than in each differential program because
-;;; eight local copies of a §12.7:777 reading is eight places for it to drift,
-;;; and because the positive exclusion check needs something to assert against.
-;;; The trap it exists to prevent: once the error slot holds a record, every
+;;; eight local copies of that reading is eight places for it to drift, and
+;;; because the positive exclusion check needs something to assert against.
+;;; The trap it exists to prevent: with the error slot holding a record, a
 ;;; whole-value tuple comparison goes red -- correctly, since the state id is
 ;;; lane-local -- and the obvious repair is to compare (parser-error-code e)
-;;; instead, which restores green while narrowing the comparison back to the one
-;;; symbol it compared before the family existed, shipping four of the five
-;;; comparable members with no differential behind them.
+;;; instead, which restores green while narrowing the comparison to one symbol
+;;; and leaving the other comparable members with no differential behind them.
 (library (byte-machine test error-projection)
   (export project-error projected-members error-state-id)
   (import (rnrs) (byte-machine runtime))
 
   ;; #f in, #f out: parser-result-error is #f on every non-error result, and
   ;; keeping that shape means the non-error tuples in the differential programs
-  ;; read exactly as they did before this family existed.
+  ;; carry a plain #f.
   (define (project-error e)
     (if (parser-error? e)
         (list (parser-error-domain e)
@@ -38,16 +37,16 @@
         e))
 
   ;; What project-error yields, named so a test can assert the width rather than
-  ;; counting a literal list. Eight, not five: §22.4:1271's five, plus `reason`,
-  ;; plus the two members decision 0056 added.
+  ;; counting a literal list. Eight, not five: the five above, plus `reason`,
+  ;; plus the span an error abandoned and the offset of its withheld bytes.
   ;;
-  ;; `reason` is one §12.7:777 neither requires to match nor licenses to differ.
-  ;; It is compared here rather than left as an orphan, and comparing it earned
-  ;; its keep: the two lanes resolved the declaration by different keys -- the
-  ;; interpreter by name, the emitter by resolved code -- and `reason` is the
-  ;; only member that divergence moved, so this is the projection member that
-  ;; caught it. Do not narrow this list on the argument that both lanes "build
-  ;; it from the same declaration"; that was the assumption the defect broke.
+  ;; `reason` is a member the contract neither requires to match nor licenses
+  ;; to differ. It is compared here rather than left as an orphan: if the two
+  ;; lanes resolve the declaration by different keys -- the interpreter by name,
+  ;; the emitter by resolved code -- `reason` is the only member that divergence
+  ;; moves. Do not narrow this list on the argument that both lanes "build it
+  ;; from the same declaration"; how each lane FINDS that declaration is what
+  ;; this member checks.
   ;;
   ;; The span an error abandoned and the stream offset where its withheld bytes
   ;; begin are comparable for the same reason the position kind is -- each lane

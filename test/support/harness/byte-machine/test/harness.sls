@@ -2,10 +2,10 @@
 ;;;
 ;;; This is the only place in the harness where runtime-specific identifiers
 ;;; may appear. Its export list is checked by mutation: deleting a load-bearing
-;;; export here must make the self-tests fail (spec section 9.1).
+;;; export here must make the self-tests fail.
 ;;;
 ;;; The library contains its own text -- the adapter section first, the
-;;; runner inlined below it (decision 0006) -- and imports (byte-machine test
+;;; runner below it -- and imports (byte-machine test
 ;;; fingerprint). Nothing here resolves through source-directories.
 
 (library (byte-machine test harness)
@@ -167,16 +167,13 @@
   (define (adapter-flush-output) (flush-output-port (current-output-port)))
 
 ;; ---------------------------------------------------------------------------
-;; The runner. Inlined here by the include collapse (decision 0006); formerly
-;; test/support/harness/shared/harness-runner.scm, this library's sole
-;; included body. Everything below stays plain R6RS out of habit and
-;; stability, not law: records as tagged lists, no hash tables, no
-;; define-record-type -- nothing has needed to change since the portability
-;; era. Free identifiers used below and defined above (the adapter
+;; The runner. Everything below is plain R6RS out of habit and stability, not
+;; law: records as tagged lists, no hash tables, no define-record-type. Free
+;; identifiers used below and defined above (the adapter
 ;; procedures) or imported (the fingerprint library, r5rs arithmetic) are
 ;; bound by this library; a name bound nowhere kills the library at import.
 ;;
-;; PROCESS STATUS (spec section 5.2)
+;; PROCESS STATUS
 ;;
 ;;   0  every selected case passed
 ;;   1  one or more assertions failed
@@ -303,8 +300,8 @@
 ;; harness-begin, or by a hand-placed call -- which is what harness-bootstrap
 ;; needed, having deliberately no harness-begin. Forget that line in a future
 ;; program and the lane runs un-provenanced with nothing failing, which is the
-;; one remaining way V9's guarantee can be true at configure time and false at
-;; run time.
+;; one remaining way the provenance guarantee can be true at configure time
+;; and false at run time.
 ;;
 ;; Pure, and separate from the summary's read of the live flag, for the reason
 ;; harness-empty-selection-diagnosis is: a run in this state cannot assert

@@ -1,16 +1,15 @@
-;;; Milestone 8 Slice ⓪: the fixture-state -> expected-error table's oracle.
+;;; The oracle for the fixture-state -> expected-error table.
 ;;;
 ;;; The table (test/support/harness/byte-machine/test/http-error-table.sls)
-;;; discharges §21.4:1177's precondition. This lane holds it to decision 0034's
-;;; two totality rows and the shape guards, WITH THE EIGHTEEN §21.4 CODES SPELLED
-;;; OUT HERE so a change to the table's own copy is caught against the spec, not
-;;; against itself.
+;;; states, for every HTTP fixture region and trigger, the error code produced
+;;; and where. This lane holds it to two totality rows and the shape guards, WITH
+;;; THE EIGHTEEN HTTP ERROR CODES SPELLED OUT HERE so a change to the table's own
+;;; copy is caught against the specification, not against itself.
 ;;;
-;;; It ships green and is a RATCHET: a nineteenth code, a dropped code, a region
-;;; with no row and no stated reason, or a (region trigger) covered twice all
-;;; fail here. The "read from the machine" half of 0034's code set-equal has no
-;;; machine at Slice ⓪ and is Slice ⑤'s (asserted here against the eighteen
-;;; alone); this file's header says so.
+;;; It is a RATCHET: a nineteenth code, a dropped code, a region with no row and
+;;; no stated reason, or a (region trigger) covered twice all fail here. The code
+;;; set is asserted here against the eighteen alone; that the machine produces
+;;; each code is http-close-tests.sps's malformed sweep.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test http-error-table))
@@ -46,7 +45,7 @@
 
 (define (nonempty-string? s) (and (string? s) (> (string-length s) 0)))
 
-;; The eighteen stable §21.4:1156-1173 codes, spelled here in spec order. This
+;; The eighteen stable HTTP error codes, in specification order. This
 ;; is the oracle; the table's rows are checked against it, never the reverse.
 (define catalog-21.4
   '(invalid-method
@@ -118,7 +117,7 @@
                     (nonempty-string? (caddr e)))))
          http-error-inapplicable)))))
 
-;; --- totality row (a): the codes (decision 0034 item 3a) ---------------------
+;; --- totality row (a): the codes --------------------------------------------
 
 (harness-group "the code column is total over §21.4 (decision 0034 item 3a)"
   (lambda ()
@@ -180,7 +179,7 @@
                (exists (lambda (e) (and (eq? (car e) 'idle) (eq? (cadr e) 'eof)))
                        http-error-inapplicable))))))
 
-;; --- the two rows Slice ⓪ decides with the grammar (design Appendix) ---------
+;; --- the two rows decided by the grammar -------------------------------------
 
 (harness-group "the two grammar-decided rows (design Appendix)"
   (lambda ()
@@ -215,7 +214,7 @@
                           http-error-rows)))
          '(fixed-body chunk-data))))))
 
-;; --- §4.9 item 2: the fixture-region -> node-name map ------------------------
+;; --- the fixture-region -> node-name map -------------------------------------
 
 (harness-group "the fixture-region -> node-name map (§4.9 item 2, owner-approved)"
   (lambda ()

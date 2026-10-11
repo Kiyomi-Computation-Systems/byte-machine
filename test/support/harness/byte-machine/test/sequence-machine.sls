@@ -1,12 +1,11 @@
-;;; A four-byte accept-sequence proving machine for Milestone 2 Slice ①
-;;; (incremental execution): s0 reads 1 -> s1 reads 2 -> s2 reads 3 -> s3 reads
-;;; 4 -> stop; every fallback REEXECUTES into the reject error, so a wrong byte's
-;;; `next` points AT the offending byte (parent §11.5). Built only through
-;;; (byte-machine graph). Four dispatch nodes give three interior split points,
-;;; so §22.5 split-point pairs and multi-split schedules are satisfiable, and it
-;;; is the first machine with MULTIPLE dispatch nodes to go through both
-;;; executors (new lowering coverage vs the one-byte and single-dispatch property
-;;; machines).
+;;; A four-byte accept-sequence machine for incremental execution: s0 reads 1
+;;; -> s1 reads 2 -> s2 reads 3 -> s3 reads 4 -> stop; every fallback
+;;; REEXECUTES into the reject error, so a wrong byte's `next` points AT the
+;;; offending byte. Built only through (byte-machine graph). Four dispatch nodes
+;;; give three interior split points, so split-point pairs and multi-split
+;;; schedules are satisfiable, and it drives a machine with MULTIPLE dispatch
+;;; nodes through both executors (lowering coverage beyond the one-byte and
+;;; single-dispatch property machines).
 (library (byte-machine test sequence-machine)
   (export make-sequence-machine sequence-bytes)
   (import (rnrs) (byte-machine graph))

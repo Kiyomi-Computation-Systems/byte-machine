@@ -1,7 +1,5 @@
-;;; `§25:1591` — the input-retention oracle (Milestone 5 Slice ④; design §9).
-;;;
-;;; "parser input-retention tests demonstrate no bytevector reference is stored
-;;; by the runtime after return."
+;;; The input-retention oracle: no bytevector reference is stored by the
+;;; runtime after a feed returns.
 ;;;
 ;;; *** THE PARSER IS HELD ALIVE AND ONLY THE BYTEVECTOR IS DROPPED. *** That is
 ;;; the whole design of this lane. A probe that let the parser die too would
@@ -9,29 +7,25 @@
 ;;; because the storage would have died with it -- and every arm below would pass.
 ;;; `parser-held` is what keeps that from being what this file measures.
 ;;;
-;;; Design §9 asks for three layers and says layer 1 "asserts nothing" without
-;;; layer 2:
+;;; Three layers, and layer 1 asserts nothing without layer 2:
 ;;;
 ;;;   1. LIVENESS -- a weak reference to a fed bytevector reads `bwp` once the
 ;;;      test drops its own and collects.
 ;;;   2. THE NEGATIVE CONTROL -- a deliberately retaining fixture the oracle must
 ;;;      FAIL on. Without it, layer 1 is satisfied by a probe that always answers
 ;;;      "gone".
-;;;   3. THE EXEMPTION BOUNDARY -- `§13:799` names three application-owned
-;;;      carriers outside the guarantee, and all three are exercised here: user
-;;;      context, a callback CLOSURE that captured the input, and callback error
-;;;      detail. The closure arm was missing from the first version of this file,
-;;;      which called it unreached; it is one line, and three surfaces had
-;;;      already claimed all three were covered.
+;;;   3. THE EXEMPTION BOUNDARY -- the runtime contract names three
+;;;      application-owned carriers outside the guarantee, and all three are
+;;;      exercised here: user context, a callback CLOSURE that captured the
+;;;      input, and callback error detail.
 ;;;
-;;; It is REACHABILITY-BASED, not a slot walk. The parser was ten slots at
-;;; Milestone 5's Gate 0 and is sixteen now; a census of slots is a thing that
-;;; goes stale, and slot 2 -- the executor closure -- is on neither `§13:799`'s
-;;; exempt list nor the list of things that could retain, so a slot walk would
-;;; have to argue about it. A weak reference covers every path, including the
-;;; ones nobody enumerated.
+;;; It is REACHABILITY-BASED, not a slot walk. A census of the parser's slots
+;;; goes stale as the parser grows, and slot 2 -- the executor closure -- is on
+;;; neither the exempt list nor the list of things that could retain, so a slot
+;;; walk would have to argue about it. A weak reference covers every path,
+;;; including the ones nobody enumerated.
 ;;;
-;;; The instrument itself was measured in both lanes by Slice ③ task 7,
+;;; The instrument itself is measured in both lanes by
 ;;; `liveness-probe-tests.sps`. Three findings from that lane are load-bearing
 ;;; here and are marked at their sites: allocate inside a procedure that returns
 ;;; only the weak pair; hold the strong reference at module level and clear it by
@@ -120,7 +114,7 @@
     (bytevector-u8-set! bv 4 90)                       ; Z -- closes
     bv))
 
-;; The recording callbacks. `§13:799` says the range is valid only for the
+;; The recording callbacks. The callback contract makes the range valid only for the
 ;; callback's dynamic extent and that an application wanting the bytes afterwards
 ;; must COPY -- so the trace holds fresh bytevectors, never `(bv from to)`.
 (define (recording-bindings rec)
@@ -137,9 +131,9 @@
         (list 'ondone (lambda (ps ux) (rec 'complete) callback-continue))))
 
 ;; The negative control's callbacks: the data callback keeps the bytevector it
-;; was handed instead of copying out of it. Design §9 calls this "a deliberately
-;; retaining fixture the oracle must FAIL on", and without it layer 1 is
-;; satisfied by a probe that answers "gone" unconditionally.
+;; was handed instead of copying out of it: a deliberately retaining fixture the
+;; oracle must FAIL on. Without it layer 1 is satisfied by a probe that answers
+;; "gone" unconditionally.
 ;; The split probe's control needs a different fixture from the one above: a
 ;; callback that stashes on EVERY invocation keeps whatever it was handed LAST,
 ;; which is the second buffer, and the first buffer's flush would go unwitnessed.
@@ -162,15 +156,13 @@
         (list 'ondone (lambda (ps ux) (rec 'complete) callback-continue))))
 
 ;; Layer 3's second carrier: an explicit callback failure whose DETAIL is the
-;; bytevector the callback was handed. Decision `0024` item 4 gave the
-;; explicit-failure path a detail slot, and `§13:799` puts "callback error
-;; detail" among the three application-owned carriers outside the guarantee, so
-;; the parser's stored error transitively -- and legitimately -- holds the input.
+;; bytevector the callback was handed. The explicit-failure path carries a
+;; detail slot, and callback error detail is among the three application-owned
+;; carriers outside the guarantee, so the parser's stored error transitively --
+;; and legitimately -- holds the input.
 ;;
-;; `§12.7:777` does NOT compare detail across lanes ("the internal state ID is an
-;; executor-local debugging aid ... Differential tests do not compare that
-;; accessor across executor kinds" is the neighbouring rule; detail is excluded
-;; from the projection for the same reason it is opaque application data). So the
+;; Detail is NOT compared across lanes: it is opaque application data and is
+;; excluded from the error projection. So the
 ;; arms below assert REACHABILITY per lane and never agreement between them --
 ;; `each-lane` returns a per-lane answer and the expected value names both, which
 ;; is a different thing from comparing one lane's detail to the other's.
@@ -181,8 +173,7 @@
                 (make-callback-failure 'app-kept-it bv)))
         (list 'ondone (lambda (ps ux) (rec 'complete) callback-continue))))
 
-;; `§13:799`'s THIRD carrier, and the one the first version of this lane left
-;; unexercised: a callback CLOSURE that captured the input. The closure lives in
+;; The THIRD carrier: a callback CLOSURE that captured the input. The closure lives in
 ;; the parser's callback slot vector, so the parser reaches the bytevector
 ;; through it -- application-owned, and outside the guarantee like the other two.
 (define (closure-holds-bindings rec captured)
@@ -195,9 +186,9 @@
         (list 'ondone (lambda (ps ux) (rec 'complete) callback-continue))))
 
 ;; A data callback that PAUSES. Used by the boundary-flush probe below: a pause
-;; during the flush is `§14:837`, and `§14:841` says what the park retains --
-;; "an internal `completion-pending` continuation, never the input bytevector".
-;; That sentence is a retention claim and had nothing asserting it.
+;; during the flush parks the parser, and the park retains only "an internal
+;; `completion-pending` continuation, never the input bytevector". That
+;; sentence is a retention claim, and the probe asserts it.
 (define (pausing-bindings rec)
   (list (list 'ondata (lambda (ps ux bv from to) (rec 'paused) callback-pause))
         (list 'ondone (lambda (ps ux) (rec 'complete) callback-continue))))
@@ -245,9 +236,9 @@
 ;;
 ;;   - `span-boundary-flush!`, gated on `need-input` AND an active span
 ;;     (`runtime.sls`, "if (and (eq? (parser-result-status r) 'need-input)");
-;;   - `§14:833`'s mark re-anchor in `parser-feed!`, gated on a span left open by
-;;     a PREVIOUS feed -- the very line design §9 cites as the reason "nothing has
-;;     to be retained to interpret it".
+;;   - the mark re-anchor in `parser-feed!`, gated on a span left open by a
+;;     PREVIOUS feed -- the reason nothing has to be retained to interpret the
+;;     mark.
 ;;
 ;; So this probe splits the payload across two feeds of two DIFFERENT
 ;; bytevectors and weakens both. The first feed leaves the span open and its
@@ -315,7 +306,7 @@
   (make-parser cm (closure-holds-bindings rec bv) 'ctx))
 (define (pausing cm bv rec) (make-parser cm (pausing-bindings rec) 'ctx))
 
-;; Milestone 6 Slice ②'s body-shaped arm: the same protocol -- `A` opens, `Z`
+;; The body-shaped arm: the same protocol -- `A` opens, `Z`
 ;; follows the span end -- with the body a COUNTED CONSUME of three instead of a
 ;; byte dispatch looping to `Z`. It consumes the same five bytes under both
 ;; probes: the split probe leaves the span open after `b` with a count of two,
@@ -412,12 +403,12 @@
   (lambda ()
     (harness-case "a span left open across a feed boundary retains neither buffer"
       (lambda ()
-        ;; *** THE FIRST VERSION OF THIS LANE COULD NOT SEE THIS. *** Every probe
-        ;; in the group above feeds all five bytes at once and ends at a terminal
-        ;; status, so `span-boundary-flush!` -- gated on `need-input` AND an
-        ;; active span -- never ran, and neither did `§14:833`'s mark re-anchor.
-        ;; Both are places where the caller's bytevector is in scope at a return,
-        ;; and a runtime that stored it in either would have passed every arm.
+        ;; *** THE ONE-FEED PROBES CANNOT SEE THIS. *** Every probe in the group
+        ;; above feeds all five bytes at once and ends at a terminal status, so
+        ;; `span-boundary-flush!` -- gated on `need-input` AND an active span --
+        ;; never runs there, and neither does the mark re-anchor. Both are
+        ;; places where the caller's bytevector is in scope at a return, and a
+        ;; runtime that stored it in either would pass every arm there.
         ;;
         ;; Two feeds of two DIFFERENT bytevectors, so the answer says WHICH
         ;; buffer leaked rather than that one did.
@@ -439,9 +430,9 @@
                              (cons 'generated (list b cd 'complete)))))))
     (harness-case "a parser PARKED mid-span holds no buffer either (§14:841)"
       (lambda ()
-        ;; `§14:841`: a pause after the data fragment "retains only an internal
+        ;; A pause after the data fragment "retains only an internal
         ;; `completion-pending` continuation, never the input bytevector". That
-        ;; sentence is a retention claim, and the reference document repeats it
+        ;; sentence is a retention claim, and the reference documentation repeats it
         ;; to readers who cannot check it. Here the parser is parked with the
         ;; span still OPEN at the moment of collection -- the state in which a
         ;; runtime most plausibly would keep the buffer, since it has been told
@@ -527,7 +518,7 @@
   (lambda ()
     (harness-case "user context may retain it, and does"
       (lambda ()
-        ;; The first of `§13:799`'s three carriers. An application that hands the
+        ;; The first of the three exempt carriers. An application that hands the
         ;; parser its own input as context has retained it BY ITS OWN POLICY, and
         ;; the guarantee does not reach there.
         (check-equal "retained, and permitted"
@@ -535,7 +526,7 @@
                      '((interpreted . #t) (generated . #t)))))
     (harness-case "and the user-context arm really ran the span"
       (lambda ()
-        ;; The vacuity guard the ctx arm needs and did not have: its retention
+        ;; The vacuity guard the ctx arm needs: its retention
         ;; comes from `make-parser` alone, so it would read RETAINED unchanged if
         ;; the span never opened or the feed never happened, and the arm would be
         ;; asserting something else's #t.
@@ -546,11 +537,9 @@
                              (cons 'generated (list f 'complete)))))))
     (harness-case "a callback CLOSURE may retain it — §13:799's third carrier"
       (lambda ()
-        ;; The carrier the first version of this lane named and did not exercise.
         ;; The parser holds the closure in its callback slot vector, so it
         ;; reaches the bytevector THROUGH application code -- which is exactly
-        ;; what `§13:799` puts outside the guarantee. All three carriers are now
-        ;; asserted rather than two of three with a note.
+        ;; what the contract puts outside the guarantee.
         (check-equal "retained, and permitted"
                      (each-lane (lambda (cm) (car (retained? cm closure-holds))))
                      '((interpreted . #t) (generated . #t)))))
@@ -564,11 +553,11 @@
                      '((interpreted same complete) (generated same complete)))))
     (harness-case "callback error detail may retain it too — the one a slot walk misses"
       (lambda ()
-        ;; *** THIS IS THE ARM DESIGN §9 SAYS AN ORACLE GETS WRONG. *** "An
-        ;; oracle that excludes only the user-context slot will report a false
-        ;; violation the first time a fixture callback fails with a detail
-        ;; holding its own slice." The detail here IS the fed bytevector, the
-        ;; parser's stored error holds it, and `§13:799` permits exactly that.
+        ;; *** THIS IS THE ARM AN ORACLE GETS WRONG. *** An oracle that excludes
+        ;; only the user-context slot reports a false violation the first time a
+        ;; fixture callback fails with a detail holding its own slice. The
+        ;; detail here IS the fed bytevector, the parser's stored error holds
+        ;; it, and the contract permits exactly that.
         (check-equal "retained, and permitted"
                      (each-lane (lambda (cm) (car (retained? cm detail-holds))))
                      '((interpreted . #t) (generated . #t)))))
@@ -583,7 +572,7 @@
       (lambda ()
         ;; The discriminator. Same failing path, same stored error, detail `#f`:
         ;; if this read RETAINED, the case above would be about the error record
-        ;; rather than about `§13:799`'s third carrier.
+        ;; rather than about the error-detail carrier.
         (check-equal "a failure with no detail retains nothing"
                      (each-lane
                       (lambda (cm)
@@ -605,14 +594,14 @@
   (lambda ()
     (harness-case "a pause reachable inside this span is REJECTED"
       (lambda ()
-        ;; *** §25:1590 AND §25:1591 ARE NOT INDEPENDENT, AND THIS IS THE LINK.
-        ;; *** §13:826 says the verifier's restriction on pausing while a span is
-        ;; active is "what makes the no-retention contract possible without
-        ;; invoking unrelated callbacks after a pause request". So the guarantee
-        ;; layer 1 measures rests on a check that lives in another file, and a
-        ;; lane that only measured retention would go on passing if that check
-        ;; were weakened or deferred -- it would be testing a weaker claim than
-        ;; the plan makes, with nothing to say so.
+        ;; *** THE PAUSE-IN-SPAN RESTRICTION AND THE RETENTION GUARANTEE ARE NOT
+        ;; INDEPENDENT, AND THIS IS THE LINK. *** The verifier's restriction on
+        ;; pausing while a span is active is what makes the no-retention
+        ;; contract possible without invoking unrelated callbacks after a pause
+        ;; request. So the guarantee layer 1 measures rests on a check that
+        ;; lives in another file, and a lane that only measured retention would
+        ;; go on passing if that check were weakened -- it would be testing a
+        ;; weaker claim than the contract makes, with nothing to say so.
         ;;
         ;; The same machine as above with one node changed: an explicit pause
         ;; between the span start and the span end.
@@ -646,11 +635,10 @@
                        codes '(span-active-at-pause)))))
     (harness-case "a successful exit reachable with this span open is REJECTED too"
       (lambda ()
-        ;; The SIBLING restriction, and it is a different rule with a different
-        ;; citation: `span-active-at-pause` is `§13:826`'s, and
-        ;; `span-active-at-exit` is `§14:843`'s ("no reachable path ... reaches
-        ;; successful stop/finish with a span active"). The reference document
-        ;; named both as enforcing `§13:826`, which is one diagnostic too many.
+        ;; The SIBLING restriction, and it is a different rule:
+        ;; `span-active-at-pause` forbids a pause while a span is active, and
+        ;; `span-active-at-exit` forbids any reachable path reaching successful
+        ;; stop/finish with a span active.
         ;;
         ;; It belongs in THIS lane and not only in the topology table because the
         ;; retention argument needs it: a span still open at a successful finish
@@ -668,15 +656,15 @@
                             (make-edge 'reject 'reexecute) 'fin #f)
                           (make-span-start-node 'sopen 'payload 'body #f)
                           ;; The eof-target is a FINISH terminal reached with the
-                          ;; span still open -- exactly what §14:843 forbids.
+                          ;; span still open -- exactly what span-active-at-exit forbids.
                           ;;
                           ;; *** ITS OWN TERMINAL, NOT `fin`. *** Pointing it at
                           ;; the shared `fin` makes that node reachable with the
                           ;; span both active and inactive, and pass 7 answers
                           ;; `inconsistent-span-state` -- a different diagnostic,
                           ;; and the case would then be about the lattice meeting
-                          ;; rather than about §14:843. Measured, not guessed:
-                          ;; the first version of this fixture did exactly that.
+                          ;; rather than about span-active-at-exit. Measured, not
+                          ;; guessed.
                           (make-byte-dispatch-node 'body
                             (list (make-byte-case (make-exact-byte-matcher 90)
                                                   (make-edge 'sclose 'reexecute) #f))

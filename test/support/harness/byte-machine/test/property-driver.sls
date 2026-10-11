@@ -1,34 +1,33 @@
-;;; The property differential DRIVER (Milestone 7 Slice ②; design §4.3/§4.4/§7).
+;;; The property differential DRIVER.
 ;;;
-;;; A FUNCTIONAL CORE (F18): it returns values and asserts NOTHING -- no `check`,
-;;; no harness import. The property lane asserts over 64 machines and 96 counters;
-;;; Slice ③'s fixture asserts one trial; the minimizer asserts nothing and needs a
+;;; A FUNCTIONAL CORE: it returns values and asserts NOTHING -- no `check`, no
+;;; harness import. The property lane asserts over 64 machines and 96 counters;
+;;; the saved fixture asserts one trial; the minimizer asserts nothing and needs a
 ;;; boolean oracle. All three read THIS library, so the disagreement rule, the
 ;;; "at most once per machine" rule and the counters live here, not in the lane.
-;;; The one seam that does I/O is `emit-and-load` in the LANE (and, in Slice ③,
-;;; the saver); the compiled machines are handed to run-machine.
+;;; The seams that do I/O are `emit-and-load` in the LANE and the fixture saver's
+;;; file write; the compiled machines are handed to run-machine.
 ;;;
-;;; THE BLIND SPOT (Task 5 Step 5 / Task 7 Step 8): all three layers are blind to
-;;; an agreed-wrong value that satisfies every invariant, and one is in the tree
-;;; today -- §12.7:770's zero-width-machine-action half, the position kind of a
-;;; FAILED zero-width action reached over a REEXECUTE edge, which the row fixes at
+;;; THE BLIND SPOT: all three layers are blind to an agreed-wrong value that
+;;; satisfies every invariant, and one is in the tree -- the zero-width
+;;; machine-action half of the position-kind rule: the position kind of a FAILED
+;;; zero-width action reached over a REEXECUTE edge, which the rule fixes at
 ;;; `boundary` and which BOTH lanes report as `byte`. This generator draws that
 ;;; shape and drives it many times per seed set; every trial passes, because Layers
 ;;; 1 and 2 compare the lanes against each other (they agree) and Layer 3 reads
-;;; statuses, cursors, offsets, fields and span bytes and NO position kind. Drawing
-;;; the shape does not make this slice the receiver: the receivers are compile.sls's
-;;; field-action arm and interpret.sls's field-step (design §4.11 item 7), and
-;;; §4.9's gate proves this slice touched neither.
+;;; statuses, cursors, offsets, fields and span bytes and NO position kind. The fix
+;;; belongs in compile.sls's field-action arm and interpret.sls's field-step (each
+;;; carries a KNOWN LIMITATION note), not in this driver.
 ;;;
 ;;; THE PAUSE PROTOCOL'S GUARD is the rule that turns a bug into a crash: resume is
 ;;; reached only once BOTH sides agree they paused. A driver that resumes on
 ;;; `(or ref-paused? gen-paused?)` converts every lane divergence at a pause into a
-;;; lifecycle-violation raise (measured on a first prototype: 941 raises over 10240
-;;; trials). ~9% of single-byte trials on freely drawn machines end paused.
+;;; lifecycle-violation raise. ~9% of single-byte trials on freely drawn machines
+;;; end paused.
 ;;;
 ;;; ONE recording closure per lane, never shared (a shared closure yields one
 ;;; interleaved list with nothing to compare it to). A fragment is copied inside
-;;; the callback's dynamic extent (§13:799): the trace is fresh bytevectors.
+;;; the callback's dynamic extent: the trace is fresh bytevectors.
 
 (library (byte-machine test property-driver)
   (export schedules-for schedules-per-input
@@ -58,7 +57,7 @@
           (byte-machine test prng)
           (byte-machine test machine-gen))
 
-  ;; ============ 1. The schedule alphabet (§22.5:1278-1283) ====================
+  ;; ============ 1. The schedule alphabet ======================================
   (define (schedule-whole bv) (list (list (list bv 0 (bytevector-length bv)))))
   (define (schedule-splits bv)
     (let ((len (bytevector-length bv)))
@@ -108,15 +107,16 @@
                       (schedule-sub-slice bv) (schedule-padded bv) multi)
               s2)))
   ;; (L+1) splits + (L+1)(L+2)/2 pairs + 10 others (1 whole + 3 empties + 1
-  ;; sub-slice + 1 padded + 4 multi), reproducing the three shipped triples:
-  ;; span (L=5) 6+21+10=37, callback (L=4) 5+15+10=30, counted-span (L=6) 7+28+10=45.
+  ;; sub-slice + 1 padded + 4 multi), reproducing the three differential lanes'
+  ;; triples: span (L=5) 6+21+10=37, callback (L=4) 5+15+10=30, counted-span (L=6)
+  ;; 7+28+10=45.
   (define (schedules-per-input len)
     (+ (+ len 1) (div (* (+ len 1) (+ len 2)) 2) 10))
 
-  ;; ============ 2. The Layer-1 tuple (§22.4:1264-1272 + §22.5:1285) ===========
-  ;; All nine members: status, next/consumed, offset, error projection (NOT
-  ;; narrowed -- the assumption the defect broke), final state name AND fields
-  ;; (:1267), and parser-active-span (decision 0028's warrant).
+  ;; ============ 2. The Layer-1 tuple ==========================================
+  ;; All nine members: status, next/consumed, offset, error projection (the full
+  ;; projection, NOT a narrowed one), final state name AND fields, and
+  ;; parser-active-span (part of the parser's visible state).
   (define (rfields r p fnames)
     (list (parser-result-status r)
           (parser-result-next r)
@@ -141,8 +141,8 @@
   ;; fragment tagged with ABSOLUTE offsets and each completion with the stream
   ;; offset read inside the callback). One recorder per lane; a per-feed CTX box
   ;; (offset-before . feed-start | #f during finish) lets the data callback
-  ;; re-anchor its SLICE offsets to absolute ones (§14:833, the driver's own
-  ;; bookkeeping -- there is no public observation of a span's start offset).
+  ;; re-anchor its SLICE offsets to absolute ones (the driver's own bookkeeping --
+  ;; there is no public observation of a span's start offset).
   (define-record-type lane (fields parser dreader creader sreader ctx))
   (define (open-lane cm cbs bound script-alist)
     (let ((box (list (map (lambda (c) (cons (car c) (cdr c))) script-alist)))  ; per-lane script copy
@@ -154,14 +154,14 @@
           (let ((c (car ctx)))                 ; abs = offset-before + (slice-off - feed-start)
             (let ((af (if c (+ (car c) (- from (cdr c))) from))
                   (at (if c (+ (car c) (- to (cdr c))) to)))
-              ;; tag with the ACTIVE span (§13:799 -- the span is open inside its own
-              ;; data callback), so row 6 can judge completion PER SPAN: one machine
+              ;; tag with the ACTIVE span (the span is open inside its own data
+              ;; callback), so row 6 can judge completion PER SPAN: one machine
               ;; may carry spans with a completion callback and spans without.
               (set! strace (cons (list 'frag af at frag (parser-active-span ps)) strace)))))
         callback-continue)
       (define (complete-cb ps ux)
         (set! dtrace (cons 'complete dtrace))
-        (set! strace (cons (list 'complete (parser-stream-offset ps)) strace))  ; §14:831 end anchor
+        (set! strace (cons (list 'complete (parser-stream-offset ps)) strace))  ; the span's end anchor
         callback-continue)
       (define (node-cb-for name)
         (lambda (ps ux)
@@ -205,9 +205,10 @@
   (define (step-life s) (vector-ref s 2))
   (define (step-tuple s) (vector-ref s 3))
 
-  ;; The pause protocol: resume only once BOTH sides agree paused. Single resume
-  ;; site (Pass 39 LABEL 2's re-anchor target; the SITES constraint of F17(c)).
-  ;; Records a step per call. Returns (values steps-r steps-g bad).
+  ;; The pause protocol: resume only once BOTH sides agree paused. Keep
+  ;; `resume-pair!` the single resume site: a mutation in the suite anchors on its
+  ;; body and expects exactly one occurrence. Records a step per call. Returns
+  ;; (values steps-r steps-g bad).
   (define (feed-loop! rl gl bv start end fnames sr sg)
     (let ((pr (lane-parser rl)) (pg (lane-parser gl)))
       (let ((lr (parser-lifecycle pr)) (lg (parser-lifecycle pg)))
@@ -260,13 +261,13 @@
                     (values rl gl (reverse sr2) (reverse sg2) bad)
                     (loop (cdr sch) sr2 sg2))))))))
 
-  ;; ============ 4. Counters (F9/F10): 48 keys, both halves ====================
+  ;; ============ 4. Counters: 48 keys, both halves =============================
   (define (make-counter-set) (let ((v (make-vector (length counter-specs)))) (do ((i 0 (+ i 1))) ((= i (vector-length v)) v) (vector-set! v i (cons #f #f)))))
   (define (counter-keys) (map counter-spec-key counter-specs))
-  ;; The member symbols of one counter FAMILY (F18 totality rows: the callback-
+  ;; The member symbols of one counter FAMILY (for the totality rows: the callback-
   ;; outcome / span-event / schedule-shape families have no source list to read, so
-  ;; a totality row compares the driver's own family against the spec's declared
-  ;; closed set). Families: node-kind matcher operation predicate callback-outcome
+  ;; a totality row compares the driver's own family against a declared closed
+  ;; set). Families: node-kind matcher operation predicate callback-outcome
   ;; span-event schedule-shape declaration.
   (define (family-members fam)
     (fold-right (lambda (cs acc) (if (eq? (counter-spec-family cs) fam) (cons (counter-spec-member cs) acc) acc))
@@ -305,7 +306,7 @@
            (nk-spec 'field-action "reaches") (nk-spec 'field-branch "reaches")
            (nk-spec 'callback "reaches") (nk-spec 'span-start "reaches")
            (nk-spec 'span-end "reaches") (nk-spec 'counted-consume "reaches")
-           ;; the SHIPPED labels (Task 7 Step 3: the shipped label IS the member's counter)
+           ;; members with hand-written labels (the label IS the member's counter)
            (make-counter-spec 'pause 'node-kind 'pause
                               "at least one agreed trial observes a pause"
                               "the interpreter alone observes a pause")
@@ -315,11 +316,11 @@
            (make-counter-spec 'integer-accumulate 'node-kind 'integer-accumulate
                               "at least one generated machine's trial commits a digit"
                               "the interpreter alone commits a digit")
-           ;; the accumulate node's SECOND arm (+2, F10)
+           ;; the accumulate node's SECOND arm (+2)
            (make-counter-spec 'accumulate-overflow 'node-kind 'integer-accumulate
                               "at least one generated machine's trial overflows the field"
                               "the interpreter alone overflows the field")
-           ;; the declares-a-field pair (+2, F10 row 3): now an OBSERVED witness + a twin
+           ;; the declares-a-field pair (+2): an OBSERVED witness + a twin
            (make-counter-spec 'declares-field 'declaration 'field
                               "at least one generated machine declares a field"
                               "the interpreter alone changes a declared field"))
@@ -409,8 +410,8 @@
       ;; the span-start/span-end NODE KINDS, which are zero-width and so are never
       ;; named at a park (parser-state-name never names them) -- their observed
       ;; witness IS the span event. A delivered fragment of length 0 witnesses
-      ;; `empty-fragment` (decision 0042: an empty span delivers one empty fragment,
-      ;; so the observable is a zero-length delivery, not the old suppression).
+      ;; `empty-fragment` (an empty span delivers one empty fragment, so the
+      ;; observable is a zero-length delivery).
       (let loop ((tr ((lane-dreader lane))) (since 0) (prev-frag #f))
         (cond ((null? tr)
                (when prev-frag (note! 'span-end-fragment) (note! 'span-end)))
@@ -457,13 +458,12 @@
   ;; agreement"); `inv-verdict` is the FIRST Layer-3 ORACLE violation on the ref lane
   ;; -- kept SEPARATE, because a Layer-3 violation is not a lane disagreement and
   ;; must not redden an agreement label. Both are "at most once per machine".
-  ;; on-first-disagreement is the SAVER (Slice ③, 0033 item 4): when non-#f,
-  ;; run-machine calls it ONCE, at the first Layer-1 disagreement per machine, as
+  ;; on-first-disagreement is the SAVER: when non-#f, run-machine calls it ONCE,
+  ;; at the first Layer-1 disagreement per machine, as
   ;; (on-first-disagreement m script schedule input verdict), and threads its return
-  ;; into the `fixture-path` value. #f stays legal and is what run-machine-verdict
-  ;; and any caller wanting no fixture passes; fixture-path is then #f. Slice ③
-  ;; added only this call site -- the argument list and the five return values are
-  ;; unchanged (F1), so a caller that passes #f folds byte-identically to before.
+  ;; into the `fixture-path` value. #f is legal and is what run-machine-verdict
+  ;; and any caller wanting no fixture passes; fixture-path is then #f, and the
+  ;; fold is otherwise identical.
   (define (run-machine m ref-cm gen-cm manifest inputs state counters on-first-disagreement)
     (let ((fnames (map uint-field-name (manifest-fields manifest)))
           (bound (all-bound manifest))
@@ -489,10 +489,10 @@
             (if (not (eq? bad 'none))
                 ;; The saver fires HERE, at the first Layer-1 disagreement per
                 ;; machine -- `first?` reads fail!'s own "only when verdict is 'none"
-                ;; rule (Task 4 Step 7), so on-first-disagreement is called at most
-                ;; once per machine and writes at most one file, whatever later
-                ;; schedules do. Its return (a fixture path, or whatever the closure
-                ;; yields) is threaded into run-machine's fixture-path value (F1).
+                ;; rule, so on-first-disagreement is called at most once per
+                ;; machine and writes at most one file, whatever later schedules
+                ;; do. Its return (a fixture path, or whatever the closure yields)
+                ;; is threaded into run-machine's fixture-path value.
                 (let ((first? (eq? verdict 'none)))
                   (fail! phase idx bad)
                   (when (and first? on-first-disagreement)
@@ -526,8 +526,8 @@
   (define (run-machine-verdict m ref-cm gen-cm manifest inputs state)
     (let-values (((c v iv fp s) (run-machine m ref-cm gen-cm manifest inputs state (make-counter-set) #f))) v))
 
-  ;; The shared single-schedule body (Task 3 Step 3: ONE body, and its consumers
-  ;; are run-machine's one-schedule and run-one-trial). Runs ONE schedule on a
+  ;; The shared single-schedule body (ONE body; its consumers are run-machine's
+  ;; one-schedule and run-one-trial). Runs ONE schedule on a
   ;; fresh lane pair and returns
   ;;   (values bad inv-v rl gl sr sg)
   ;; bad   = the FIRST Layer-1 cross-lane disagreement descriptor (run-schedule's
@@ -537,9 +537,9 @@
   ;;         fold does -- and 'none otherwise;
   ;; rl gl sr sg = the lanes and their step lists, for the caller's observation.
   ;; The disagreement rule (Layer 1) and the agreement-gated Layer-3 oracle live
-  ;; HERE and nowhere else, so the lane and the fixture cannot drift (F2 / Task 3
-  ;; Step 5: run-one-trial and run-machine fold the identical (bad, inv-v) for any
-  ;; schedule, so their verdicts agree by construction rather than by coincidence).
+  ;; HERE and nowhere else, so the lane and the fixture cannot drift (run-one-trial
+  ;; and run-machine fold the identical (bad, inv-v) for any schedule, so their
+  ;; verdicts agree by construction rather than by coincidence).
   (define (schedule-outcome m ref-cm gen-cm cbs fnames bound script schedule input)
     (let-values (((rl gl sr sg bad)
                   (run-schedule ref-cm gen-cm cbs schedule fnames bound script)))
@@ -548,17 +548,17 @@
           (let-values (((v3 app) (check-invariants m sr input ((lane-sreader rl)))))
             (values 'none v3 rl gl sr sg)))))
 
-  ;; run-one-trial (Slice ③, F2): the single-trial entry the fixture asserts on and
-  ;; the minimizer uses as a boolean oracle. ONE machine, ONE script, ONE schedule,
+  ;; run-one-trial: the single-trial entry the fixture asserts on and the
+  ;; minimizer uses as a boolean oracle. ONE machine, ONE script, ONE schedule,
   ;; ONE input; the field names and callback declarations come from the MACHINE
   ;; through `ir`, NOT from a manifest -- the fixture asserts one trial and no
   ;; counter, so it needs no decoder, so it needs no manifest, so `make-manifest`
-  ;; stays unexported and this is a NEW export rather than a changed run-machine
-  ;; signature (F1's instruction). Returns the trial's disagreement verdict: the
+  ;; stays unexported and this is a separate export rather than a variant of
+  ;; run-machine's signature. Returns the trial's disagreement verdict: the
   ;; Layer-1 cross-lane `bad` when the lanes disagree (the probe's case -- a lying
   ;; compiled lane against an honest reference), else the Layer-3 oracle verdict on
   ;; agreement, 'none when neither fires. It shares schedule-outcome with the lane,
-  ;; so for the same schedule its verdict is what run-machine folds (Task 3 Step 5).
+  ;; so for the same schedule its verdict is what run-machine folds.
   ;; `input` is the logical bytevector the schedule was sliced from: the Layer-3
   ;; content/anchor row reads it, and the minimizer shrinks it and re-derives the
   ;; schedule from it before each call.
@@ -570,34 +570,32 @@
                                       (map callback-declaration-name cbs) script schedule input)))
         (if (not (eq? bad 'none)) bad inv-v))))
 
-  ;; fixture-text (Slice ③ saver, F1/F5/F6): the PURE core of the saver. It returns
-  ;; the fixture PROGRAM as a string and does no I/O (F18: the driver is a functional
-  ;; core); the LANE's closure writes the string to a file and returns its path,
-  ;; which run-machine threads into fixture-path. It takes an already-printed
+  ;; fixture-text: the PURE core of the fixture saver. It returns the fixture
+  ;; PROGRAM as a string and does no I/O (the driver is a functional core); the
+  ;; LANE's closure writes the string to a file and returns its path, which
+  ;; run-machine threads into fixture-path. It takes an already-printed
   ;; `machine-datum` (the lane calls (byte-machine test machine-print)'s print-machine
   ;; and passes the result) so the driver does not import machine-print -- that keeps
   ;; machine-print out of the differential lane's SOURCES and in only the fixture
-  ;; lane's (Task 7 Step 1). The single case asserts the
-  ;; two lanes AGREE, so the fixture FAILS -- exit 1 -- exactly when the disagreement
-  ;; is present, and exits 0 once it is fixed (§4.7's "exits 1 on the disagreement
-  ;; and 0 when fixed"; the polarity P3 measured as "FAIL … the lanes agree").
+  ;; lane's. The single case asserts the two lanes AGREE, so the fixture FAILS --
+  ;; exit 1 -- exactly when the disagreement is present, and exits 0 once it is
+  ;; fixed.
   ;;   m script schedule input : the trial to reproduce.
-  ;;   invocation : the F5 header comment (already ";;"-prefixed, newline-terminated)
+  ;;   invocation : the header comment (already ";;"-prefixed, newline-terminated)
   ;;                the lane computed from (command-line-arguments): the exact
   ;;                provenance-unset `chez … chez-source.ss … --program <this file>`.
   ;;   preamble   : extra top-level forms ('() honest; the probe's `perturb` def).
   ;;   gen-expr   : the datum bound to `gen`, with `ref` in scope -- `ref` itself for
   ;;                an honest fixture (which then agrees and exits 0), or the lying
-  ;;                slot-2 wrapper of REF's op for the probe (F7).
+  ;;                slot-2 wrapper of REF's op for the probe.
   ;;
-  ;; The fixture builds BOTH lanes from the interpreter and EMITS NOTHING. F7's lie
-  ;; can only wrap the message-dispatch op, which is the INTERPRETER variant's -- the
-  ;; generated variant's slot 2 is a step function of a different arity (measured:
-  ;; wrapping it raises "incorrect number of arguments"). So the deliberate-failure
-  ;; probe needs no generated lane and no writable directory: F6's "the fixture emits
-  ;; a generated lane" does not hold for it (Task 12 corrects F6), and "without
-  ;; external tooling" (§25:1627) is the stronger for it -- chez, the launcher, the
-  ;; tree, and not one byte written. A fixture reproducing a REAL interpreter/generated
+  ;; The fixture builds BOTH lanes from the interpreter and EMITS NOTHING. The
+  ;; probe's lie can only wrap the message-dispatch op, which is the INTERPRETER
+  ;; variant's -- the generated variant's slot 2 is a step function of a different
+  ;; arity (wrapping it raises "incorrect number of arguments"). So the
+  ;; deliberate-failure probe needs no generated lane and no writable directory --
+  ;; chez, the launcher, the tree, and not one byte written. A fixture reproducing
+  ;; a REAL interpreter/generated
   ;; disagreement would instead build one lane by emission; that is not this probe.
   (define (fixture-text machine-datum script schedule input invocation preamble gen-expr)
     (let ((forms
@@ -629,10 +627,10 @@
          (put-string port invocation)
          (for-each (lambda (f) (write f port) (newline port) (newline port)) forms)))))
 
-  ;; ============ the minimizer (Slice ③, §4.7) =================================
+  ;; ============ the minimizer =================================================
   ;; A PURE greedy reducer over (machine script input schedule): a fixed sequence of
   ;; reductions, each candidate accepted iff the reduced machine VERIFIES (validity
-  ;; oracle: the shipped verify-machine) AND the reduced trial STILL DISAGREES
+  ;; oracle: the library's verify-machine) AND the reduced trial STILL DISAGREES
   ;; (failure oracle: `fail-oracle`, injected by the lane because only the lane knows
   ;; how the gen lane was built -- honest, or the probe's lie). Deterministic (fixed
   ;; candidate order, first accepted wins, restart), bounded to `bound` failure-oracle
@@ -641,7 +639,7 @@
   ;; output is (values machine script input schedule) -- the minimized trial, which
   ;; the lane saves through the SAME saver (fixture-text) as the raw one.
   ;;
-  ;; It introduces no third notion of validity or failure (§4.7): validity is the
+  ;; It introduces no third notion of validity or failure: validity is the
   ;; verifier's verdict, failure is run-one-trial's (via fail-oracle).
 
   ;; -- structural size: a node's weight reflects its content, so replacing a rich
@@ -727,11 +725,11 @@
   (define (replace-node m name n2)
     (rebuild-machine m (map (lambda (n) (if (eq? (node-name n) name) n2 n)) (machine-nodes m))))
 
-  ;; remove NODE victim: every in-edge is retargeted to a FRESH error node OF ITS OWN
-  ;; (Task 5 Step 4). Never a shared sink -- a shared sink joins `none` with (active s)
-  ;; inside a span and stops every subsequent reduction at inconsistent-span-state
-  ;; (decision 0029 item 2). The sink references the machine's first declared error,
-  ;; and its name is portable (lowercase/hyphen), so the verifier accepts the name.
+  ;; remove NODE victim: every in-edge is retargeted to a FRESH error node OF ITS OWN.
+  ;; Never a shared sink -- a shared sink joins `none` with (active s) inside a span
+  ;; and stops every subsequent reduction at inconsistent-span-state. The sink
+  ;; references the machine's first declared error, and its name is portable
+  ;; (lowercase/hyphen), so the verifier accepts the name.
   (define (remove-node m victim)
     (let* ((errname (if (pair? (machine-errors m))
                         (error-declaration-name (car (machine-errors m)))
@@ -753,7 +751,7 @@
             ((= k n) out)
           (unless (= k i) (bytevector-u8-set! out o (bytevector-u8-ref bv k)))))))
 
-  ;; The reductions, in §4.7's order. Each maps the current trial to a list of
+  ;; The reductions, in the order they are tried. Each maps the current trial to a list of
   ;; candidate trials (m script input schedule); the driver's verify+fail-oracle
   ;; guards decide which are kept. Reductions that need no graph surgery (input and
   ;; schedule shrinks) are pure list edits.
@@ -786,8 +784,8 @@
                      (indices (sequence-dispatch-node-cases N))))
                (else '())))
            (machine-nodes m))))
-  ;; remove a declaration (a field / callback / span / error). §4.7's "unnamed
-  ;; declaration": rather than re-derive referencedness, offer each and let the
+  ;; remove a declaration (a field / callback / span / error) that nothing names:
+  ;; rather than re-derive referencedness, offer each and let the
   ;; verifier reject a referenced one -- a removable declaration is exactly one whose
   ;; removal still verifies.
   (define (red-remove-declaration m s i sch)
@@ -821,7 +819,7 @@
                                           (list-tail sch (+ k 2))))
                             acc)
                       acc))))))
-  ;; drop the trailing feed (§4.7's "drop a resume or the finish": shortening the
+  ;; drop the trailing feed ("drop a resume or the finish": shortening the
   ;; schedule ends the trial earlier; a dropped resume tends to make both lanes hit
   ;; the same contract condition, i.e. AGREEMENT, so the oracle usually rejects it).
   (define (red-drop-trailing-feed m s i sch)
@@ -853,7 +851,7 @@
                     (loop c)
                     (try (cdr cs)))))))))))
   ;; Bind every declared callback (required ones MUST be bound; optionals MAY be).
-  ;; §4.4's "optional callbacks bound in half the draws" governs which PATHS run,
+  ;; Binding optional callbacks in only half the draws governs which PATHS run,
   ;; not the 96 counters, so binding all is valid here; the coverage segment's
   ;; required callbacks (covd/covc/covdec) are bound by this.
   (define (all-bound manifest) (map callback-declaration-name (manifest-callbacks manifest)))
@@ -873,25 +871,24 @@
                 (loop (cdr cds) s2 (cons (cons (callback-declaration-name cd) (list outcome 'continue 'continue)) acc))))))))
 
   ;; ============ 7. disagreement ===============================================
-  ;; Exported for Slice ③ (0033 item 4): the caller-chosen `check-fail` detail the
-  ;; saver will render. Not called in this slice's lane, which asserts agreement
-  ;; per machine with `check-equal` and needs no free-text detail.
+  ;; Exported for the saver: the caller-chosen `check-fail` detail it renders.
+  ;; The property lane does not call it -- it asserts agreement per machine with
+  ;; `check-equal` and needs no free-text detail.
   (define (disagreement->detail verdict)
     (if (eq? verdict 'none) "expected none, got none"
         (string-append "expected none, got " (write-to-string verdict))))
   (define (write-to-string v) (call-with-string-output-port (lambda (p) (write v p))))
 
   ;; ============ 8. rejection ledger ===========================================
-  ;; MOVED (Slice ④, F13): the record, `make-rejection*` and the accessors now live
-  ;; in the executor-free `(byte-machine test rejection-ledger)`, imported above and
-  ;; RE-EXPORTED from this library (the export list is unchanged, so nothing that
-  ;; reads the driver moves). It moved because Slice ④'s rejections program must have
-  ;; no executor in scope (§4.5 / §22.6:1297) and THIS driver imports all three
-  ;; executors; a ledger left here would drag them into that program's manifest. Its
-  ;; receiver, decision 0033 item 1 -- "rejected draws are counted by code and kept"
-  ;; -- is `property-rejections-tests.sps`, which imports the small library directly.
+  ;; The record, `make-rejection*` and the accessors live in the executor-free
+  ;; `(byte-machine test rejection-ledger)`, imported above and RE-EXPORTED from
+  ;; this library. They live there because the rejections program must have no
+  ;; executor in scope and THIS driver imports all three executors; a ledger here
+  ;; would drag them into that program's manifest. Its reader -- "rejected draws
+  ;; are counted by code and kept" -- is `property-rejections-tests.sps`, which
+  ;; imports the small library directly.
 
-  ;; ============ 9. Layer 2 -- the normalized-form comparators (§22.5:1287/:1289)
+  ;; ============ 9. Layer 2 -- the normalized-form comparators =================
   (define (coalesce-fragments trace)
     ;; ONE coalescer, TOTAL: one concatenation per logical span, emitted even when
     ;; empty. Trace elements are fresh bytevectors + 'complete markers. The tree's
@@ -934,14 +931,14 @@
   (define (fx-raws r) (vector-ref r 3))
   (define (fx-span r) (vector-ref r 4))
   ;; The malformed-input Layer-2 tuple: (status, absolute-offset, error-code) from
-  ;; the LAST step -- §22.5:1289's "error category is parser-error-code, not the
-  ;; declaration name", the reading that matters for a machine whose declaration
+  ;; the LAST step -- the error category is parser-error-code, not the
+  ;; declaration name, the reading that matters for a machine whose declaration
   ;; names are drawn and whose codes are not. The full trace is deliberately OMITTED.
   (define (fx-final3 r)
     (let* ((t (step-tuple (last-elt (fx-steps r)))) (e (tup-error t)))
       (list (tup-status t) (tup-offset t) (and (pair? e) (cadr e)))))
 
-  ;; ============ 10. Layer 3 -- the six invariant rows (F23, §12.2/§16.2/§14) ===
+  ;; ============ 10. Layer 3 -- the six invariant rows =========================
   ;; check-invariants reads ONE lane's step sequence (the oracle is a single-lane
   ;; property; Layer 1 already proved the lanes agree), plus the logical input
   ;; (row 6 content) and the rich span trace (row 6 anchors). It returns
@@ -953,9 +950,10 @@
   (define invariant-rows '(row1 row2 row3 row4 row5 row6))
   (define (last-elt xs) (if (null? (cdr xs)) (car xs) (last-elt (cdr xs))))
   (define (check-invariants m steps input span-trace)
-    ;; row 1 (§12.2 + §16.2:909): a sticky life (stopped|error|finished) returns
-    ;; that same status; a finish! from ready|finish-ready never returns `stopped`
-    ;; (the verifier's :908/:909 completeness, not a runtime property). poisoned /
+    ;; row 1 (the lifecycle x operation table): a sticky life
+    ;; (stopped|error|finished) returns that same status; a finish! from
+    ;; ready|finish-ready never returns `stopped` (the verifier's EOF-completeness
+    ;; check, not a runtime property). poisoned /
     ;; busy / the paused cells are NOT driven by the schedule alphabet and are not
     ;; asserted vacuously.
     (define (row1)
@@ -968,9 +966,8 @@
                ((and (eq? op 'finish) (memq life '(ready finish-ready)))
                 (loop (cdr ss) #t (if (eq? st 'stopped) (list 'finish-reached-stop life) #f)))
                (else (loop (cdr ss) app #f)))))))
-    ;; row 2 (§9.3 cursor arithmetic, feed- vs finish-originated): a feed consumes
-    ;; (next - start); a finish reports consumed 0 and next = the stream offset. The
-    ;; `finished next 5 consumed 0 offset 5` digest is DROPPED, not repeated (F23).
+    ;; row 2 (cursor arithmetic, feed- vs finish-originated): a feed consumes
+    ;; (next - start); a finish reports consumed 0 and next = the stream offset.
     (define (row2)
       (let loop ((ss steps) (app #f) (v #f))
         (if (or v (null? ss)) (values app v)
@@ -1004,10 +1001,11 @@
                           ((let ((x (car vs)) (w (car ws))) (or (< x 0) (>= x (expt 2 w))))
                            (loop (cdr ss) (list 'field-range (car vs) (car ws))))
                           (else (scan (cdr vs) (cdr ws))))))))))
-    ;; row 5 (§16.2:908): a `finished` status from parser-feed! is legal only when
-    ;; the lifecycle before was already finished (a sticky feed). A live feed
-    ;; reaching a finish node is the :908 hole -- kept out by the verifier, not the
-    ;; runtime, which is why this is a completeness property.
+    ;; row 5: a `finished` status from parser-feed! is legal only when the
+    ;; lifecycle before was already finished (a sticky feed). A live feed reaching
+    ;; a finish node is kept out by the verifier (a finish node must not be
+    ;; byte-reachable), not the runtime, which is why this is a completeness
+    ;; property.
     (define (row5)
       (let loop ((ss steps) (app #f) (v #f))
         (if (or v (null? ss)) (values app v)
@@ -1017,15 +1015,14 @@
                         (if (and (eq? (step-op s) 'feed) (not (eq? (step-life s) 'finished)))
                             (list 'feed-finished (step-life s)) #f))
                   (loop (cdr ss) app #f))))))
-    ;; row 6 (F23, the span row): (i) content at absolute offsets; (ii) contiguity
+    ;; row 6 (the span row): (i) content at absolute offsets; (ii) contiguity
     ;; and order within one logical span; (iii) the end anchor = parser-stream-offset
     ;; inside the span-complete callback. THREE inapplicability conditions: not at an
-    ;; error (§14:839); not when the fragment step short-circuits (no frag recorded --
-    ;; an unbound data callback; since decision 0042 an empty span DELIVERS a
-    ;; zero-length fragment, so it is now IN scope for row 6 -- af==at at the span's
-    ;; offset, and the end anchor still holds); and -- this plan's own addition --
-    ;; not when no span-complete callback is bound, in which case (iii) is dropped
-    ;; and (i)+(ii) stand.
+    ;; error; not when the fragment step short-circuits (no frag recorded -- an
+    ;; unbound data callback; an empty span DELIVERS a zero-length fragment, so it
+    ;; is IN scope for row 6 -- af==at at the span's offset, and the end anchor
+    ;; still holds); and not when no span-complete callback is bound, in which case
+    ;; (iii) is dropped and (i)+(ii) stand.
     (define (row6)
       (let* ((last-tup (and (pair? steps) (step-tuple (last-elt steps))))
              (final (and last-tup (tup-status last-tup)))
@@ -1081,7 +1078,7 @@
                    ((not (= (car (car fs)) prev)) (list 'span-gap prev (car (car fs))))
                    (else (cloop (cdr fs) (cadr (car fs))))))
            ;; (iii) end anchor -- DROPPED when THIS span has no completion callback
-           ;; (this plan's third inapplicability condition, judged per span). With one
+           ;; (row 6's third inapplicability condition, judged per span). With one
            ;; bound: a group that ended in a completion anchors its last fragment at
            ;; the completion offset; a group that ended WITHOUT one is a span that
            ;; CLOSED with no completion -- the violation -- but only when no span is

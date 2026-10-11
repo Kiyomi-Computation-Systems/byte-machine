@@ -1,4 +1,4 @@
-;;; The parent §9.6 end-to-end example, run as one program in both lanes:
+;;; The end-to-end example, run as one program in both lanes:
 ;;; construct only through (byte-machine graph); verify; compile without runtime
 ;;; evaluation; emit the .sls to a binary file port; the consumer imports the
 ;;; generated library (by import, never include) and only (byte-machine runtime),

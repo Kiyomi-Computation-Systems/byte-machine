@@ -5,9 +5,9 @@
 # This module compares the exact status instead, which means it has to say what
 # the legal statuses even are -- and has to tell an out-of-vocabulary status
 # apart from a wrong one, because those are different defects. Measured
-# 2026-08-18 against Chez 10.4.1: `--script` naming a file that does not exist
-# exits 255; reporting that as "expected 1, got 255" would send a reader
-# looking for a failed assertion that never ran.
+# against Chez 10.4.1: `--script` naming a file that does not exist exits 255;
+# reporting that as "expected 1, got 255" would send a reader looking for a
+# failed assertion that never ran.
 
 cmake_minimum_required(VERSION 3.26)
 
@@ -109,11 +109,11 @@ spec_check_equal("${message}" "" "verdict clears the message on success")
 # byte_machine_add_exit_code_test does so only to prove a rejection, and each
 # one is rejected before the registrar at the bottom of that function is ever
 # called (the stub inside the BYTE_MACHINE_SPEC_CASE block above stands aside
-# for exactly that reason). Nothing here previously drove a valid registration
-# through to that final call, so the WORKING_DIRECTORY-forwarding block in
-# ByteMachineExpectExit.cmake -- the same conditional-forwarding shape
-# byte_machine_add_scheme_lane uses, and CMP0174-motivated for the same reason
-# -- was exercised by nothing at all. This stub records what it was handed,
+# for exactly that reason). The registrations below are valid and reach that
+# final call, which is the only way to exercise the WORKING_DIRECTORY-forwarding
+# block in ByteMachineExpectExit.cmake -- the same conditional-forwarding shape
+# byte_machine_add_scheme_lane uses, and CMP0174-motivated for the same reason.
+# This stub records what it was handed,
 # the same two ways ByteMachineSchemeLaneSpec.cmake does: the value
 # cmake_parse_arguments extracted, and whether the literal "WORKING_DIRECTORY"
 # keyword appears anywhere in the raw arguments, since a keyword present with

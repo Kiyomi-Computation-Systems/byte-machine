@@ -13,9 +13,9 @@
 
 (harness-begin "unit.interpret")
 
-;; Slice ①a task 5: the error slot holds a parser-error record, and is #f on
-;; every non-error result. These are single-executor lanes, so they compare the
-;; CODE rather than the §22.4:1271 projection the differential lanes use --
+;; The error slot holds a parser-error record, and is #f on every non-error
+;; result. These are single-executor lanes, so they compare the CODE rather
+;; than the error projection the differential lanes use --
 ;; but they must stay #f-tolerant, because the same accessor is read on results
 ;; that carry no error at all.
 (define (error-code-of r)
@@ -116,10 +116,10 @@
               (loop (+ b 1))))
           (check-equal "no byte in 1..255 misbehaved" bad 'none))))))
 
-;; Milestone 3 Slice ② Task 3 (decision 0015 points 3-5). Prefix progress lives
-;; in the parser's own `current` as (name . path), where path is the byte list
-;; consumed so far inside the sequence -- NOT a bare position index. Design
-;; §4.2's (s . k) is insufficient: see the AB/XY case below.
+;; Prefix progress lives in the parser's own `current` as (name . path), where
+;; path is the byte list consumed so far inside the sequence -- NOT a bare
+;; position index. A (node . position) pair is insufficient: see the AB/XY case
+;; below.
 (define (seq-alt* bytes target) (make-sequence-case bytes target #f))
 (define (seq-m name alts mode extra)
   (make-machine name 'seq '() '() '() (list eof-decl rej-decl)
@@ -194,16 +194,15 @@
          (eq? (condition-who e) 'interpret)
          (equal? (condition-message e) message))))
 
-;; Milestone 3 Slice ③ Task 1. §16.2:894 now rejects both unrepresentable shapes
-;; at verify-machine, and make-interpreted-machine refuses an unverified machine
-;; (interpret.sls:25-28) -- so `interp` can no longer carry one this far. The
-;; guards below are NOT thereby dead: normalize-machine and make-interpreted-
+;; verify-machine rejects both unrepresentable shapes, and
+;; make-interpreted-machine refuses an unverified machine -- so `interp` cannot
+;; carry one this far. The guards below are NOT thereby dead: normalize-machine and make-interpreted-
 ;; machine both remain reachable by a caller that skips verification, and
 ;; (byte-machine private ir) exports make-verification-result, so that caller is
 ;; expressible here. Forging an ok? verification the verifier would never
 ;; produce is precisely the shape the guards exist to catch, and witnessing them
-;; that way keeps SchemeMutationSuite.cmake's two Pass 34 guard mutations alive
-;; with their pins unchanged.
+;; that way is what catches SchemeMutationSuite.cmake's two Pass 34 guard
+;; mutations.
 (define (unverified m) (make-verification-result #t '() m))
 (define (interp-unverified m) (make-interpreted-machine (unverified m)))
 
@@ -265,11 +264,10 @@
         (check-equal "pos 2" (feed-bytes adv '(1 2 200)) '(error 1 1 3 unexpected-byte))
         (check-equal "pos 3" (feed-bytes adv '(1 2 3 200)) '(error 1 1 4 unexpected-byte))))))
 
-;; Task 3 coverage gap closed here, not in the brief's own Step 1 block: none of
-;; the fixtures above ever calls parser-finish! while `current` is a compound, so
-;; eof-target-of's (car cur) extraction has no witness even though it is a value
-;; the code produces (interpret.sls's own comment says a compound answers with
-;; ITS SOURCE NODE'S eof-target). Mirrors (byte-machine test eof-machine)'s
+;; None of the fixtures above calls parser-finish! while `current` is a
+;; compound, so this group is the witness for eof-target-of's (car cur)
+;; extraction (interpret.sls's own comment says a compound answers with ITS
+;; SOURCE NODE'S eof-target). Mirrors (byte-machine test eof-machine)'s
 ;; s1 -> 'trunc pattern: the sequence node's eof-target names an error node
 ;; directly, reusing the SAME 'reject node the mismatch edge already uses, so no
 ;; new error declaration is needed and the machine stays well-formed by the same
@@ -293,12 +291,13 @@
             (check-equal "the sequence node's own eof-target code, not default-eof"
                          (error-code-of r) 'unexpected-byte)))))))
 
-;; --- Milestone 6 Slice ①: the counted-consume op, driven directly ----------------
+;; --- the counted-consume op, driven directly --------------------------------
 ;;
-;; `count-step` is decision 0030 item 4's message, driven through the op closure
-;; a compiled machine wraps (slot 2 of its tagged vector -- the shipped practice
-;; for a test that needs an internal). The cases are 0030 item 1's table, read
-;; off the op's answer and the field vector it commits into.
+;; `count-step` is the op's counted-consume message, driven through the op
+;; closure a compiled machine wraps (slot 2 of its tagged vector -- the shipped
+;; practice for a test that needs an internal). The cases are the counted
+;; consume's outcome table (zero count, empty slice, partial, exact, surplus
+;; input), read off the op's answer and the field vector it commits into.
 (define (op-of cm) (vector-ref cm 2))
 (define (cc-interp eof)
   (make-machine 'ccint 'start (list (make-uint-field 'len 64 3 #f)) '() '() (list eof-decl rej-decl)

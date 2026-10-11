@@ -1,8 +1,7 @@
-;;; interpreter ≡ generated over the pause/resume proving machine (Milestone 2
-;;; Slice 3, parent §22.4 "pause continuations"). Proves the generated /v2
-;;; pause arm and its post-resume continuation equal the interpreter's
-;;; parser-feed!/parser-finish!/parser-resume! walk over the shared pause
-;;; machine, for feed (byte 1 pauses into p1, continuation s1; resume; byte 2
+;;; interpreter ≡ generated over the pause/resume proving machine. Proves the
+;;; generated /v2 pause arm and its post-resume continuation equal the
+;;; interpreter's parser-feed!/parser-finish!/parser-resume! walk over the
+;;; shared pause machine, for feed (byte 1 pauses into p1, continuation s1; resume; byte 2
 ;;; stops), finish (EOF at entry pauses into pe, continuation done; resume;
 ;;; finish -> finished), truncation after a resumed pause (s1's eof-target ->
 ;;; trunc), and every one of the 256 first bytes (byte 1 pauses; every other
@@ -27,13 +26,13 @@
 (define cm-gen (eval 'pause-parser (environment '(generated pausem))))
 
 ;; Every field the operation matrix defines, plus parser-lifecycle: the
-;; §22.4 "pause continuations" comparison is observable as identical
-;; post-resume continuation behavior, which only parser-lifecycle plus a
+;; pause-continuation comparison is observable as identical post-resume
+;; continuation behavior, which only parser-lifecycle plus a
 ;; following operation's result can show.
 (define (rfields r p)
   (list (parser-result-status r) (parser-result-next r) (parser-result-consumed r)
         (parser-result-stream-offset r) (project-error (parser-result-error r))
-        ;; Milestone 12: the pause reason is projected too, so a lowering defect
+        ;; The pause reason is projected too, so a lowering defect
         ;; in the pause identity (wrong code/reason, or leaked into the error
         ;; slot) shows as a cross-lane disagreement. project-error handles the
         ;; parser-error-shaped pause value and #f alike.
@@ -81,11 +80,11 @@
   (lambda ()
     (harness-case "a pause fed from a nonzero start agrees on next, consumed, and stream offset"
       (lambda ()
-        ;; Whole-branch review Critical 1: runtime-tests.sps's own nonzero-
-        ;; start case witnesses the interpreter's pause arm directly; this
-        ;; adds the same fixture here so a divergence would also show up as
-        ;; a ref/gen disagreement (the generated side is unmutated, so an
-        ;; interpreter-only regression separates the two here too).
+        ;; runtime-tests.sps's own nonzero-start case witnesses the
+        ;; interpreter's pause arm directly; the same fixture here makes a
+        ;; divergence also show up as a ref/gen disagreement (the generated
+        ;; side is unmutated, so an interpreter-only regression separates the
+        ;; two here too).
         (let* ((pr (fresh-ref)) (pg (fresh-gen))
                (bv (u8-list->bytevector (list 9 1 2)))
                (rr (parser-feed! pr bv 1 3)) (rg (parser-feed! pg bv 1 3)))
@@ -120,7 +119,7 @@
             (check-equal "error code" (parser-error-code (parser-result-error rr)) 'truncated-input)
             (check-equal "offset" (parser-result-stream-offset rr) 1)))))))
 
-;; --- Milestone 12: the pause reason, interpreter ≡ generated -----------------
+;; --- the pause reason, interpreter ≡ generated -------------------------------
 ;; A local machine is emitted, loaded and eval'd the same way the shared pause
 ;; machine is above; `gen-of` returns its compiled generated form so a reason
 ;; defect that hit both lanes identically cannot pass by agreement.
@@ -137,7 +136,7 @@
   (lambda ()
     ;; The shared pause machine's p1 (feed pause) carries paused-continue and pe
     ;; (EOF pause) carries paused-at-eof -- two different nodes, two different
-    ;; reasons, which is criterion 4 across the feed and finish paths.
+    ;; reasons, so each of the feed and finish paths must report its own.
     (harness-case "feed pause p1 reports paused-continue with error slot #f"
       (lambda ()
         (let* ((pr (fresh-ref)) (pg (fresh-gen)) (bv (make-bytevector 1 1))

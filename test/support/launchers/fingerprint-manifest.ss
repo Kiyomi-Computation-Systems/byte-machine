@@ -14,8 +14,8 @@
 ;;;
 ;;; (byte-machine test fingerprint) is imported -- the same library the
 ;;; harness re-exports to every lane -- so this program and the runner cannot
-;;; drift apart. The import mechanism (library-directories set first, import
-;;; mid-file under --script) is measured in decision 0006. The root is paired
+;;; drift apart. The import mechanism is library-directories set first, then an
+;;; import mid-file under --script. The root is paired
 ;;; with the always-empty object guard for the same reason chez-source.ss
 ;;; pairs its roots: the expectation must be computed from source text, and a
 ;;; compiled object beside the source must have nowhere to load from.

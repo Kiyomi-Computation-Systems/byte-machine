@@ -1,19 +1,18 @@
-;;; §22.9 determinism over a MULTI-ALTERNATIVE sequence machine, proved against
-;;; a committed golden. Byte-identity in this process AND equality to the
-;;; golden (which every cell and lane compares against) give cross-process,
-;;; cross-lane, and cross-cell identity transitively; M9 completes the four-cell
-;;; matrix with the same golden. Comparison is over raw bytes through the
-;;; project-owned writer, never via implementation `write`.
+;;; Determinism over a MULTI-ALTERNATIVE sequence machine, proved against a
+;;; committed golden. Byte-identity in this process AND equality to the golden
+;;; (which every cell and lane compares against) give cross-process,
+;;; cross-lane, and cross-cell identity transitively. Comparison is over raw
+;;; bytes through the project-owned writer, never via implementation `write`.
 ;;;
-;;; Why a third golden rather than reusing one: decision 0016's ascending-byte
-;;; child rule and two-phase id allocation are what keep a BRANCHING trie's
-;;; emission deterministic, and neither the one-byte nor the pause golden
-;;; contains a branch. An unstable child order at the branch is precisely how
-;;; §25:1539's "normalized output is deterministic" would be lost, and only a
-;;; machine with a branch can witness it.
+;;; Why a separate golden rather than reusing one: the ascending-byte child rule
+;;; and two-phase id allocation are what keep a BRANCHING trie's emission
+;;; deterministic, and neither the one-byte nor the pause golden contains a
+;;; branch. An unstable child order at the branch is precisely how normalized
+;;; output would lose its determinism, and only a machine with a branch can
+;;; witness it.
 ;;;
 ;;; The order in question is trie-put's own insert-before-if-less arm, NOT the
-;;; `list-sort` that orders a byte-dispatch node's transitions (decision 0014).
+;;; `list-sort` that orders a byte-dispatch node's transitions.
 ;;; This fixture declares no byte-dispatch node at all, so that comparator never
 ;;; runs for it: flipping it leaves this golden byte-identical, measured, with
 ;;; the numbers recorded beside SchemeMutationSuite.cmake's Pass 49.
@@ -61,7 +60,7 @@
                  (r1 (run (http-version-bytes 'one)))
                  (rx (run (append (http-version-shared-prefix) '(50)))))  ; `HTTP/1.2`
             ;; A single-alternative walk would leave the branching prefix state
-            ;; untested by this lane, which is the whole reason for a third
+            ;; untested by this lane, which is the whole reason for a separate
             ;; golden -- so both alternatives AND the branch mismatch are driven.
             (check-equal "HTTP/1.0 status" (parser-result-status r0) 'stopped)
             (check-equal "HTTP/1.0 consumed" (parser-result-consumed r0) 8)

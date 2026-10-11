@@ -1,13 +1,12 @@
-;;; Milestone 11 Slice ②: the brief §2b HTTP-header case-insensitivity
-;;; demonstration (criterion 4) and the folded-collision rejection's per-table
-;;; contrast (decision 0045 item 3), interpreter ≡ generated with the generated
-;;; side asserted ABSOLUTELY (agreement alone cannot carry a fold defect that hit
-;;; both executors identically -- Slice ①'s lane lesson).
+;;; The HTTP-header case-insensitivity demonstration and the folded-collision
+;;; rejection's per-table contrast, interpreter ≡ generated with the generated
+;;; side asserted ABSOLUTELY (agreement alone cannot see a fold defect that hits
+;;; both executors identically).
 ;;;
 ;;; Two kinds of group:
 ;;;  - RECOGNITION: a case-insensitive header table folds every casing of
 ;;;    Content-Length / Transfer-Encoding to one target; a case-sensitive one over
-;;;    the same names recognizes only the canonical bytes. That is criterion 4.
+;;;    the same names recognizes only the canonical bytes.
 ;;;  - COLLISION: a case-insensitive table over two byte-distinct case variants
 ;;;    (Content-Length + content-length) is refused by name; the SAME table
 ;;;    case-sensitive verifies clean. The collision group calls `verify-machine`
@@ -33,8 +32,8 @@
         (assertion-violation 'differential-keyword-header
                              "BYTE_MACHINE_TEST_TMPDIR is unset" d))))
 
-;; Emit, load and eval one fixture's generated library (the sequence/keyword-node
-;; differential precedent; the binding is this function's own).
+;; Emit, load and eval one fixture's generated library (as the sequence and
+;; keyword-node differentials do; the binding is this function's own).
 (define (generated-machine name machine)
   (let ((genfile (string-append tmpdir "/generated-" (symbol->string name) ".sls"))
         (binding (string->symbol (string-append (symbol->string name) "-parser"))))
@@ -62,7 +61,7 @@
 (define ci-ref (make-interpreted-machine (verify-machine (make-keyword-header-ci-machine))))
 (define ci-gen (generated-machine 'kwheaderci (make-keyword-header-ci-machine)))
 
-;; --- criterion 4, the HIT half: the case-insensitive table folds every casing --
+;; --- the HIT half: the case-insensitive table folds every casing ------------
 (harness-group "the case-insensitive table folds every casing of a header name to one target"
   (lambda ()
     (harness-case "Content-Length in canonical, lower and mixed case all reach got-content-length"
@@ -85,7 +84,7 @@
         (check-equal "lower" (feed1 ci-gen "transfer-encoding ") '(stopped 17 17 17 got-transfer-encoding #f #f))
         (check-equal "agree lower" (feed1 ci-ref "transfer-encoding ") (feed1 ci-gen "transfer-encoding "))))))
 
-;; --- criterion 4, the MISS half: the case-sensitive table refuses the casings --
+;; --- the MISS half: the case-sensitive table refuses the casings ------------
 (harness-group "the case-sensitive table recognizes only the canonical bytes"
   (lambda ()
     (harness-case "Content-Length canonical hits; lower and mixed case no-match at offset 0"
@@ -113,7 +112,7 @@
         (check-equal "gen" (feed1 ci-gen "Upgrad ") '(error 6 6 6 reject unexpected-byte 6))
         (check-equal "agree" (feed1 ci-ref "Upgrad ") (feed1 ci-gen "Upgrad "))))))
 
-;; --- the folded-collision rejection is per-table (decision 0045 item 3) -------
+;; --- the folded-collision rejection is per-table ----------------------------
 ;; verify-machine directly: the case-insensitive collision machine is invalid by
 ;; design (it would raise through make-interpreted-machine). The CS-verifies-clean
 ;; assertion is the per-table pin.

@@ -1,19 +1,19 @@
-;;; The Milestone 6 Slice ① proving machines (design §6): a length-prefixed
-;;; message loop WITHOUT a span -- `idle` -> `len` -> `:` -> `body` -> `,` ->
-;;; clear -> `idle` -- in the shape §21 needs (§21.3:1149-1150: completion resets
-;;; the message field and loops to request start), plus the two smaller machines
-;;; the slice's oracles need, one the reached-declaration walk owes, and -- from
-;;; Slice ② -- the same loop with `body` inside a span, in two variants.
+;;; The counted-consume proving machines: a length-prefixed message loop
+;;; WITHOUT a span -- `idle` -> `len` -> `:` -> `body` -> `,` -> clear -> `idle`
+;;; -- in the shape the HTTP fixture needs (completion resets the message field
+;;; and loops to request start), plus the smaller machines the counted-consume
+;;; oracles and the reached-declaration walk need, and the same loop with
+;;; `body` inside a span, in two variants.
 ;;;
 ;;; `idle`'s eof-target is the FINISH, so EOF between messages is `finished`,
 ;;; and `len`, `body` and `,` route EOF to the truncation error, so EOF after a
-;;; partial length, mid-body or before the delimiter is a truncation --
-;;; §12.4:725's idle-versus-partial distinction, which a machine whose entry is
-;;; the accumulate node cannot make. The entry reexecutes the first digit into
+;;; partial length, mid-body or before the delimiter is a truncation -- the
+;;; idle-versus-partial distinction, which a machine whose entry is the
+;;; accumulate node cannot make. The entry reexecutes the first digit into
 ;;; `len` so the accumulator sees every digit; `len`'s non-digit edge reexecutes
 ;;; the `:` into a dispatch that consumes it, so the body starts exactly after
-;;; the colon. Slice ② wraps `body` in a span (`make-counted-span-machine`, below)
-;;; and changes nothing in the four Slice ① machines.
+;;; the colon. `make-counted-span-machine` (below) wraps `body` in a span and
+;;; leaves the other four machines unchanged.
 (library (byte-machine test counted-machine)
   (export make-counted-machine make-only-consumer-machine make-entry-zero-machine
           make-big-count-machine make-counted-span-machine)
@@ -56,8 +56,8 @@
                                           (make-edge 'clear 'advance) #f))
                     (make-edge 'reject 'reexecute)
                     'trunc #f)
-                   ;; §21.3:1150: completion resets the message field by an
-                   ;; explicit action and loops to request start.
+                   ;; Completion resets the message field by an explicit
+                   ;; action and loops to request start.
                    (make-field-action-node 'clear 'clear '(len) 'idle #f #f)
                    (make-finish-node 'fin #f)
                    (make-error-node 'trunc 'truncated #f)
@@ -68,8 +68,8 @@
   ;; The machine whose ONLY default-EOF consumer is the counted consume: the
   ;; entry routes EOF to the finish, so nothing but `body` credits the default
   ;; declaration to the emitted errs table, and no error node names it or shares
-  ;; its code and reason. compile.sls's reached-declaration walk found the
-  ;; accumulate defect on exactly this shape (design §3.2 item 5).
+  ;; its code and reason. compile.sls's reached-declaration walk must credit
+  ;; the declaration on exactly this shape.
   (define (make-only-consumer-machine)
     (make-machine 'onlycc 'start
                   (list (make-uint-field 'len 8 2 #f))
@@ -90,8 +90,8 @@
 
   ;; The ENTRY is a counted consume with a zero initial and an error node for
   ;; `next`: the only shape that reaches the finish arm's zero-count route
-  ;; (decision 0030 item 6 -- a parser parked by need-input holds a positive
-  ;; count, so only a fresh parser arrives there with zero). It verifies clean:
+  ;; (a parser parked by need-input holds a positive count, so only a fresh
+  ;; parser arrives there with zero). It verifies clean:
   ;; the entry's walk joins the default EOF error with the error node, tier 0.
   (define (make-entry-zero-machine)
     (make-machine 'entryzero 'body
@@ -103,10 +103,10 @@
                         (make-error-node 'bad 'empty #f))
                   'default-eof #f))
 
-  ;; Slice ②'s machine: the same loop with `body` wrapped in a span --
-  ;; `:` -> `open` -> `body` -> `close` -> `,` -- §21.3:1145's fixed-body shape.
+  ;; The same loop with `body` wrapped in a span --
+  ;; `:` -> `open` -> `body` -> `close` -> `,` -- the HTTP fixed-body shape.
   ;; TWO variants, because the emitter renders two span-completion arms and only
-  ;; one is a call (§10.4:516 makes the completion callback optional): `complete?`
+  ;; one is a call (the completion callback is optional): `complete?`
   ;; declares `on-done` and names it in the span. The machine NAME differs per
   ;; variant so both generated libraries can be resident at once. `body`'s EOF
   ;; route is its OWN truncation node: the shared one is reached with no span
@@ -155,7 +155,7 @@
                   'default-eof #f))
 
   ;; A u64 count above the fixnum range: the subtraction is bignum arithmetic
-  ;; (§15:856), and both lanes must agree with the expected value, not only
+  ;; and both lanes must agree with the expected value, not only
   ;; with each other.
   (define (make-big-count-machine)
     (make-machine 'bigcount 'start

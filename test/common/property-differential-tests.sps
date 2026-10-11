@@ -1,25 +1,23 @@
-;;; Property differential (parent §22.4/§22.6; Milestone 7 design §4.3/§4.4/§7;
-;;; decision 0033). Sixty-four generated machines drawn over EVERY §10.6 construct,
-;;; the interpreter oracle against the emitted executor, compared at three layers.
-;;; Only VERIFIED machines reach an executor; rejected draws are normal (clause 1)
-;;; and are counted, not failed. The floor (0033 item 2) requires at least half
-;;; the machine count accepted; the counters require every construct OBSERVED in
+;;; Property differential. Sixty-four generated machines drawn over EVERY IR
+;;; construct, the interpreter oracle against the emitted executor, compared at
+;;; three layers. Only VERIFIED machines reach an executor; rejected draws are
+;;; normal and are counted, not failed. The floor requires at least half the
+;;; machine count accepted; the counters require every construct OBSERVED in
 ;;; both halves. The floor does not measure what it is for on its own -- a draw
 ;;; steered to a single error node per machine would clear it while every counter
 ;;; read zero -- so what stops the degenerate case is the counters, not the floor.
 ;;;
-;;; THE BLIND SPOT (design §7's Oracle scores it): all three layers are blind to an
-;;; agreed-wrong value that satisfies every invariant, and one is in the tree --
-;;; §12.7:770's zero-width-machine-action half, the position kind of a FAILED
-;;; zero-width action reached over a REEXECUTE edge, which the row fixes at
-;;; `boundary` and which BOTH lanes report as `byte`. This lane DRAWS that shape
-;;; thousands of times per seed set and every trial passes, because the layers
-;;; compare the lanes against each other (they agree) and read no position kind.
-;;; The receivers are compile.sls's field-action arm and interpret.sls's field-step
-;;; (design §4.11 item 7); §4.9's gate proves this slice touched neither.
+;;; THE BLIND SPOT: all three layers are blind to an agreed-wrong value that
+;;; satisfies every invariant, and one is in the tree -- the machine-action half
+;;; of the zero-width position-kind rule. A FAILED zero-width action reached over
+;;; a REEXECUTE edge should report `boundary`, and BOTH lanes report `byte`. This
+;;; lane DRAWS that shape thousands of times per seed set and every trial passes,
+;;; because the layers compare the lanes against each other (they agree) and read
+;;; no position kind. The fix belongs in compile.sls's field-action arm and
+;;; interpret.sls's field-step, which both carry the KNOWN LIMITATION note.
 ;;;
 ;;; The driver ((byte-machine test property-driver)) owns the trial, the pause
-;;; protocol, the counters and the comparison layers; Slice ③'s fixture and the
+;;; protocol, the counters and the comparison layers; the fixture saver and the
 ;;; minimizer read the same library. This program is the imperative shell: it draws
 ;;; the machines, verifies them, hands the accepted ones over, and asserts.
 (import (rnrs) (rnrs eval)
@@ -37,7 +35,7 @@
         (byte-machine compile)
         (byte-machine private conditions))
 
-;; ---- the seed (0033 item 3) ----
+;; ---- the seed ----
 ;; Read BYTE_MACHINE_PROPERTY_SEED; unset is LEGAL (the committed default) and
 ;; malformed is LOUD -- the opposite polarity from BYTE_MACHINE_TEST_TMPDIR, whose
 ;; unset is the loud case. `(rnrs)` has no string-trim, so the whitespace set is
@@ -60,17 +58,16 @@
                     (assertion-violation 'property
                       "BYTE_MACHINE_PROPERTY_SEED is not a nonnegative decimal integer" raw))))))))
 
-;; Printed once at the suite's start (0033 item 3). New practice in this tree
-;; (no test/common/*.sps calls display today). The text introduces no token any
-;; pin of this SPEC matches -- checked against every Pass 39 pin before commit.
+;; Printed once at the suite's start, so a run's output names its seed. The
+;; text introduces no token any pin of this SPEC matches (checked against every
+;; Pass 39 pin).
 (display "property-differential-tests: drawing seed ") (display seed) (newline)
 
 (harness-begin "property.differential")
 
 (define machine-count 64)
-(define floor-literal 32)   ; 0033 item 2: no lower than half the machine count;
+(define floor-literal 32)   ; no lower than half the machine count;
                             ; measured through this lane and this generator = 41
-                            ; (was 36 before Milestone 11 added keyword-table to the draw table).
 (define tmpdir
   (let ((d (adapter-environment-variable "BYTE_MACHINE_TEST_TMPDIR")))
     (if (and d (not (string=? d ""))) d
@@ -88,7 +85,7 @@
 ;; IR). Used by the reproducibility case.
 (define (machine->bytes m) (render-machine (compile-machine m '()) 'gen-parser))
 
-;; Eight drawn inputs of length 0-6 per machine (§4.4), from the machine's own
+;; Eight drawn inputs of length 0-6 per machine, from the machine's own
 ;; TRIAL stream -- separate from the machine-drawing stream so the accepted count
 ;; is a function of the generator and the seed alone, not of the trial machinery.
 (define (draw-inputs s)
@@ -118,7 +115,7 @@
 ;; the condition's detail in the output, rather than escaping the top level as an
 ;; uncaught exception (which would exit 255, a "wrong reason" for the mutation
 ;; suite). It also means such a mutant never reaches the floor or the counter
-;; case, so it produces no per-member label (F12).
+;; case, so it produces no per-member label.
 (define (drive!)
  (let loop ((i 0) (s (make-prng seed)))
   (when (< i machine-count)
@@ -157,10 +154,10 @@
  (set! inv-verdicts (reverse inv-verdicts))
  (set! floor-held? (>= accepted-count floor-literal)))
 
-;; ---- the totality rows read ir.sls AS A DATUM (§4.10 / Task 7 Step 2). The
-;; readers replicate the shipped census readers' shape (diagnostic-census's
-;; defined-list, kind-position-census's node?/matcher? disjunct walk) rather than
-;; import them -- they live in .sps programs, not libraries. BYTE_MACHINE_SOURCE_ROOT
+;; ---- the totality rows read ir.sls AS A DATUM. The readers replicate the
+;; census readers' shape (diagnostic-census's defined-list,
+;; kind-position-census's node?/matcher? disjunct walk) rather than import
+;; them -- they live in .sps programs, not libraries. BYTE_MACHINE_SOURCE_ROOT
 ;; is loud when unset, for the diagnostic census's reason: a census that silently
 ;; read the wrong tree would report every source-side mutation caught for nothing.
 (define source-root
@@ -192,9 +189,8 @@
                 (pair? (cddar x)) (pair? (caddar x)) (eq? (car (caddar x)) 'quote))
            (cadr (caddar x)))
           (else (or (loop (car x)) (loop (cdr x)))))))
-;; F18: walk to `(define (FN …) …)` and return the first `(memq VAR '(…))`'s list --
-;; make-callback-declaration's kind guard, the closed set no other mechanism reads
-;; (`rg -n "'memq" test/` printed nothing before this extractor added the term).
+;; Walk to `(define (FN …) …)` and return the first `(memq VAR '(…))`'s list --
+;; make-callback-declaration's kind guard, the closed set no other mechanism reads.
 (define (memq-closed-set datum fn)
   (let ((body (let loop ((x datum))
                 (cond ((not (pair? x)) #f)
@@ -210,24 +206,23 @@
 
 ;; ---- FIRST harness-case: run the drive, then the floor, the structural
 ;; equality, the per-machine agreement, and the skip sentinel that witnesses the
-;; second case ran (F12). ----
+;; second case ran. ----
 (harness-group "property.differential"
  (lambda ()
   (harness-case "accounting"
    (lambda ()
      (drive!)
-     ;; Layer 1 (§22.4:1264-1272 + §22.5:1285): the two lanes agree exactly, per
-     ;; machine. The label is per machine so a divergence names which one replays.
+     ;; Layer 1: the two lanes agree exactly, per machine. The label is per machine so a divergence names which one replays.
      (for-each
       (lambda (iv)
         (check-equal (string-append "machine " (number->string (car iv))
                                     " (seed " (number->string seed) ") byte agreement")
                      (cdr iv) 'none))
       verdicts)
-     ;; Layer 3 (F23): the single-lane ORACLE over the SAME drawn trials -- kept
+     ;; Layer 3: the single-lane ORACLE over the SAME drawn trials -- kept
      ;; distinct from the agreement checks above, since a Layer-3 violation is not a
      ;; lane disagreement. One check over the accepted machines' first violations, so
-     ;; each Task 10 Step 3 row-inversion pin reddens exactly this record and its
+     ;; each row-inversion mutation's pin reddens exactly this record and its
      ;; detail names the row. 'none unless a row's comparison is inverted.
      (check-equal "no accepted machine's trial violated a Layer-3 invariant"
                   (let scan ((vs inv-verdicts))
@@ -235,10 +230,10 @@
                           ((not (eq? (cdar vs) 'none)) (cdar vs))
                           (else (scan (cdr vs)))))
                   'none)
-     ;; the floor (0033 item 2). EXPECT_SURVIVES is refused here (design §7): the
-     ;; witness is a mutant that rejects everything.
+     ;; the floor. It takes no EXPECT_SURVIVES: its witness is a mutant that
+     ;; rejects everything.
      (check "the accepted count is at least the floor" floor-held?)
-     ;; the structural equality (0033 item 1), by COMPARISON not by a raise.
+     ;; the structural equality, by COMPARISON not by a raise.
      (check-equal "no draw reached an executor unverified" fed-unverified 0)
      (check-equal "every accepted machine reached the interpreter" interpreted-count accepted-count)
      (check-equal "every accepted machine reached the generated lane" generated-count accepted-count)
@@ -247,14 +242,14 @@
      (check-equal "the machine loop ran machine-count times" machines-loop-ran machine-count)
      (check-equal "the machine loop ran the literal count" machines-loop-ran 64)
      (check-equal "the trial pass ran over every accepted machine" trials-loop-ran accepted-count)
-     ;; the SKIP SENTINEL (F12 / Task 3 Step 7): read from what the drive produced,
+     ;; the SKIP SENTINEL: read from what the drive produced,
      ;; NEVER from the counter table's length, and registered in THIS case so it
      ;; fails under the floor mutant (in the second case it would be skipped by the
      ;; very condition it exists to witness).
      (check-equal "the counter pass ran over the measured accepted machines" accepted-count 41)))
 
   ;; ---- SECOND harness-case: the 98 counter checks, entered only when the floor
-  ;; held (F12). A rejects-everything mutant fails the floor and this case emits
+  ;; held. A rejects-everything mutant fails the floor and this case emits
   ;; NONE of the member labels, so every per-member pin resolves to one record. ----
   (harness-case "counters"
    (lambda ()
@@ -271,13 +266,13 @@
          (check-equal "the counter pass asserted ninety-eight checks" asserted 98)
          (check-equal "and the counter table's length agrees" asserted (* 2 (length (counter-keys))))))))
 
-  ;; ---- Layer 2/3 fixture validation (Task 5 Steps 2-4). The three comparison
+  ;; ---- Layer 2/3 fixture validation. The three comparison
   ;; layers are the DRIVER's; here each is asserted as a BOOLEAN on a named fixture.
   ;; spanfull and spanbare are counted-machine's make-counted-span-machine, which
   ;; differ in exactly the completion declaration. The "1:A," one-byte span stands
   ;; in for differential-span-tests.sps's eopen/eclose pair (a span that never
   ;; straddles a boundary): that program is not a library and cannot be imported,
-  ;; and a one-byte span is unsplittable by construction -- noted for Task 12. ----
+  ;; and a one-byte span is unsplittable by construction. ----
   (harness-case "layers"
    (lambda ()
      (define spanfull (make-counted-span-machine #t))
@@ -288,7 +283,7 @@
      (define (bs . xs) (u8-list->bytevector xs))
      (define cm-full (interp spanfull))
      (define cm-bare (interp spanbare))
-     ;; Layer 2, comparator 1 (§22.5:1287, the coalescer): spanfull's 37 schedules of
+     ;; Layer 2, comparator 1 (the coalescer): spanfull's 37 schedules of
      ;; "2:AB," coalesce to one span, equal? across all 37; the raw trace does not.
      (let ((rs (obs spanfull cm-full (bs 50 58 65 66 44))))
        (check-equal "spanfull drives thirty-seven schedules" (length rs) 37)
@@ -297,14 +292,14 @@
      ;; Layer 2, the non-straddling case (the eopen/eclose analog): raw distinct is 1.
      (let ((rs (obs spanfull cm-full (bs 49 58 65 44))))
        (check-equal "a one-byte span never straddles a boundary" (distinct-count (map fx-raws rs)) 1))
-     ;; Layer 2, comparator 3 (§22.5:1289, malformed input): the (status, absolute
+     ;; Layer 2, comparator 3 (malformed input): the (status, absolute
      ;; offset, error-code) tuple is invariant across schedules while the callback
      ;; prefix is schedule-dependent -- both asserted, so "compare only three fields"
      ;; is a restriction that costs something.
      (let ((rs (obs spanfull cm-full (bs 51 58 65 66))))
        (check "the error tuple is invariant across schedules of a malformed input" (= 1 (distinct-count (map fx-final3 rs))))
        (check "the callback prefix is schedule-dependent (the negative sentinel)" (> (distinct-count (map fx-raws rs)) 1)))
-     ;; Layer 3 (F23): check-invariants holds on both fixtures, and every row is
+     ;; Layer 3: check-invariants holds on both fixtures, and every row is
      ;; applicable at least once across the drive set (a valid message exercises
      ;; rows 1/2/4/5/6; a feed error "ZZ" exercises the sticky rows 1/3). spanbare's
      ;; row 6 is applicable with conjunct (iii) DROPPED (no span-complete callback).
@@ -332,13 +327,13 @@
                  invariant-rows)
        (check-equal "the layer-3 applicability pass covered all six rows" (length covered) 6))))
 
-  ;; ---- the totality rows (§4.10 / Task 7 Step 2): every family the generator
+  ;; ---- the totality rows: every family the generator
   ;; draws from, and every family the driver counts, covers EXACTLY its closed set.
   ;; Five families read that set from ir.sls (node? / matcher? disjuncts, the two
   ;; field lists, make-callback-declaration's kind guard) and compare it to the
   ;; generator's DRAW TABLE; three families (callback outcomes, span events,
   ;; schedule shapes) have no source list, so the driver's own family is compared to
-  ;; a DECLARED closed set with its citation. Each has a "found it" guard first: a
+  ;; a DECLARED closed set. Each has a "found it" guard first: a
   ;; reader that returned #f would compare two empties and pass. ----
   (harness-case "totality"
    (lambda ()
@@ -377,9 +372,8 @@
                     (sortsym (family-members 'schedule-shape))
                     (sortsym '(every-split-point split-point-pair random-multi-split empty-feeds nonzero-slice padded-bytevector))))))
 
-  ;; ---- reproducibility (design §7's oracle): the same seed in two processes
-  ;; yields the same drawn machines. Raised one level up from the shipped PRNG
-  ;; case, and compared by IR fingerprint through harness-fingerprint-*. ----
+  ;; ---- reproducibility: the same seed in two processes yields the same drawn
+  ;; machines. Raised one level up from the PRNG's own reproducibility case, and compared by IR fingerprint through harness-fingerprint-*. ----
   (harness-case "reproducibility"
    (lambda ()
      ;; The generator's coverage cycles are module-level, so the draw is

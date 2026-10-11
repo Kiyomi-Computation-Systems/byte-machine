@@ -1,6 +1,6 @@
-;;; Milestone 8 Slice ④: the chunked body, extensions, the zero chunk, and
-;;; trailers (§25:1639-1640), through the reference interpreter with ABSOLUTE
-;;; outcomes. Agreement between the executors is differential-http-tests.sps's.
+;;; The chunked body, extensions, the zero chunk, and trailers, through the
+;;; reference interpreter with ABSOLUTE outcomes. Agreement between the
+;;; executors is differential-http-tests.sps's.
 (import (rnrs)
         (byte-machine test harness)
         (byte-machine test http-machine)
@@ -48,7 +48,7 @@
 (define (has? e tr) (and (member e tr) #t))
 (define pre "GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")   ; 46 bytes
 
-;; --- the chunked body's events, in order (§21.3) ------------------------------
+;; --- the chunked body's events, in order -------------------------------------
 
 (harness-group "chunk-header, body-data, chunk-complete, the zero chunk, and message-complete"
   (lambda ()
@@ -79,7 +79,7 @@
       (lambda ()
         (check-equal "05 is 5 octets" (car (feed-finish (string-append pre "05\r\nHELLO\r\n0\r\n\r\n"))) 'finished)))))
 
-;; --- chunk extensions (§21.3:1147) --------------------------------------------
+;; --- chunk extensions --------------------------------------------------------
 
 (harness-group "chunk extensions are token spans excluding their delimiters"
   (lambda ()
@@ -93,7 +93,7 @@
         (check-equal "an empty extension name (;=) at its byte"
                      (err (string-append pre "5;=x\r\nHELLO\r\n")) '(invalid-chunk-extension byte 48))))))
 
-;; --- the checked chunk size (§21.2:1108, §12.7:773) ---------------------------
+;; --- the checked chunk size --------------------------------------------------
 
 (harness-group "chunk sizes are base-16 checked accumulation"
   (lambda ()
@@ -109,7 +109,7 @@
         (check-equal "5\\r\\nHELLOX" (err (string-append pre "5\r\nHELLOX\r\n"))
                      '(invalid-chunk-ending byte 54))))))
 
-;; --- the trailer section (§21.2:1110) -----------------------------------------
+;; --- the trailer section -----------------------------------------------------
 
 (harness-group "trailers reuse the header grammar; Content-Length/Transfer-Encoding are forbidden"
   (lambda ()
@@ -129,7 +129,7 @@
         (check-equal "Content-Lengthy is a permitted trailer"
                      (car (feed-finish (string-append pre "0\r\nContent-Lengthy: v\r\n\r\n"))) 'finished)))))
 
-;; --- split points (§22.5) -----------------------------------------------------
+;; --- split points ------------------------------------------------------------
 
 (harness-group "a chunked message coalesces identically across every split (§22.5)"
   (lambda ()

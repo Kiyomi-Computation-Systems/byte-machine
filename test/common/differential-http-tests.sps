@@ -1,15 +1,13 @@
-;;; Milestone 8 Slice ①: interpreter ≡ generated over the request line
-;;; (§25:1648, "interpreter and generated traces match"). This is the lane every
-;;; later slice extends; Slice ① drives the request-line grammar.
+;;; Interpreter ≡ generated over the HTTP fixture machine (http-machine.sls):
+;;; the request line, the header section, bodies and the message loop.
 ;;;
 ;;; Agreement alone cannot carry the lane — both executors read the same source
 ;;; IR (http-version-interpret-tests.sps's reason) — so the ABSOLUTE tuples and
 ;;; the absolute events live in http-request-line-tests.sps. Here the claim is
 ;;; that the two executors AGREE on the result tuple AND the event trace, for
-;;; every feed schedule, well-formed and malformed, plus §22.5's split points:
-;;; identical fragment boundaries for the same schedule (§22.5:1285), and the
-;;; coalesced event skeleton invariant across schedules while the raw fragment
-;;; trace is deliberately not (§22.5:1287).
+;;; every feed schedule, well-formed and malformed, plus split points: identical
+;;; fragment boundaries for the same schedule, and the coalesced event skeleton
+;;; invariant across schedules while the raw fragment trace is deliberately not.
 (import (rnrs) (rnrs eval)
         (only (chezscheme) load)
         (byte-machine test harness)
@@ -43,8 +41,7 @@
     (if (< i from) (list->string acc)
         (loop (- i 1) (cons (integer->char (bytevector-u8-ref bv i)) acc)))))
 ;; Bind EVERY callback the fixture declares, so the interpreter-vs-generated
-;; trace comparison covers the body, chunk and trailer events too (grown each
-;; slice).
+;; trace comparison covers the body, chunk and trailer events too.
 (define all-callbacks
   '(message-begin method-data method-complete target-data target-complete version-complete
     header-name-data header-name-complete header-value-data header-value-complete
@@ -136,7 +133,7 @@
              (check-equal (string-append "agree: " s) ri rg)))
          (list "@" "GE@ x HTTP/1.1\r\n" "GET \x01;;" "GET /a\x01; HTTP/1.1\r\n"
                "GET /x XTTP/1.1\r\n" "GET /x HTTP/1.1X" "GET /x HTTP/1.1\rX"
-               ;; Slice ②: header-region errors agree too.
+               ;; Header-region errors agree too.
                "GET / HTTP/1.1\r\n@bad\r\n" "GET / HTTP/1.1\r\nHost\r\n"
                "GET / HTTP/1.1\r\nHost: a\x01;b\r\n" "GET / HTTP/1.1\r\nHost: v\rX"
                "GET / HTTP/1.1\r\n\rX"))))))

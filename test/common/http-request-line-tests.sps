@@ -1,15 +1,15 @@
-;;; Milestone 8 Slice ①: the request line, through the reference interpreter with
-;;; ABSOLUTE expected outcomes — the events in §21.3 order, and the error
-;;; positions of Slice ⓪'s table, byte for byte.
+;;; The HTTP request line, through the reference interpreter with ABSOLUTE
+;;; expected outcomes — the events in the order the machine emits them, and the
+;;; request-line error positions, byte for byte.
 ;;;
 ;;; Absolute, not differential, on purpose (http-version-interpret-tests.sps's
 ;;; reason): both executors are built from the same source IR, so a defect there
 ;;; is wrong in both and a comparison stays green. differential-http-tests.sps
-;;; proves the two executors AGREE and folds in §22.5's split points; this file
+;;; proves the two executors AGREE and folds in split points; this file
 ;;; pins what the request line MEANS.
 ;;;
 ;;; The recorded trace is validated against the shared event-order oracle
-;;; (§4.9 item 1) as well as asserted absolutely, so a reordering the oracle's
+;;; as well as asserted absolutely, so a reordering the oracle's
 ;;; grammar forbids is caught by the grammar and not only by a hand-written
 ;;; expected list.
 (import (rnrs)
@@ -40,7 +40,7 @@
                 (list 'target-data (dv 'target-data))
                 (list 'target-complete (ev 'target-complete))
                 (list 'version-complete (ev 'version-complete))
-                ;; Slice ②: the fixture now fires these too; bind them so a
+                ;; The fixture fires these too; bind them so a
                 ;; complete no-body message's full trace is recorded.
                 (list 'header-name-data (dv 'header-name-data))
                 (list 'header-name-complete (ev 'header-name-complete))
@@ -91,7 +91,7 @@
             (loop end (cdr cs)
                   (parser-feed! p bv 0 (bytevector-length bv))))))))
 
-;; --- the machine is valid (§22.6 forbids driving an invalid graph) -----------
+;; --- the machine is valid (an invalid graph is never driven) ----------------
 
 (harness-group "the fixture verifies clean"
   (lambda ()
@@ -101,13 +101,13 @@
           (check "ok" (verification-ok? v))
           (check-equal "diagnostic count" (length (verification-diagnostics v)) 0))))))
 
-;; --- the §21.3 request-line events, absolutely and by the oracle -------------
+;; --- the request-line events, absolutely and by the oracle -----------------
 
 (harness-group "a well-formed request line fires §21.3's events in order"
   (lambda ()
     (harness-case "the request-line events fire in order, then the machine awaits the header section"
       (lambda ()
-        ;; Since Slice ②, the request-line CRLF leads into the header section
+        ;; The request-line CRLF leads into the header section
         ;; rather than stopping, so a bare request line reaches need-input at the
         ;; header line start with the request-line event PREFIX delivered.
         (let ((r (feed-whole "GET /index HTTP/1.1\r\n")))
@@ -149,7 +149,7 @@
                      '(message-begin method-data method-complete
                        target-data target-complete))))))))
 
-;; --- the request-line error rows of Slice ⓪'s table, byte for byte -----------
+;; --- the request-line error rows, byte for byte ----------------------------
 
 (harness-group "lexical errors at the first offending unconsumed byte (§21.4:1175)"
   (lambda ()
@@ -222,7 +222,7 @@
               (loop (+ k 1))))
           (check-equal "no split changed the skeleton or the idle terminal" bad 'none)
           (check-equal "all 22 single-cut splits ran" n 22)
-          ;; The negative sentinel (§22.5:1287): the RAW fragment trace is NOT
+          ;; The negative sentinel: the RAW fragment trace is NOT
           ;; invariant — a split inside `/index` splits the target-data delivery,
           ;; so at least two of the raw traces differ. Without this, "the
           ;; skeleton is invariant" could hold vacuously if every split produced

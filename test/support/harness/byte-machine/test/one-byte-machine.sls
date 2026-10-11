@@ -1,5 +1,5 @@
 ;;; The fixed one-byte proving machine, shared by the differential and example
-;;; lanes so the graph descriptor is written once (Slice A Minor T4). Built only
+;;; lanes so the graph descriptor is written once. Built only
 ;;; through (byte-machine graph).
 (library (byte-machine test one-byte-machine)
   (export make-one-byte-machine)

@@ -28,7 +28,7 @@
 (define (normalize m) (normalize-machine (verification-machine (verify-machine m))))
 (define n1 (normalize one-byte))
 
-;; Slice ①a task 4 helpers. `one-byte/reason` varies the reason of the
+;; Reason-variation helpers. `one-byte/reason` varies the reason of the
 ;; default-eof declaration, which IS referenced (it is the machine's
 ;; default-eof error); `one-byte/spare-reason` varies a third declaration that
 ;; no node names, so nothing resolves it and it never reaches the encoder.
@@ -62,10 +62,9 @@
           (check-equal "state 0 kind" (normal-state-kind (vector-ref s 0)) 'dispatch)
           (check-equal "state 1 kind" (normal-state-kind (vector-ref s 1)) 'stop)
           (check-equal "state 2 kind" (normal-state-kind (vector-ref s 2)) 'error))))
-    ;; Decision 0016 point 1: a DECLARED node keeps its declaration index; only
-    ;; internal prefix states break the old coincidence, and they append after
-    ;; the entire declared block. The one-byte machine has no sequence node, so
-    ;; its ids are unchanged -- which is decision 0016 point 2 in one assertion.
+    ;; A DECLARED node keeps its declaration index; internal prefix states
+    ;; append after the entire declared block. The one-byte machine has no
+    ;; sequence node, so its ids are exactly its declaration indices.
     (harness-case "declared nodes keep their declaration indices (decision 0016)"
       (lambda ()
         (let ((s (normal-machine-states n1)))
@@ -83,9 +82,9 @@
       (lambda ()
         (check-equal "code" (normal-error-code (vector-ref (normal-machine-states n1) 2))
                      'unexpected-byte)))
-    ;; Golden value: measured against this exact encoding (FORMAT TAG 2 since
-    ;; Milestone 4 Slice ①a; entry and state-count as u32be; then a u16be
-    ;; reserved field count, zero until Slice ①b; per dispatch state u16be
+    ;; Golden value: measured against this exact encoding (FORMAT TAG 2;
+    ;; entry and state-count as u32be; then a u16be field count, zero for a
+    ;; machine declaring no fields; per dispatch state u16be
     ;; transition count then each (u8 byte, u32be target, u8 mode) ascending by
     ;; byte, then u32be fallback target + u8 mode, then eof routing (tag 0 +
     ;; u32be node id, or tag 1 + u16be code-length + UTF-8 default-eof code bytes
@@ -102,12 +101,11 @@
         (check-equal "same fingerprint twice"
                      (normal-machine-fingerprint (normalize one-byte))
                      (normal-machine-fingerprint n1))))
-    ;; Milestone 4 Slice ①a task 4 (decision 0019 item 2). The reason must enter
-    ;; the ENCODING, not merely be readable from the source machine: decision
-    ;; 0009 point 2 computes the fingerprint over the canonical normalized IR and
-    ;; §20:1043 makes that the object the determinism checks compare, so two
-    ;; machines differing only in a reason must differ in fingerprint or the
-    ;; fingerprint stops identifying what was emitted.
+    ;; The reason must enter the ENCODING, not merely be readable from the
+    ;; source machine: the fingerprint is computed over the canonical normalized
+    ;; IR and is the object the determinism checks compare, so two machines
+    ;; differing only in a reason must differ in fingerprint or the fingerprint
+    ;; stops identifying what was emitted.
     (harness-case "two machines differing only in a reason differ in fingerprint"
       (lambda ()
         (check "different"
@@ -121,18 +119,18 @@
         ;; declaration no node names and that is not the default-eof error never
         ;; reaches the encoder, so this pair must be EQUAL. Stated as its own case
         ;; because a reader who varies an unreferenced reason and sees no
-        ;; fingerprint move would otherwise read it as the slice failing.
+        ;; fingerprint move would otherwise read it as a defect.
         (check-equal "equal"
                      (normal-machine-fingerprint (normalize (one-byte/spare-reason "first")))
                      (normal-machine-fingerprint (normalize (one-byte/spare-reason "second"))))))))
 
-;; Milestone 4 Slice ①b task 5: slot assignment and the field table (§17:962,
-;; "assign field, callback, and span slots"; decision 0019 item 3(a)).
+;; Slot assignment and the field table: the normalizer assigns field, callback,
+;; and span slots.
 ;;
-;; SLOT = DECLARATION INDEX. Decision 0016 point 1's two-phase append applied to
-;; fields, of which fields have only the first phase: nothing synthesizes a
-;; field, so there is no internal-state append to follow the declared ones, and
-;; §10.1:482 already makes declaration order the source of stable IDs.
+;; SLOT = DECLARATION INDEX. The declared-then-internal append that state ids
+;; follow, applied to fields, of which fields have only the first phase:
+;; nothing synthesizes a field, so there is no internal-state append to follow
+;; the declared ones, and declaration order is the source of stable IDs.
 (define (one-byte/fields fs)
   (make-machine 'one-byte 'start fs '() '() (list eof-decl rej-decl)
     (list (make-byte-dispatch-node 'start
@@ -160,19 +158,14 @@
       (lambda ()
         (check-equal "empty" (normal-machine-fields n1) '())))
     ;; The three cases below are the reason the table is ENCODED rather than
-    ;; merely carried. Decision 0009 point 2 computes the fingerprint over the
-    ;; canonical normalized IR and §20:1043 makes that the object the determinism
-    ;; checks compare, so any part of a declaration the generated parser can
-    ;; observe must move the fingerprint, or the fingerprint stops identifying
-    ;; what was emitted. The NAME is observable now, through parser-field-ref;
-    ;; the INITIAL is, through a read before any write. The WIDTH is not yet --
-    ;; nothing in this slice writes a field, so no value can exceed its declared
-    ;; range and the width has no runtime effect. It is encoded anyway because
-    ;; Slice ②'s field writes make it observable, and a width that entered the
-    ;; encoding later would move every field-declaring fingerprint at that point.
-    ;; (This comment claimed all three were observable today; two are.) One case per component, because a
-    ;; single "two different field lists differ" case passes with two of the
-    ;; three unencoded.
+    ;; merely carried. The fingerprint is computed over the canonical normalized
+    ;; IR and is the object the determinism checks compare, so any part of a
+    ;; declaration the generated parser can observe must move the fingerprint,
+    ;; or the fingerprint stops identifying what was emitted. The NAME is
+    ;; observable through parser-field-ref; the INITIAL through a read before
+    ;; any write; the WIDTH through a field write, which cannot exceed the
+    ;; declared range. One case per component, because a single "two different
+    ;; field lists differ" case passes with two of the three unencoded.
     (harness-case "two machines differing only in a field NAME differ in fingerprint"
       (lambda ()
         (check "different"
@@ -194,12 +187,12 @@
                         (normalize (one-byte/fields (list (make-uint-field 'count 8 0 #f)))))
                        (normal-machine-fingerprint
                         (normalize (one-byte/fields (list (make-uint-field 'count 8 1 #f))))))))))
-    ;; Milestone 13: settability is observable to a generated parser -- a settable
+    ;; Settability is observable to a generated parser -- a settable
     ;; field carries a table in the emitted payload that make-parser range-checks
     ;; against -- so two machines differing only in one field's settable flag must
     ;; differ in fingerprint, or the tag-10 settable section is not encoded and a
     ;; settable and a non-settable machine share a fingerprint but emit different
-    ;; bytes (the decision-0019 rule).
+    ;; bytes.
     (harness-case "two machines differing only in a field's SETTABLE flag differ in fingerprint"
       (lambda ()
         (check "different"
@@ -219,11 +212,11 @@
                        (normal-machine-fingerprint
                         (normalize (one-byte/fields (list (make-uint-field 'limit 8 0 #f)
                                                           (make-uint-field 'count 8 0 #f))))))))))
-    ;; Decision 0019 item 5, asserted rather than assumed: ①a reserved the count
-    ;; slot so that a zero-field machine encodes IDENTICALLY once ①b fills it.
-    ;; The golden case above is that assertion for the one-byte machine; this one
-    ;; states it as the invariant it is, at the value ①a measured.
-    ;; The slice's own field-declaring golden (design §6 task 5). The inequality
+    ;; A zero-field machine encodes IDENTICALLY with or without the field
+    ;; table: the count slot is always written, and a zero count adds no
+    ;; records. The golden case above is that assertion for the one-byte
+    ;; machine; the last case below states it as an invariant, at that value.
+    ;; The field-declaring golden. The inequality
     ;; cases above cannot replace it: dropping the COUNT while still writing the
     ;; records leaves every one of those pairs unequal, so the count byte has no
     ;; witness among them. Only an exact value pins the whole record layout --
@@ -241,7 +234,7 @@
         (check-equal "unmoved" (normal-machine-fingerprint (normalize (one-byte/fields '())))
                      14095574568398596535)))))
 
-;; --- the trailing slot-table sections (Milestone 5 Slice ①b) -----------------
+;; --- the trailing slot-table sections ----------------------------------------
 (define (one-byte/decls cbs sps)
   (make-machine 'one-byte 'start '() cbs sps (list eof-decl rej-decl)
     (list (make-byte-dispatch-node 'start
@@ -257,10 +250,10 @@
   (lambda ()
     (harness-case "a machine declaring neither is byte-identical to Slice ①a's"
       (lambda ()
-        ;; Decision 0025 point 1's whole bargain, at ①a's own measured value.
-        ;; Every byte of both sections is inside a guard, so this machine writes
-        ;; none of them -- and if it wrote even one, all four committed goldens
-        ;; would move with this number.
+        ;; The sections cost nothing on a machine that declares none, at the
+        ;; one-byte golden value. Every byte of both sections is inside a guard,
+        ;; so this machine writes none of them -- and if it wrote even one, every
+        ;; committed golden would move with this number.
         (check-equal "unmoved" (normal-machine-fingerprint (normalize (one-byte/decls '() '())))
                      14095574568398596535)))
     (harness-case "declaring a callback moves the fingerprint"
@@ -273,15 +266,14 @@
                        14095574568398596535)))))
     (harness-case "a callback and a span are not confusable"
       (lambda ()
-        ;; The section tag is one of two things keeping these apart, and after
-        ;; the final review's encoding fix it is no longer the load-bearing one:
-        ;; a callback record now carries name + kind + required? + default while
-        ;; a span record carries name + data + complete, so the two shapes differ
-        ;; even with identical names. The tag remains for self-description and so
-        ;; that a THIRD section can be added without re-deriving this argument.
-        ;; Measured: a mutation collapsing the two tags is UNCAUGHT, and that is
-        ;; recorded rather than papered over -- see the retired pin's comment in
-        ;; SchemeMutationSuite.cmake.
+        ;; The section tag is one of two things keeping these apart, and not the
+        ;; load-bearing one: a callback record carries name + kind + required? +
+        ;; default while a span record carries name + data + complete, so the two
+        ;; shapes differ even with identical names. The tag remains for
+        ;; self-description and so that a THIRD section can be added without
+        ;; re-deriving this argument. A mutation collapsing the two tags is
+        ;; therefore UNCAUGHT, so no mutation pins the tag; SchemeMutationSuite.cmake
+        ;; says so beside the section-table pins.
         (let ((cb-only (normal-machine-fingerprint
                         (normalize (one-byte/decls (list (a-cb 'x 'span-data)) '()))))
               (sp-only (normal-machine-fingerprint
@@ -296,14 +288,12 @@
           (check-equal "span slots" (normal-machine-spans n) '((only 0))))))
     (harness-case "EVERY part the ABI carries is in the fingerprint"
       (lambda ()
-        ;; *** THE FINAL REVIEW'S CRITICAL FINDING, and it was mine. *** The
-        ;; first version of the trailing sections encoded only the NAME, while
-        ;; the emitter rendered name, kind, required? and default-branch into ABI
-        ;; member 1. Measured then: two machines differing only in `required?`
-        ;; shared fingerprint 4858454120852933155 and emitted DIFFERENT
-        ;; libraries -- one raising `missing-required-callback` from make-parser,
-        ;; the other building. That is the converse of decision 0019 item 2's
-        ;; property, which this file's own comment at :64-70 states for fields.
+        ;; The emitter renders name, kind, required? and default-branch into ABI
+        ;; member 1, so every one of them must be encoded: a section encoding
+        ;; only the NAME lets two machines differing only in `required?` share a
+        ;; fingerprint and emit DIFFERENT libraries -- one raising
+        ;; `missing-required-callback` from make-parser, the other building. This
+        ;; is the rule the reason cases above state, applied to the slot tables.
         ;;
         ;; A sentinel over OBSERVED pairs, so a loop that never ran cannot pass.
         (let ((checked 0) (same '()))
@@ -339,8 +329,8 @@
           (check-equal "and none of them collided" same '()))))
     (harness-case "declaration ORDER is observable, so two orders differ"
       (lambda ()
-        ;; §10.1:482 gives declaration order no semantic priority and exists to
-        ;; provide stable ids -- which is exactly why the id must be visible.
+        ;; Declaration order has no semantic priority and exists to provide
+        ;; stable ids -- which is exactly why the id must be visible.
         (check "distinct"
                (not (= (normal-machine-fingerprint
                         (normalize (one-byte/decls (list (a-cb 'a 'event) (a-cb 'b 'event)) '())))
@@ -391,7 +381,7 @@
         (check-equal "fingerprint" (normal-machine-fingerprint n-eof)
                      13828870821654800916)))))
 
-;; The pause tag (4) plus its u32be continuation id (D5) is not exercised by
+;; The pause tag (4) plus its u32be continuation id is not exercised by
 ;; the one-byte or node-routing goldens above -- neither fixture has a pause
 ;; node -- so this is the only golden that moves when the pause encode arm's
 ;; bytes change. Same measured-golden discipline as those two cases; node
@@ -413,14 +403,13 @@
           (check-equal "pe target" (normal-pause-target pe) 5))))
     (harness-case "the pause encoding is pinned by a fingerprint golden"
       (lambda ()
-        ;; Milestone 12: the shared pause machine's p1 and pe now declare reasons,
-        ;; so the pause encoding carries them and the golden re-baselines from the
-        ;; reason-less 17903327606435836645 -- the change is the point.
+        ;; The shared pause machine's p1 and pe declare reasons, so the pause
+        ;; encoding carries them and this golden includes their bytes.
         (check-equal "pause fingerprint" (normal-machine-fingerprint n-pause)
                      4328141021048275055)))
-    ;; Milestone 12: a pause reason enters the encoding (the decision-0019 rule),
-    ;; so two machines differing ONLY in a pause reason differ in fingerprint, and
-    ;; a reason-less pause is byte-identical to before the reason existed.
+    ;; A pause reason enters the encoding, so two machines differing ONLY in a
+    ;; pause reason differ in fingerprint; a reason-less pause writes only its
+    ;; tag and continuation id.
     (harness-case "a pause reason changes the fingerprint; no reason leaves it unmoved"
       (lambda ()
         (define (pm reason)
@@ -441,11 +430,9 @@
                (not (= (normal-machine-fingerprint (normalize (pm #t)))
                        (normal-machine-fingerprint (normalize (pm #f))))))))))
 
-;; Milestone 3 Slice ① Task 4 (decision 0014): a byte set, range or complement
-;; lowers to ONE normalized transition per byte. Normalized IR gains no grouped
-;; or set-valued transition and its encoding gains no new arm -- so these cases
-;; check the transition LIST, and the three fingerprint goldens above (which no
-;; class machine touches) are what proves the encoding did not move.
+;; A byte set, range or complement lowers to ONE normalized transition per
+;; byte. Normalized IR has no grouped or set-valued transition and its encoding
+;; has no class arm -- so these cases check the transition LIST.
 (define (class-machine name cases)
   (make-machine name 'start '() '() '() (list eof-decl rej-decl)
     (list (make-byte-dispatch-node 'start cases (make-edge 'reject 'reexecute) #f #f)
@@ -505,7 +492,7 @@
           (check-equal "first" (car bs) 0)
           (check-equal "last" (list-ref bs 255) 255))))))
 
-;; Milestone 3 Slice ② Task 2 (decisions 0015 and 0016). A sequence node lowers
+;; A sequence node lowers
 ;; to ORDINARY dispatch states -- no new state kind, no new encoding arm -- with
 ;; alternatives merged into a trie so no prefix state can offer the same byte
 ;; twice, which is what keeps the ascending-by-byte sort a total order.
@@ -645,10 +632,10 @@
         (check-equal "sb prefix states are 6,7" (trs-of two 6) '((2 7 advance)))
         (check-equal "state count" (state-count two) 8)))))
 
-;; Milestone 3 Slice ③ Task 3: the §21.2:1065 `version` production lowered.
-;; Two alternatives sharing the seven-byte prefix `HTTP/1.` descend into ONE
-;; chain and part at ONE state -- §10.6:544's shared nonterminal prefixes, and
-;; the property that makes decision 0014's ascending-by-byte sort a total order
+;; The HTTP `version` production lowered. Two alternatives sharing the
+;; seven-byte prefix `HTTP/1.` descend into ONE chain and part at ONE state --
+;; shared alternative prefixes, and the property that makes the
+;; ascending-by-byte transition sort a total order
 ;; (no prefix state can offer the same byte twice). This is where "each
 ;; alternative reaches its OWN declared node" is observable at all: both
 ;; targets are stop nodes, so the two accepts are behaviourally identical.
@@ -680,7 +667,7 @@
         ;; an alternative would show one transition here -- and this file is
         ;; where that has to be caught, because http-version-interpret-tests.sps
         ;; drives the same two alternatives through the reference interpreter,
-        ;; which never touches the normalizer (interpret.sls's header, §18) and
+        ;; which never touches the normalizer (interpret.sls's header) and
         ;; so cannot see a lowering defect at all. The AB/AC group above makes
         ;; the same claim over a one-byte prefix; this one carries the seven-byte
         ;; chain with it.
@@ -715,7 +702,7 @@
                       (lambda () (normalize (seq-machine 'dup '(((65 66) . stop)
                                                                 ((65 66) . halt))
                                                          (list (make-stop-node 'halt #f))))))))
-    ;; Minor 3 (Fix wave 1): trie-insert's bs-NULL branch carries a THIRD guard
+    ;; trie-insert's bs-NULL branch carries a THIRD guard
     ;; -- (when (trie-interior? t) ...) -- distinct from the bs-non-null-branch
     ;; guard the "AB|ABC" case above witnesses. It fires only when a LONGER
     ;; alternative is inserted BEFORE its own prefix (every fixture above
@@ -728,10 +715,10 @@
                                                          (list (make-stop-node 'halt #f))))))))))
 
 
-;; Milestone 4 Slice ② task 5: the two zero-width kinds lower 1:1 and encode at
-;; tags 5 and 6. Each new encode arm gets its OWN exact-value golden, which is
-;; this file's shipped discipline -- an inequality pair cannot see a dropped
-;; count or a transposed pair, only a wrong VALUE can.
+;; The two zero-width kinds lower 1:1 and encode at tags 5 and 6. Each encode
+;; arm gets its OWN exact-value golden, which is this file's discipline -- an
+;; inequality pair cannot see a dropped count or a transposed pair, only a
+;; wrong VALUE can.
 (define s2-eof (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
 (define s2-rej (make-error-declaration 'rejected 'unexpected-byte "unexpected byte" #f))
 (define (s2-machine nodes)
@@ -791,26 +778,25 @@
           (check "different" (not (= (s2-fp safe) (s2-fp fallible)))))))
     (harness-case "widening the state vector moved no existing fingerprint"
       (lambda ()
-        ;; Design §0 D3's whole cost argument: ② pays the six-literal edit and
-        ;; existing machines encode identically, because the new slots are #f for
-        ;; every shipped kind and none of them is written. Asserted at ①a's own
-        ;; measured value rather than left to the goldens to notice.
+        ;; Machines without these kinds encode identically, because the slots
+        ;; the zero-width kinds use are #f for every other kind and none of
+        ;; them is written. Asserted at the one-byte golden value rather than
+        ;; left to the goldens to notice.
         (check-equal "unmoved" (normal-machine-fingerprint n1) 14095574568398596535)))))
 
 
-;; *** Whole-branch review of Slice ②: every normalized state must be the LENGTH
-;; THIS FILE'S LAYOUT DECLARES, and one kind was not. ***
+;; *** Every normalized state must be the LENGTH THIS FILE'S LAYOUT DECLARES:
+;; eleven slots. ***
 ;;
-;; Slice ② widened the vector from eight slots to eleven and missed `seq-state`,
-;; which builds every sequence-dispatch node's state. Sequence states carry kind
-;; `dispatch`, and the only readers of slots 8-10 are kind-guarded, so nothing
-;; reached one and all 92 lanes stayed green -- while four of the six states in
-;; the sequence-node fixture were three slots short of the declared layout.
+;; State literals are built in several places, among them `seq-state`, which
+;; builds every sequence-dispatch node's state. Sequence states carry kind
+;; `dispatch`, and the only readers of slots 8-10 are kind-guarded, so a
+;; sequence state three slots short would reach no reader and pass every other
+;; lane.
 ;;
 ;; This case is TOTAL over the state kinds a fixture can produce, deliberately:
-;; a case naming one kind would have passed the whole time. It is the check that
-;; makes "the vector was widened" a fact rather than a claim, and the reason a
-;; later slice adding a kind cannot repeat the miss.
+;; a case naming one kind cannot see a short literal in another kind's
+;; builder.
 (define (state-lengths m)
   (let* ((ss (normal-machine-states (normalize m))))
     (let loop ((i 0) (acc '()))
@@ -838,8 +824,8 @@
           (check "every fixture contributed states" (> seen 20)))))))
 
 
-;; Milestone 4 Slice ③ task 3: integer accumulate lowers 1:1 and encodes at tag 7.
-;; Its own exact-value goldens, per this file's discipline for a new encode arm.
+;; Integer accumulate lowers 1:1 and encodes at tag 7. Its own exact-value
+;; goldens, per this file's discipline for an encode arm.
 (define (acc-machine base eof)
   (make-machine 'm 'acc (list (make-uint-field 'count 32 0 #f)) '() '()
     (list s2-eof s2-rej)
@@ -864,28 +850,27 @@
     (harness-case "the EOF routing reaches the encoding"
       (lambda ()
         ;; `#f` routes to the machine default-eof error and a symbol routes to a
-        ;; node -- slot 6's shipped (node . id) / (default . code) convention,
+        ;; node -- slot 6's (node . id) / (default . code) convention,
         ;; reused verbatim rather than given a parallel encoding.
         (check-equal "node routing" (s2-fp (acc-machine 10 'stop)) 11426950116850452563)
         (check "differs from the default routing"
                (not (= (s2-fp (acc-machine 10 'stop)) (s2-fp (acc-machine 10 #f)))))))
     (harness-case "the accumulate state has the declared layout length"
       (lambda ()
-        ;; The check Slice ②'s `seq-state` miss earned: total over the states a
-        ;; fixture produces, so a kind three slots short cannot hide behind a
-        ;; kind-guarded reader.
+        ;; The layout-length check: total over the states a fixture produces,
+        ;; so a kind three slots short cannot hide behind a kind-guarded
+        ;; reader.
         (let ((bad '()))
           (for-each (lambda (len) (unless (= len 11) (set! bad (cons len bad))))
                     (state-lengths (acc-machine 10 #f)))
           (check-equal "all eleven" bad '()))))))
 
-;; --- Milestone 6 Slice ①: the counted-consume state's encoding ---------------
+;; --- the counted-consume state's encoding ------------------------------------
 ;;
-;; The thirteenth kind lowers 1:1 (design §4.4): `arguments` the field NAME,
-;; `targets` the one successor id, slot 6 the EOF routing in the shipped
-;; convention through its own resolver, no selector. Every part is encoded
-;; (decision 0019 item 2), so the three drift pairs below each move the
-;; fingerprint. The fixture puts a dispatch in front of the counted node so the
+;; The counted-consume kind lowers 1:1: `arguments` the field NAME, `targets`
+;; the one successor id, slot 6 the EOF routing in the shared convention
+;; through its own resolver, no selector. Every part is encoded, so the three
+;; drift pairs below each move the fingerprint. The fixture puts a dispatch in front of the counted node so the
 ;; base machine verifies clean; the "another successor" variant does not (its
 ;; stop is unreachable), which the normalizer does not care about and the
 ;; fingerprint pins regardless.
@@ -936,14 +921,13 @@
             (check-equal "default EOF routing" (car (normal-dispatch-eof st)) 'default)
             (check-equal "no selector" (normal-field-selector st) #f)))))))
 
-;; --- Milestone 5 Slice ②: the callback state's encoding ----------------------
+;; --- the callback state's encoding -------------------------------------------
 ;;
-;; *** THIS GROUP IS DECISION 0019 ITEM 2, and Slice ①b shipped its converse.
-;; *** That slice encoded a callback declaration's NAME and nothing else, so two
-;; machines differing only in `required?` shared one fingerprint and emitted
-;; different libraries. The rule is that a datum "must enter the *encoding*, not
-;; merely be read from the source machine", so every part the callback state
-;; carries is varied here ONE AT A TIME and the fingerprints must differ.
+;; A datum must enter the *encoding*, not merely be read from the source
+;; machine: encoding only a callback declaration's NAME would let two machines
+;; differing only in `required?` share one fingerprint and emit different
+;; libraries. So every part the callback state carries is varied here ONE AT A
+;; TIME and the fingerprints must differ.
 ;;
 ;; The pairs are built from one parameterised machine, so a variation cannot
 ;; move something else by accident: exactly one argument changes per case.
@@ -992,7 +976,7 @@
                      (map diagnostic-code (verification-diagnostics
                                            (verify-machine (cbm-base))))
                      '())
-        ;; A GOLDEN, measured 2026-09-05. It is what pins the wire TAG and the
+        ;; A GOLDEN. It is what pins the wire TAG and the
         ;; field order: every pairwise inequality below survives a tag change,
         ;; because a tag change moves all of them together.
         (check-equal "fingerprint" (s2-fp (cbm-base)) 4714737223744993991)))
@@ -1002,12 +986,12 @@
         ;; failed to move -- a bare boolean here would say "something is wrong"
         ;; and not which part is unencoded, which is the whole finding.
         (let ((base (s2-fp (cbm-base))) (driven 0) (same '()))
-          ;; *** The SLOT has its own base, and isolating it took a second
-          ;; attempt worth recording. *** Varying it by ADDING a declaration
-          ;; before the invoked one moves the fingerprint whatever the state
-          ;; encodes, because the trailing declaration SECTION grows with it --
-          ;; so that pair proved nothing about the state and its mutation was
-          ;; caught for the wrong reason. This pair holds the declaration table
+          ;; *** The SLOT has its own base. *** Varying it by ADDING a
+          ;; declaration before the invoked one moves the fingerprint whatever
+          ;; the state encodes, because the trailing declaration SECTION grows
+          ;; with it -- so such a pair proves nothing about the state, and a
+          ;; mutation dropping the slot would be caught for the wrong reason.
+          ;; This pair holds the declaration table
           ;; FIXED at two identical-but-for-name entries and moves only which
           ;; one the node names, which nothing but the state's slot can account
           ;; for. Counted into `driven` beside the rest.
@@ -1037,8 +1021,8 @@
                   (lambda () (cbm-machine 'decide '(keep drop)
                                           '((keep stop) (drop other)) 'stop 'reject
                                           #t #f)))
-            ;; §9.1:318 makes a branch map "a proper list in deterministic
-            ;; caller order", so two machines whose branches differ only in
+            ;; A branch map is a proper list in deterministic caller order,
+            ;; so two machines whose branches differ only in
             ;; ORDER are two machines and must not share a fingerprint.
             (list 'branch-order
                   (lambda () (cbm-machine 'decide '(keep skip)
@@ -1067,18 +1051,16 @@
                                            #f 'skip)))))))
     (harness-case "the callback state has the declared layout length"
       (lambda ()
-        ;; The same total Slice ②'s `seq-state` miss earned, one kind later.
+        ;; The layout-length check, for the callback kind.
         (let ((bad '()))
           (for-each (lambda (len) (unless (= len 11) (set! bad (cons len bad))))
                     (state-lengths (cbm-base)))
           (check-equal "all eleven" bad '()))))))
 
-;; --- Milestone 5 Slice ③: the span states' encoding ---------------------------
+;; --- the span states' encoding -----------------------------------------------
 ;;
-;; Decision 0019 item 2, one kind family later, and the group's shape is copied
-;; from Slice ②'s callback separability group because that slice shipped the
-;; converse first: a datum "must enter the *encoding*, not merely be read from
-;; the source machine".
+;; The callback group's rule for the span family, in the same shape: a datum
+;; must enter the *encoding*, not merely be read from the source machine.
 ;;
 ;; What makes this family different: a span END lowers to TWO states, so the
 ;; state count itself moves, and the golden below is what pins the wire tags --
@@ -1098,14 +1080,13 @@
             (make-edge 'reject 'reexecute) #f #f)
           (make-span-start-node 'op span-of-start start-next #f)
           (make-span-end-node 'cl span-of-end end-next #f)
-          ;; *** `done` IS A DISPATCH, and it was a stop until Slice ③'s census
-          ;; reconciliation. *** A span end is a parked state (§16.2:909, and
-          ;; `parked-eof-start`'s own note), so a span end continuing straight
-          ;; into a stop is a machine `parser-finish!` can answer `stopped` from
-          ;; after a span-data pause. The base machine has to VERIFY for the
-          ;; fingerprint below to mean anything, so the stop moved behind a
-          ;; dispatch whose EOF route is the error terminal. Six nodes still, and
-          ;; still one internal state.
+          ;; *** `done` IS A DISPATCH, not a stop. *** A span end is a parked
+          ;; state (`parked-eof-start`'s own note), so a span end continuing
+          ;; straight into a stop is a machine `parser-finish!` can answer
+          ;; `stopped` from after a span-data pause, which the verifier
+          ;; rejects. The base machine has to VERIFY for the fingerprint below
+          ;; to mean anything, so the stop sits behind a dispatch whose EOF
+          ;; route is the error terminal. Six nodes, one internal state.
           (make-byte-dispatch-node 'done
             (list (make-byte-case (make-exact-byte-matcher 2)
                                   (make-edge 'other-stop 'advance) #f))
@@ -1125,13 +1106,9 @@
                      (map diagnostic-code
                           (verification-diagnostics (verify-machine (span-fp-base))))
                      '())
-        ;; A GOLDEN, RE-MEASURED 2026-09-05 when the tail above changed. It is
-        ;; what pins the three wire tags and the field order; the inequalities
-        ;; below cannot, because a tag change moves every span fingerprint
-        ;; together. The previous value was 346240202880439782, against the base
-        ;; machine whose span end continued straight into a stop -- a machine the
-        ;; verifier now rejects, so the number was pinning a shape this fixture
-        ;; may not build.
+        ;; A GOLDEN. It is what pins the three wire tags and the field order;
+        ;; the inequalities below cannot, because a tag change moves every span
+        ;; fingerprint together.
         (check-equal "fingerprint" (s2-fp (span-fp-base)) 8308402030897048213)))
     (harness-case "each part varied alone moves the fingerprint"
       (lambda ()
@@ -1147,9 +1124,9 @@
            (list
             ;; The SPAN SLOT. Both declarations stay in the table and only which
             ;; one the nodes name moves, so nothing but the state's own slot can
-            ;; account for it -- the isolation Slice ② had to find twice for the
-            ;; callback slot, where adding a declaration moved the trailing
-            ;; declaration section too.
+            ;; account for it -- the same isolation as the callback slot's pair,
+            ;; where adding a declaration would move the trailing declaration
+            ;; section too.
             (list 'span-slot (lambda () (span-fp-machine 'other 'other 'cl 'done)))
             (list 'start-next (lambda () (span-fp-machine 'body 'body 'reject 'done)))
             (list 'end-next (lambda () (span-fp-machine 'body 'body 'cl 'other-stop)))))
@@ -1157,9 +1134,8 @@
           (check-equal "and every one moved the fingerprint" same '()))))
     (harness-case "a span end lowers to TWO states and a span start to one"
       (lambda ()
-        ;; Decision 0026 item 2: one internal state per resumable substep, not a
-        ;; fused state, because §14:838 resumes "at the next undelivered
-        ;; substep". The declared block is six nodes, so a seventh state is the
+        ;; One internal state per resumable substep, not a fused state, because
+        ;; a resume continues at the next undelivered substep. The declared block is six nodes, so a seventh state is the
         ;; span end's own continuation and nothing else.
         (check-equal "seven states for six nodes"
                      (vector-length (normal-machine-states (normalize (span-fp-base))))
@@ -1170,10 +1146,9 @@
                      'span-completion)))
     (harness-case "the debug map stays total over the new family"
       (lambda ()
-        ;; §17:963, and §13:820 requires the public parser state to name the
-        ;; SOURCE span node rather than a generated internal continuation. Slice
-        ;; ② made an incomplete map an index error in the generated lane, not a
-        ;; missing debug string.
+        ;; The public parser state names the SOURCE span node rather than a
+        ;; generated internal continuation, and in the generated lane an
+        ;; incomplete map is an index error, not a missing debug string.
         (let* ((n (normalize (span-fp-base)))
                (m (normal-machine-debug-map n))
                (missing '()))
