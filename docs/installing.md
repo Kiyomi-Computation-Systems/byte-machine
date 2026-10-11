@@ -13,8 +13,9 @@ this repository on Chez's library path, and then you can import.
 
 macOS on arm64 is where byte-machine is developed and fully tested. Linux
 (amd64 and arm64) and Windows (amd64) are supported targets, and nothing in
-the code is platform-specific. Linux amd64 has a CI job that runs on demand;
-Linux arm64 and Windows have none.
+the code is platform-specific. Linux amd64 has a CI job that runs on every
+push to `main` and on pull requests labelled `ci`; Linux arm64 and Windows
+have none.
 
 ## 1. Get the source
 
