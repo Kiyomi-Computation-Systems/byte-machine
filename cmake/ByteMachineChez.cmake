@@ -24,10 +24,9 @@
 #
 # WHY THREADING IS NOT CHECKED
 #
-# The sibling protium project requires threaded Chez because libuv gives it a
-# loop-owner thread model. byte-machine has no threads anywhere in its design,
-# so gating on a threaded build here would be a copied requirement rather than a
-# real one. The flag is recorded as portability evidence, not enforced.
+# byte-machine has no threads anywhere in its design, so requiring a threaded
+# Chez build would be a requirement with no reason behind it. The flag is
+# recorded as portability evidence, not enforced.
 #
 # This module defines functions and does not run discovery on include, so its
 # functional core is specifiable under `cmake -P` without a Chez present. Call
@@ -40,9 +39,8 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/ByteMachineProbe.cmake")
 
 # The floor is what this project has actually verified, not what it guesses it
-# could tolerate. Milestone 0 question 1 (parent plan section 30) is answered by
-# CI, and lowering this pin is that answer's job; raising it needs a reason
-# recorded in .decisions.
+# could tolerate. Lower it only with CI evidence from the older release; raise
+# it only with a recorded reason.
 set(BYTE_MACHINE_CHEZ_MINIMUM_VERSION "10.4.1")
 
 # Searched in this order. `scheme` is first because it is what upstream installs,
@@ -121,9 +119,8 @@ function(byte_machine_chez_classify output path
   endif()
   set(version "${CMAKE_MATCH_1}")
 
-  # A floor, not an equality: the parent plan's Tier 2 matrix explicitly
-  # includes additional implementation versions, so exact-matching would
-  # contradict it.
+  # A floor, not an equality: newer Chez releases are supported, so
+  # exact-matching would refuse them.
   # The floor must be present before it can be enforced. `if(x VERSION_LESS "")`
   # evaluates FALSE in CMake, so an unset or out-of-scope minimum would accept
   # every version silently -- the one guard behind this project's portability
@@ -193,10 +190,10 @@ endfunction()
 # candidate that cannot even be executed is a verdict on that candidate, not on
 # the host, and the search has to be able to move on to the next name.
 #
-# This was learned the hard way. When the probe raised, a `chezscheme` on PATH
-# that was a symlink to a Petite binary aborted the entire search -- Chez locates
-# its boot files from argv[0], so the wrong name makes it die rather than answer
-# -- and a perfectly good `chez` two entries later was never reached.
+# A raising probe would let one broken candidate abort the entire search: a
+# `chezscheme` on PATH that is a symlink to a Petite binary dies rather than
+# answering -- Chez locates its boot files from argv[0] -- and a perfectly good
+# `chez` two entries later would never be reached.
 #
 # Status is `ok` or `no-answer`. execute_process reports a failure to run at all
 # as a non-numeric RESULT_VARIABLE, which covers both a timeout and a subprocess

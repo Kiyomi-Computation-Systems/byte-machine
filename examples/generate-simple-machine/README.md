@@ -1,8 +1,8 @@
 # Example: generate a simple machine
 
-A minimal, end-to-end demonstration of the byte-machine v0.1 flow, using **only**
+A minimal, end-to-end demonstration of the byte-machine flow, using **only**
 the public procedural API (`(byte-machine graph)` for construction — never the
-private tagged-vector constructors, per §27:1703).
+private tagged-vector constructors).
 
 The machine accepts exactly one byte, ASCII `'A'` (`0x41`), then stops. Any other
 first byte is rejected with `unexpected-byte`; end of input before the byte is
@@ -44,7 +44,7 @@ Set `BYTE_MACHINE_EXAMPLE_OUT` to write the generated library somewhere else.
    bypassed (`compilation-ok?` reports the result).
 3. **Emit** the generated Scheme library with `emit-machine`.
 4. **Load** it — the generated library imports only `(rnrs)` and
-   `(byte-machine runtime)` (the dependency boundary of §26:1681; see
+   `(byte-machine runtime)` (see
    [the integration guide](../../.reference/generated-code-integration-chez.md)).
 5. **Run** it: `make-parser`, `parser-feed!`, and read `parser-result-status`,
    `parser-result-consumed`, and the `parser-error` fields.

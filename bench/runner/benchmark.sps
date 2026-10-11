@@ -1,16 +1,12 @@
-;;; Milestone 9 Slice ③: the v0.1 compiled-benchmark runner (§23.1, §23.2).
+;;; The compiled-benchmark runner.
 ;;;
-;;; Produces the committed baseline artefact §23.1 specifies: canonical workload
-;;; bytes, deterministic seeds, harness version, exact commands, raw samples,
-;;; summarised statistics, and a distinction between required metrics and metrics
-;;; unavailable on this runtime. v0.1 RECORDS baselines and has NO noisy CI perf
-;;; gate (§23.1); this runner is not a gating lane. The one gated, deterministic
-;;; property — no per-byte allocation in the generated path — is asserted
-;;; separately by test/common/allocation-audit-tests.sps (decision 0040).
-;;;
-;;; This slice records and does not act: §23.3's admission rule is not met for
-;;; anything in §29 and no optimisation is attempted (§26:1679 "without
-;;; speculative optimization").
+;;; Produces a baseline artefact: canonical workload bytes, deterministic seeds,
+;;; harness version, exact commands, raw samples, summarised statistics, and a
+;;; distinction between required metrics and metrics unavailable on this
+;;; runtime. It RECORDS baselines and is not a gating lane: there is no noisy CI
+;;; performance gate. The one gated, deterministic property — no per-byte
+;;; allocation in the generated path — is asserted separately by
+;;; test/common/allocation-audit-tests.sps.
 ;;;
 ;;; Run (the exact command recorded in the artefact):
 ;;;   chez --script test/support/launchers/chez-source.ss \
@@ -37,17 +33,16 @@
 (define rounds (string->number (env "BYTE_MACHINE_BENCH_ROUNDS" "7")))
 (define inner  (string->number (env "BYTE_MACHINE_BENCH_INNER" "200")))
 ;; WHICH EXECUTORS TO RUN. The default runs both, and the COMMITTED artefact is
-;; always taken that way -- the interpreted figures are §23.1's record of the
-;; oracle and a baseline without them is not a baseline.
+;; always taken that way -- the interpreted figures are the baseline's record
+;; of the oracle and a baseline without them is not a baseline.
 ;;
-;; `generated` exists for the A/B loop that decision 0048 governs: the
-;; interpreter is ~200x slower, so it is ~95% of a run's wall clock and none of
-;; it is the thing being optimized. Measuring a change against a baseline taken
-;; by a DIFFERENT program is the sort of instrument mixing 0048 was written
-;; about, and the alternative -- a hand-rolled generated-only script -- is
-;; exactly that. This keeps one instrument and lets it answer faster. The
-;; setting is recorded in the artefact, so a partial run cannot be mistaken for
-;; a baseline.
+;; `generated` exists for A/B comparison while optimizing: the interpreter is
+;; ~200x slower, so it is ~95% of a run's wall clock and none of it is the
+;; thing being optimized. Measuring a change against a baseline taken by a
+;; DIFFERENT program mixes instruments, and the alternative -- a hand-rolled
+;; generated-only script -- is exactly that. This keeps one instrument and
+;; lets it answer faster. The setting is recorded in the artefact, so a
+;; partial run cannot be mistaken for a baseline.
 (define executors (env "BYTE_MACHINE_BENCH_EXECUTORS" "both"))
 (define both-executors? (string=? executors "both"))
 (unless (or both-executors? (string=? executors "generated"))
@@ -65,7 +60,7 @@
 (define generated (eval 'httpreq (environment '(generated httpreq))))
 (define interpreted (make-interpreted-machine (verify-machine (make-http-machine))))
 
-;; --- §23.2 workloads, as canonical bytes ------------------------------------
+;; --- the workloads, as canonical bytes --------------------------------------
 (define (b s) (u8-list->bytevector (map char->integer (string->list s))))
 (define (rep-str n s)
   (let loop ((i 0) (acc "")) (if (= i n) acc (loop (+ i 1) (string-append acc s)))))
@@ -146,7 +141,7 @@
           (list 'allocation-bytes-per-message alloc))))
 
 ;; --- the artefact -----------------------------------------------------------
-;; AOT-compiled artifact size (§23.1): compile the emitted generated source to an
+;; AOT-compiled artifact size: compile the emitted generated source to an
 ;; object and size it. compile-file's progress line is suppressed so it cannot
 ;; land in an artefact written to stdout.
 (compile-file-message #f)

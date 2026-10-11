@@ -3,17 +3,14 @@
 How a verified machine becomes an importable `.sls`, and how a consumer runs the
 parser it defines.
 
-This is `§27:1697` of
-[the implementation plan](../.plans/byte-machine-implementation-plan.md) (the
-"generated-code integration guide for Chez"), and it carries `§26:1681`'s release
-criterion — that "public libraries and generated-runtime dependency boundaries
-are documented". Everything below was checked against the code
+This guide documents the public libraries and the dependency boundary between
+the compiler and a generated parser. Everything below matches the code
 (`src/byte-machine/compile.sls`, `src/byte-machine/runtime.sls`) and the
 end-to-end example lane (`test/common/example-one-byte-tests.sps`).
 
-Applies to byte-machine at v0.1. A generated parser and the reference interpreter
-(`(byte-machine interpret)`) share the same runtime API and contracts; this guide
-is written for the generated lane.
+A generated parser and the reference interpreter (`(byte-machine interpret)`)
+share the same runtime API and contracts; this guide is written for the
+generated lane.
 
 ---
 
@@ -22,10 +19,9 @@ is written for the generated lane.
 Construction, verification, and compilation live in
 `(byte-machine graph)`, `(byte-machine verify)`, `(byte-machine compile)`, and
 `(byte-machine interpret)`. **A generated parser depends on `(byte-machine
-runtime)` alone at run time — on none of those four.** This is `§7.2`'s dependency
-direction: `runtime` sits below `graph`/`verify`/`compile` and depends on nothing
-above it, and the runtime library is, in the plan's words, "the only byte-machine
-library required by emitted parsers".
+runtime)` alone at run time — on none of those four.** `runtime` sits below
+`graph`/`verify`/`compile` and depends on nothing above it, and it is the only
+byte-machine library an emitted parser requires.
 
 The rule is enforced by construction, not by convention. The library
 `render-machine` emits opens with exactly:
@@ -40,9 +36,9 @@ The rule is enforced by construction, not by convention. The library
 Its only imports are `(rnrs)` and `(byte-machine runtime)`. It calls only the
 small runtime surface (`byte-machine-make-compiled-machine`, the feed-outcome and
 error constructors, the callback/span step helpers) and never builder, verifier,
-normalizer, interpreter, or emitter code (`§19.3`). Because the emitter emits a
+normalizer, interpreter, or emitter code. Because the emitter emits a
 *complete* importable library, no file includes another: the consumer reaches the
-parser **by `import`, never by `include`** (`§9.6` item 5).
+parser **by `import`, never by `include`**.
 
 So a deployed application ships the generated `.sls` plus `(byte-machine
 runtime)`; it does not ship, or need to load, the compiler.
@@ -55,8 +51,8 @@ Three procedures in `(byte-machine compile)`, in order:
 
 - **`(compile-machine machine options)`** — verifies `machine` internally (it
   calls `verify-machine`; you do not verify separately) and, on success,
-  normalizes it. Returns a *compilation* value. v0.1 accepts only `'()` for
-  `options` and raises on anything else.
+  normalizes it. Returns a *compilation* value. `options` must be `'()`; any
+  other value raises.
 - **`(compilation-ok? compilation)`** — `#t` when verification passed; on `#f`,
   `(compilation-diagnostics compilation)` returns the diagnostics and the
   compilation cannot be rendered.
@@ -64,18 +60,18 @@ Three procedures in `(byte-machine compile)`, in order:
   library as a canonical UTF-8/LF **bytevector**. `binding` is the symbol the
   library will export (the caller's chosen name for the compiled machine),
   rejected if it collides with R6RS syntax, a runtime export, or an emitted
-  internal identifier (`§20`).
+  internal identifier.
 - **`(emit-machine compilation binding port)`** — renders as above, writes the
   bytes to the supplied **binary output** `port`, and returns emission metadata
   (IR fingerprint and byte length). This is the only procedure here that does
   I/O; `compile-machine` and `render-machine` are pure.
 
-`compile-machine` performs no Scheme compilation, no `eval`, and no file write
-(`§9.2`). Verification cannot be bypassed: `render-machine` raises on a
+`compile-machine` performs no Scheme compilation, no `eval`, and no file write.
+Verification cannot be bypassed: `render-machine` raises on a
 compilation whose `compilation-ok?` is `#f`.
 
 Generation is deterministic: the same verified machine, options, and binding
-produce byte-identical source on every platform cell (`§20`).
+produce byte-identical source on every platform.
 
 ---
 
@@ -87,10 +83,10 @@ uses the runtime API on the compiled-machine value the library exports.
 - **`(make-parser compiled-machine callback-bindings user-context [field-initials])`** —
   `callback-bindings` is a proper list of two-element lists `(list (list 'name
   proc) ...)`, or `'()` when the machine declares no callbacks; `user-context` is
-  opaque application data (or `#f`). The OPTIONAL fourth argument `field-initials`
-  (Milestone 13) is an alist `((field-name . value) ...)` overriding the DECLARED
-  initials of fields the machine declared **settable** (`make-uint-field`'s
-  optional `settable?` flag), so two parsers built from one machine can start in
+  opaque application data (or `#f`). The OPTIONAL fourth argument
+  `field-initials` is an alist `((field-name . value) ...)` overriding the
+  DECLARED initials of fields the machine declared **settable**
+  (`make-uint-field`'s optional `settable?` flag), so two parsers built from one machine can start in
   two modes. An override naming an unknown field, a non-settable field, a
   duplicate name, or a value outside the field's declared width is refused at
   construction; it cannot apply mid-parse. `parser-reset!` restores these
@@ -111,8 +107,8 @@ On `error`, `parser-result-error` holds a parser-error read with
 `parser-error-code`, `-reason`, `-node-name`, `-offset`, `-position-kind`, and the
 rest of that family — including `-span` and `-span-offset`, which name the span
 an error abandoned and where its withheld bytes begin, or `#f` when none was
-open (decision 0056). On `paused`, `parser-result-error` stays `#f` (a pause is not
-an error, and it is resumable) and `parser-result-pause` holds the pause's reason
+open. On `paused`, `parser-result-error` stays `#f` (a pause is not an error,
+and it is resumable) and `parser-result-pause` holds the pause's reason
 — the SAME parser-error shape, so the same accessors read its code and reason —
 when the pause node (or a callback node whose callback returned `callback-pause`)
 declared one, else `#f`.
@@ -126,12 +122,12 @@ Other live accessors: `parser-field-ref`, `parser-state-name`,
 ## 4. Source and AOT execution
 
 The same generated `.sls` and the same `(byte-machine runtime)` serve both Chez
-execution modes (`§7.3`, `§24.2`):
+execution modes:
 
 - **Source mode** loads the `.sls` directly.
 - **AOT mode** compiles the library to a native object ahead of time and links
-  it; `§24.3` keeps those objects per version/OS/architecture and never commits
-  them.
+  it. Compiled objects are build products: they are specific to the Chez
+  version, OS and architecture that produced them, and are not committed.
 
 The compiled machine carries an ABI version (currently `9`), and
 `byte-machine-make-compiled-machine` checks it as its first action, raising

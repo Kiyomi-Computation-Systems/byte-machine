@@ -79,25 +79,27 @@
                 ((pair? ends) (cons (sequence-case-target (car ends)) 'advance))
                 (else (cons (cons (sequence-dispatch-node-name n) new) 'advance)))))
       ;; --- the keyword-table walk, interpreter side ---
-      ;; Derived independently of the normalizer for decision 0015's reason (the
-      ;; keyword table lowers to a compact runtime-walked table, decision 0044;
-      ;; this walker is the oracle that catches a lowering defect and shares no
-      ;; helper with it). `current` inside a table is the compound (name . path),
-      ;; path the bytes consumed so far -- the same shape seq-step uses, so
-      ;; `kind`/`state-name`/`default-eof-parts` need no keyword-table arm.
+      ;; Derived independently of the normalizer, like the sequence walker
+      ;; above: the keyword table lowers to a compact table walked by a runtime
+      ;; op, and this walker is the oracle that catches a lowering defect, so it
+      ;; shares no helper with it. `current` inside a table is the compound
+      ;; (name . path), path the bytes consumed so far -- the same shape
+      ;; seq-step uses, so `kind`/`state-name`/`default-eof-parts` need no
+      ;; keyword-table arm.
       ;;
       ;; Unlike a sequence, a position may be BOTH a complete keyword AND the
-      ;; interior of a longer one (GET vs GET-PARAMETER). The rule (decision 0043):
-      ;; if the next byte extends toward any keyword, consume it and go deeper;
+      ;; interior of a longer one (GET vs GET-PARAMETER). The rule: if the next
+      ;; byte extends toward any keyword, consume it and go deeper;
       ;; otherwise take PATH's keyword if PATH is one (delimiter reexecuted, so a
       ;; span closes at the keyword's length), else the no-match edge. Greedy
       ;; forward, no backtracking: a byte consumed toward a longer keyword is
-      ;; never returned. Matching folds ASCII case when the table is
-      ;; case-insensitive (decision 0045).
-      ;; Case folding is per table (decision 0045): an ASCII letter matches
-      ;; either case, a byte with no case only itself. Written twice (here and in
-      ;; the runtime op) on purpose -- shared nothing with the emitter, so a fold
-      ;; defect in one lane is a differential result, not a hidden agreement.
+      ;; never returned.
+      ;;
+      ;; Case folding is per table: in a case-insensitive table an ASCII letter
+      ;; matches either case, a byte with no case only itself. Written twice
+      ;; (here and in the runtime op) on purpose -- shared nothing with the
+      ;; emitter, so a fold defect in one lane is a differential result, not a
+      ;; hidden agreement.
       (define (kw-fold b ci) (if (and ci (>= b 65) (<= b 90)) (+ b 32) b))
       (define (kw-prefix? ci p bs)      ; p a (folded) prefix of bs
         (cond ((null? p) #t)
@@ -199,15 +201,15 @@
         (let ((d (lookup-error errors (error-node-error-name (lookup nodes name)))))
           (list (error-declaration-code d) (error-declaration-reason d)
                 name (declaration-index name))))
-      ;; The OPTIONAL pause reason (Milestone 12), for BOTH author-facing pause
-      ;; paths: a `pause` node's own reason and a `callback` node's (reported when
-      ;; its callback returns `callback-pause`). Same parts an error node's reason
+      ;; The OPTIONAL pause reason, for BOTH author-facing pause paths: a
+      ;; `pause` node's own reason and a `callback` node's (reported when its
+      ;; callback returns `callback-pause`). Same parts an error node's reason
       ;; produces -- (code reason node-name state-id) -- resolved from the node's
-      ;; declared reason NAME, or #f when the node declares none (today's
-      ;; behaviour). A span-data/span-complete callback pause is NOT covered here
-      ;; (design §3.4): those are internal fragment-resumption steps, not
-      ;; author-declared pause points, and reach this only through a span node
-      ;; that has no reason -- so `node-reason` returns #f for them.
+      ;; declared reason NAME, or #f when the node declares none. A
+      ;; span-data/span-complete callback pause is NOT covered here: those are
+      ;; internal fragment-resumption steps, not author-declared pause points,
+      ;; and reach this only through a span node that has no reason -- so
+      ;; `node-reason` returns #f for them.
       (define (node-reason node)
         (cond ((pause-node? node) (pause-node-reason node))
               ((callback-node? node) (callback-node-reason node))
@@ -483,14 +485,15 @@
            ((count-step)
             (let* ((name (car args)) (fv (cadr args)) (pos (caddr args)) (end (cadddr args)))
               (count-step (lookup nodes name) fv pos end)))
-           ;; The machine-action half of field-action is still incomplete here;
-           ;; the emitted arms carry the other end of this note, in `compile.sls`'s
-           ;; `field-action`, and the two must change together. This shared arm
-           ;; cannot tell a SUCCESS jump from a FAILURE jump, so distinguishing
-           ;; them would need `field-step` to say which route it took -- a widened
-           ;; return (exactly what the `accumulate-step` comment above declines to
-           ;; do for its own reason) or a new executor message. The "one message
-           ;; per shape" argument is what makes the widened return the wrong first
+           ;; KNOWN LIMITATION, shared with `compile.sls`'s `field-action` arm
+           ;; (the two must change together): a field-action operation that fails
+           ;; over a reexecute edge reports position kind `byte` where the
+           ;; zero-width rule wants `boundary`. This shared arm cannot tell a
+           ;; SUCCESS jump from a FAILURE jump, so distinguishing them would need
+           ;; `field-step` to say which route it took -- a widened return
+           ;; (exactly what the `accumulate-step` comment above declines to do
+           ;; for its own reason) or a new executor message. The "one message per
+           ;; shape" argument is what makes the widened return the wrong first
            ;; instinct.
            ((field-step)
             (let* ((name (car args)) (fv (cadr args))
@@ -502,8 +505,8 @@
             (list->vector (map (lambda (f) (cons (uint-field-name f)
                                                  (uint-field-initial f)))
                                (machine-fields m))))
-           ;; The settable table (Milestone 13): `(name width)` per SETTABLE
-           ;; field, what make-parser range-checks an embedder override against.
+           ;; The settable table: `(name width)` per SETTABLE field, what
+           ;; make-parser range-checks an embedder override against.
            ;; This lane answers from the source machine; the generated lane reads
            ;; the equivalent ABI payload member 3. A list here, a vector there --
            ;; make-parser converts the v2 vector to a list, so the two shapes meet.

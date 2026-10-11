@@ -136,8 +136,7 @@
   ;; in both directions. A caller who mutates the list they passed in
   ;; (set-car!, etc.) cannot reach back into an already-built matcher, and a
   ;; caller who mutates the list this accessor just handed them cannot reach
-  ;; the matcher's own storage either -- both routes go through `(rnrs
-  ;; mutable-pairs)` and this closes both. Copying is not the forbidden
+  ;; the matcher's own storage either. Copying is not the forbidden
   ;; transform -- it changes the list's identity, not its
   ;; order or membership; the copy byte-set-matcher-bytes returns is unsorted
   ;; and undeduplicated, same as the stored list. The degenerate `(append '()
@@ -146,13 +145,10 @@
   ;; stored list -- and therefore the accessor's `(vector-ref m 1)` -- is
   ;; always a non-empty proper list.
   ;;
-  ;; byte-complement-matcher-matcher below does NOT get the same treatment --
-  ;; it hands back the nested matcher object itself (a tagged vector), not a
-  ;; copy. That is a real, separate exposure (`vector-set!` can overwrite a
-  ;; nested matcher's own slots in place), but it is a different route
-  ;; through a different mutable primitive than the one this fix closes, and
-  ;; closing it would mean deep-copying an arbitrarily nested matcher tree on
-  ;; every read -- out of scope here.
+  ;; byte-complement-matcher-matcher below does NOT copy: it hands back the
+  ;; nested matcher object itself (a tagged vector), so `vector-set!` can
+  ;; overwrite that matcher's slots in place. Closing that would mean
+  ;; deep-copying an arbitrarily nested matcher tree on every read.
   (define byte-set-matcher-tag (tag 'byte-machine-byte-set-matcher))
   ;; make-byte-set-matcher : bytes:(Listof Byte) -> ByteSetMatcher
   (define (make-byte-set-matcher bytes)
@@ -355,9 +351,8 @@
   ;; no advance/reexecute mode (modes are defined only for byte reads).
   (define pause-node-tag (tag 'byte-machine-pause-node))
   ;; make-pause-node : name:Symbol continuation:NodeName [reason:(Option ErrorName)] source-label:Label -> PauseNode
-  ;; The OPTIONAL reason (Milestone 12) is a declared error-declaration NAME, or
-  ;; #f. `case-lambda` keeps the 3-arg arity, so no existing machine changes
-  ;; (M12 criterion 1); the reason is a leaf datum the verifier resolves and the
+  ;; The OPTIONAL reason is a declared error-declaration NAME, or #f (the
+  ;; 3-argument form). The reason is a leaf datum the verifier resolves and the
   ;; normalizer carries -- it is NOT a node target, so it never enters
   ;; `node-out-targets`, exactly as an error node's error name does not.
   (define make-pause-node
@@ -714,10 +709,9 @@
   ;; what moving one of them here would cost.
   (define callback-node-tag (tag 'byte-machine-callback-node))
   ;; make-callback-node : name:Symbol callback:Symbol continue-target:NodeName branch-targets:(Listof (List Symbol NodeName)) pause-continuation:NodeName [reason:(Option ErrorName)] source-label:Label -> CallbackNode
-  ;; The OPTIONAL reason (Milestone 12) is a declared error-declaration NAME, or
-  ;; #f, carried on the SECOND author-facing pause path: when this node's callback
-  ;; returns `callback-pause`, the runtime reports this reason. `case-lambda`
-  ;; keeps the 6-arg arity, so no existing machine changes (M12 criterion 1).
+  ;; The OPTIONAL reason is a declared error-declaration NAME, or #f (the
+  ;; 6-argument form), carried on the SECOND author-facing pause path: when this
+  ;; node's callback returns `callback-pause`, the runtime reports this reason.
   (define make-callback-node
     (case-lambda
       ((name callback continue-target branch-targets pause-continuation source-label)
@@ -922,17 +916,16 @@
   ;; re-checks them: a machine whose field failed construction never exists, so
   ;; such an arm would be unreachable through any public API.
   ;;
-  ;; There is exactly one field TYPE in v0.1; additional ones are deferred.
+  ;; Unsigned integer is the only field TYPE.
   (define uint-field-tag (tag 'byte-machine-uint-field))
   ;; make-uint-field : name:Symbol width:UintWidth initial:ExactInteger [settable?:Boolean] source-label:Label -> UintField
-  ;; The OPTIONAL `settable?` (Milestone 13) marks a field whose INITIAL an
-  ;; embedder may override at `make-parser`, so a grammar with an embedder-chosen
-  ;; mode (llhttp's request/response `type`, its `lenient_flags` bitset) needs no
-  ;; entry nodes to write it. `case-lambda` keeps the 4-arg arity, so no existing
-  ;; machine changes (M13 criterion 1); default `#f`. The flag is a leaf datum:
-  ;; local shape (a boolean) is checked here, and that a settable field is used
-  ;; LEGALLY -- never as a counted-consume counter, whose entry-value the verifier
-  ;; reasons about -- is the verifier's (decision 0047 item 4).
+  ;; The OPTIONAL `settable?` (default `#f`, the 4-argument form) marks a field
+  ;; whose INITIAL an embedder may override at `make-parser`, so a grammar with
+  ;; an embedder-chosen mode (llhttp's request/response `type`, its
+  ;; `lenient_flags` bitset) needs no entry nodes to write it. The flag is a
+  ;; leaf datum: local shape (a boolean) is checked here, and that a settable
+  ;; field is used LEGALLY -- never as a counted-consume counter, whose
+  ;; entry-value the verifier reasons about -- is the verifier's.
   (define make-uint-field
     (case-lambda
       ((name width initial source-label)
@@ -1049,7 +1042,7 @@
 
   ;; --- machine (default-eof-error is a declared error NAME) ---
   (define machine-tag (tag 'byte-machine-machine))
-  (define machine-ir-version 1)     ; stamped; v0.1 callers do not override
+  (define machine-ir-version 1)     ; stamped; no argument overrides it
   ;; The version pass-schema accepts. Named separately from the stamp so the two
   ;; are distinct: the stamp is what is built, this is what is accepted, and only
   ;; the second is a verifier decision.
@@ -1069,14 +1062,12 @@
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'nodes))
     (unless (for-all error-declaration? errors)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'errors))
-    ;; What makes the descriptor load-bearing. Before this guard the collection
-    ;; loop above checked only `list?`, so any proper list passed as `fields`
-    ;; would be accepted -- a machine could carry (junk 42 "string") unchecked.
+    ;; The collection loop above checks only `list?`; without this guard any
+    ;; proper list -- (junk 42 "string") -- would be accepted as `fields`.
     (unless (for-all uint-field? fields)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'fields))
     ;; The same as the fields guard above and for the same reason: a proper list
-    ;; of junk would otherwise be a valid callbacks or spans table. These two
-    ;; guards are what make the slots load-bearing.
+    ;; of junk would otherwise be a valid callbacks or spans table.
     (unless (for-all callback-declaration? callbacks)
       (byte-machine-contract-violation 'make-machine 'invalid-argument 'callbacks))
     (unless (for-all span-declaration? spans)

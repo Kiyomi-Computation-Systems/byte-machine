@@ -1,12 +1,9 @@
 name: CI
 
-# CI is ONE Linux job, run on demand. On 2026-09-07 the month's GitHub Actions
-# minutes ran out: a macOS job (billed at ten times a Linux minute) and a Linux
-# job that built Chez from source ran on every push to every PR and on every
-# merge, about sixty billed minutes a run. The macOS job is gone -- Apple
-# silicon is the platform every slice is measured on locally, with the
-# `release` preset and the mutation lane, before it merges -- and the Linux job,
-# the platform nobody here develops on, is what CI is for. What runs when:
+# CI is ONE Linux job, run on demand. There is no macOS job: Apple silicon is
+# where the project is developed, and every change is run there locally with
+# the `release` preset and the mutation lane before it merges. CI exists for
+# Linux, the platform nobody here develops on. What runs when:
 #
 #   push to `main`     the Linux job.
 #   pull_request       NOTHING until the PR carries the `ci` label. Only the
@@ -28,10 +25,11 @@ name: CI
 # reason: a new top-level source directory would silently lose CI under an
 # allow-list, and gain it here.
 #
-# Nothing under these paths is a build or test input. Every reference to them in
-# CMake, the harness, or the mutation suite is a prose citation in a comment
-# (verified 2026-08-29). If that ever stops being true -- a doc that is parsed,
-# a fixture moved under docs/ -- remove it from this list.
+# Nothing under these paths is a build input. Two test lanes do read markdown
+# -- the release ledger and the diagnostic census check documents against the
+# code -- so a change touching only those documents is skipped here; run those
+# lanes locally, or dispatch, when one changes. If a doc ever becomes a build
+# input, or a fixture moves under docs/, remove its pattern from this list.
 #
 # Safe today because `main` carries no branch protection: a skipped or
 # never-triggered workflow reports no check at all, which would leave a PR

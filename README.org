@@ -9,72 +9,46 @@ offline generator emits deterministic R6RS Scheme. Generated parsers depend only
 on a small runtime library — never on the builder, verifier, compiler, or
 reference interpreter.
 
-It is a library and source generator, not itself an HTTP parser. A separate
-project will use it to define and generate one.
+It is a library and source generator, not itself a parser for any particular
+protocol.
 
 Machines combine byte dispatch, byte classes and sequences, unsigned-integer
 fields with checked accumulation, zero-width actions and branches, callbacks,
 spans, and counted consumption. The [[file:.reference/source-ir-and-builder.md][source IR and builder reference]] documents
 every constructor and node kind.
 
-*Status:* =0.7.0=. v0.7 lets a parse error say which span bytes it withheld.
-When an error stops the parser with a span open, the bytes that span took in
-the failing feed are never delivered, so an embedder counting a span's bytes
-against a size limit got an answer that depended on how the network split the
-input. Two new accessors on the error record, =parser-error-span= and
-=parser-error-span-offset=, name the abandoned span and the stream offset where
-its withheld bytes begin, or =#f= when no span was open. With the span's data
-callback bound, the delivered fragments followed by that range are the span's
-bytes up to the error, however the input was split
-([[file:.decisions/0056-an-error-records-the-span-it-abandoned.md][decision 0056]]).
-No regeneration is needed: the ABI (9), the emitted text and every golden are
-unchanged, though the two names can no longer be a generated parser's output
-binding. v0.6.1 fixed a keyword table's allocation: the runtime walk
-every keyword-table state calls copied the prefix it had matched on every byte,
-so a header name matching k bytes of a keyword allocated about k²/2 pairs —
-downstream, 138 times a request's own size for a run of near-miss
-=Transfer-Encoding= fields. The walk now makes one pass over the table and
-allocates only its answer, 64 bytes, however much it matched
-([[file:.decisions/0054-a-keyword-walk-reads-its-prefix-in-place.md][decision 0054]]),
-with no regeneration. v0.6 makes the emitted parser stop scanning. Chez compiles a
-large =case= over integer keys as a **linear scan** — about 0.31 ns per arm
-skipped — and the emitter had four of them nested: the state dispatch, the byte
-dispatch inside each state, a callback answering =goto=, and the feed entry.
-Every one is now a jump, a range test or a binary search, and the callback seam
-stopped consing an outcome list nobody read (128 bytes per HTTP header). On
-=tarm64osx=, =many-small-headers= runs 90 → 51 ms and a byte-at-a-time parse 39
-→ 32; downstream, a 308-byte HTTP request parses **twelve times faster** than
-before this release with its llhttp differential unchanged. **The
-generated-runtime ABI breaks, 8 → 9** (decision 0052): regenerate, or the
-runtime refuses the parser at construction. No graph or parser API changes.
-[[file:.plans/milestone-14-close.md][Milestone 14's close]] records the five
-decisions, and that one of them ships without meeting this project's own
-admission rule — recorded as an exception rather than resolved by widening the
-rule. v0.5 lets a parser **start in a mode**: a =uint= field may be
-declared =settable= (=make-uint-field='s optional trailing flag, read by
-=uint-field-settable?=), and =make-parser= takes an OPTIONAL trailing
-=field-initials= alist overriding the declared initials of settable fields — so
-two parsers built from one machine can start in two states (a request/response
-selector, a lenient-flags bitset) with no entry nodes writing the mode. The
-override is range-checked and refused for an unknown, non-settable, duplicate or
-out-of-range field; it applies at construction (never mid-parse), and
-=parser-reset!= restores it so the mode survives a reset. Both additions are
-optional, so no existing machine changes; the generated-runtime ABI bumps 7 → 8
-for the settable table it carries (decision 0047). v0.4 added a **pause reason**:
-a =pause= node (and a =callback= node returning =callback-pause=) may name an
-OPTIONAL reason — a declared =error-declaration= — so a paused parser reports its
-own =(code, reason)= through a new =parser-result-pause= accessor, while
-=parser-result-error= stays =#f= (a pause is not an error, and it remains
-resumable); it bumped the ABI 6 → 7 (decision 0046). v0.3 made the first public-API addition since v0.1: a
-=keyword-table= node kind (=make-keyword-table-node= / =make-keyword-entry=,
-through =(byte-machine graph)=) that matches a set of keywords tolerating proper
-prefixes (=GET= ⊂ =GET-PARAMETER=) with optional per-table ASCII case-folding, and
-lowers to one compact table walked by a new runtime op — replacing hundreds of
-generated dispatch states (the 47 HTTP methods go from a 242-node trie to one
-state); it bumped the ABI 5 → 6 (decisions 0043–0045). v0.2 added
-empty-span observability (decision 0042). =src/byte-machine/= holds the
-construction API, the verifier, the normalizer and emitter, the reference
-interpreter, and the runtime.
+*Status:* =0.7.0=. Beyond the core node kinds, the library provides:
+
+- *Keyword tables* — =make-keyword-table-node= matches a set of keywords,
+  tolerating proper prefixes (=GET= ⊂ =GET-PARAMETER=), with optional per-table
+  ASCII case folding. It lowers to one compact table walked by the runtime
+  rather than a trie of generated states.
+- *Pause reasons* — a =pause= node, or a callback returning =callback-pause=,
+  may name a declared =error-declaration= as its reason, reported through
+  =parser-result-pause=; =parser-result-error= stays =#f= and the parser remains
+  resumable.
+- *Settable fields* — a =uint= field declared settable (=make-uint-field='s
+  optional trailing flag) can have its initial value overridden per parser
+  through =make-parser='s optional =field-initials= alist, so one machine can
+  start in different modes. The override is range-checked, applies only at
+  construction, and survives =parser-reset!=.
+- *Observable empty spans* — a span that opens and closes on the same byte
+  position is announced to its data callback once, with an empty range.
+- *Abandoned-span reporting* — when an error stops the parser with a span open,
+  =parser-error-span= and =parser-error-span-offset= name that span and the
+  stream offset where its undelivered bytes begin (or =#f= when no span was
+  open), so the delivered fragments plus that range account for every span byte
+  however the input was split.
+
+The emitted parser dispatches states, bytes and callback answers through jumps,
+range tests and binary searches rather than linear =case= scans. A generated
+parser carries the runtime ABI version it was emitted for (currently 9); a
+runtime refuses, at construction, a parser emitted for a different version, so
+regenerate parsers after upgrading across an ABI change. The [[file:CHANGELOG.md][changelog]] records
+what changed in each release.
+
+=src/byte-machine/= holds the construction API, the verifier, the normalizer and
+emitter, the reference interpreter, and the runtime.
 
 ** Quick start
 
@@ -118,9 +92,10 @@ generated parser. See [[*Documentation][Documentation]] below for the full set.
 - CMake 3.26 or newer
 - Chez Scheme 10.4.1 or newer, full system rather than Petite
 
-The Chez version is a floor recording what has actually been verified. v0.1 is
-verified on macOS arm64; Linux/Windows amd64 and Linux arm64 are supported but
-not yet CI-verified — see the [[file:.reference/portability-matrix.md][portability matrix]].
+The Chez version is a floor recording what has actually been verified. The
+library is verified on macOS arm64; Linux amd64, Windows amd64 and Linux arm64
+are supported targets that are not CI-verified — see the
+[[file:.reference/portability-matrix.md][portability matrix]].
 
 ** R6RS portability
 
@@ -189,7 +164,7 @@ cmake --preset no-scheme && ctest --preset no-scheme
 
 ** Documentation
 
-*References* ([[file:.reference/][=.reference/=]], the v0.1 documentation set):
+*References* ([[file:.reference/][=.reference/=]]):
 
 - [[file:.reference/source-ir-and-builder.md][Source IR and builder]] — every =(byte-machine graph)= constructor and node kind
 - [[file:.reference/transition-and-cursor-semantics.md][Transition and cursor semantics]] — edge modes, cursor, offsets, statuses, position kinds
@@ -198,15 +173,12 @@ cmake --preset no-scheme && ctest --preset no-scheme
 - [[file:.reference/verifier-diagnostic-catalog.md][Verifier diagnostic catalog]] — the diagnostic codes the verifier can emit
 - [[file:.reference/generated-code-integration-chez.md][Generated-code integration for Chez]] — generating, importing, and running a parser; the dependency boundary
 - [[file:.reference/grammar-author-testing-guide.md][Grammar-author testing guide]] — the harness, lanes, and differential testing
-- [[file:.reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]] — the metrics, workloads, and the recorded v0.1 baseline
+- [[file:.reference/benchmark-methodology-and-baseline.md][Benchmark methodology and baseline]] — the metrics, workloads, and the recorded baseline
 - [[file:.reference/portability-matrix.md][Portability matrix]] — the Tier 1 matrix and the pinned runtime
 
 *Example*: [[file:examples/generate-simple-machine/][=examples/generate-simple-machine/=]] — construct, compile, emit, and run a parser end to end.
 
-For architecture and IR semantics in depth, see the [[file:.plans/byte-machine-implementation-plan.md][implementation plan]].
-
-- [[file:.decisions/][Architecture decisions]]
-- [[file:CHANGELOG.md][Changelog]]
+*Changelog*: [[file:CHANGELOG.md][=CHANGELOG.md=]].
 
 -----
 

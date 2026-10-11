@@ -50,10 +50,11 @@ export list of that library; the procedures a grammar author uses are:
 inputs through it — for example `BYTE_MACHINE_TEST_TMPDIR`, the scratch
 directory provided for emitted files.
 
-**Process status** (spec §5.2, documented in `harness.sls`): `0` every selected
-case passed, `1` one or more assertions failed, `2` a harness, configuration, or
-registration error (e.g. a duplicate case id or an empty case selection), `3` the
-run could not confirm it executed the intended text (a provenance failure).
+**Process status** (the `harness-status-*` constants in `harness.sls`): `0`
+every selected case passed, `1` one or more assertions failed, `2` a harness,
+configuration, or registration error (e.g. a duplicate case id or an empty case
+selection), `3` the run could not confirm it executed the intended text (a
+provenance failure).
 
 ## A minimal test program
 
@@ -136,8 +137,9 @@ agree. `test/common/differential-one-byte-tests.sps` is the pattern:
 Because the interpreter and the generated parser are independent
 implementations of the same semantics, any divergence — the exact class of bug a
 code generator is prone to — shows up as a failing `check-equal`.
-`test/common/determinism-http-tests.sps` extends this to also compare the two
-executors on realistic HTTP inputs.
+`test/common/differential-http-tests.sps` extends this to realistic HTTP inputs,
+comparing both the result tuple and the callback event trace under every feed
+schedule.
 
 ## Further guards already in the tree
 
