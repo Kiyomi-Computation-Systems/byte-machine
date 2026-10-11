@@ -1354,6 +1354,29 @@ is the edge of what it closed. Two things carry over:
   the claim, gate below it, and use the cost above it as the live control: the
   same arm and the same apparatus, giving a positive number.
 
+**A witness that enters an arm can disarm a mutation anchored on its absence
+(2026-10-11, decision 0058).** The arm census asked for new witnesses, and
+adding them turned up three things nothing else would have flagged:
+
+- **The op census's founding mutation went uncaught.** It put a runtime call
+  in the counted-consume arm, "on the body path, which no audited message
+  takes". The new body witness took it, the call was reached, and the mutant
+  exited 0. A new witness re-calibrates every mutation anchored on code it now
+  runs, the way a new exit path does, so re-run the whole pass. The mutation
+  moved to `%dispatch`'s fallback in a callback answer, a clause no
+  construction reaches, which no later witness can enter.
+- **A figure that is the same on every row is the apparatus.** The field group
+  first reported 19 840 extra bytes for each of its fourteen rows, `store` and
+  the comparisons included. The case was building each input bytevector inside
+  the measured loop. Build inputs before `collect`, and distrust a measurement
+  that does not differ across rows that should.
+- **A slope must hold its other dimensions fixed by construction.** Bodies of
+  44 and 40044 bytes carry Content-Length values of two and five digits, so the
+  digit-bound mutant also reddened the body slope, and the sweep reported a pin
+  collision. The fixture was the defect, not the pin: 10044 and 50044 hold the
+  digit count fixed. When a sweep collides, ask first whether the other mutant
+  reaches the decision through a dimension the fixture forgot to hold.
+
 ## Restoring a deleted line re-opens what was decided while it was gone
 
 Milestone 5 deleted the mark advance from the span-fragment step. Measured, it

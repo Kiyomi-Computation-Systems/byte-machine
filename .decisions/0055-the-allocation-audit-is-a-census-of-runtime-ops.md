@@ -10,7 +10,10 @@ Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the slope
 >
 > - **2026-10-11 (decision 0057)** — **amends the Context's fourth paragraph**:
 >   [decision 0057](./0057-a-digit-compares-against-its-bound.md) found a
->   per-byte path that paragraph's bound leaves out.
+>   per-byte path that paragraph's bound leaves out. **The note itself carries
+>   a later 2026-10-11 annotation**: its last sentence, that arm entry is not
+>   measured, is answered by
+>   [decision 0058](./0058-the-allocation-audit-is-a-census-of-arm-kinds.md).
 
 ## Context
 
@@ -168,3 +171,6 @@ two such arms. Every audited message has no body, so neither ran, and the census
 had nothing to count. Decision 0057 fixes the arm and gives the lane a witness
 for it. The census itself is unchanged and still covers ops only; which emitted
 arms the audited inputs enter is not measured (0057, "What this does not fix").
+
+*Annotated later on 2026-10-11:* [decision 0058](./0058-the-allocation-audit-is-a-census-of-arm-kinds.md)
+measures it. The census now counts arm kinds as well as ops.

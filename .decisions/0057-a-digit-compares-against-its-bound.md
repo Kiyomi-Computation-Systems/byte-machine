@@ -6,6 +6,13 @@ Milestone: none. Measured 2026-10-11, after 0.7.0; the user documentation (#160)
 Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the audit is a slope with a live control) and [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (its scope is a census of runtime ops)
 Amends: [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (the Context's bound on "every generated per-byte path")
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-10-11 (decision 0058)** — **amends "What this does not fix", first
+>   bullet**: [decision 0058](./0058-the-allocation-audit-is-a-census-of-arm-kinds.md)
+>   measures which arms the audited inputs enter and fails for any it does not.
+
 ## Context
 
 The generated integer-accumulate arm checked overflow as
@@ -93,6 +100,11 @@ admission under 0048.
   closed runtime ops. To settle it: count, on the counting twin, which state
   arms each audited input enters, and fail for any arm kind the HTTP and
   keyword machines render that no witness enters.
+
+  > **Amended 2026-10-11 (decision 0058)** by
+  > [decision 0058](./0058-the-allocation-audit-is-a-census-of-arm-kinds.md).
+  > See the dated note below; the bullet above is left as decided.
+
 - **A value above the fixnum range allocates** (item 3).
 
 ## Witnesses
@@ -118,3 +130,19 @@ admission under 0048.
   audit pass, with the field pass clean on `main` (41 mutants) as the control.
   The `eq?` pin needed both rows in one value: read alone, its u64 record is
   the refusing mutant's record too.
+
+## 2026-10-11 (decision 0058)
+
+The first bullet of "What this does not fix" said which arms an audited input
+reaches had not been measured. Decision 0058 measured it, against this lane
+with its digit group in place: the HTTP machine's accumulate and
+counted-consume arms were never entered, nor the overflow arm of either digit
+machine; no audited machine rendered a pause; and 12 of the emitter's 14 field
+operations and predicates ran under no input. The lane now counts, on each
+counting twin, the states every witness enters, and fails for an arm an
+audited machine renders that no witness enters there (its kind, with a field
+arm's operation or predicate and an accumulate arm's base), for a kind the emitter
+renders that no audited machine has, and for a field operation or predicate no
+witness runs. It gained the witnesses those rows asked for. None of them found
+an arm allocating while its values are fixnums, so item 3's limit is the
+claim's limit for every arm, as measured there.

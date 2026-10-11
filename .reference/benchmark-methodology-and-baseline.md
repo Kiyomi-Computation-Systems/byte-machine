@@ -190,7 +190,17 @@ A slope sees only the dimension it varies, so the lane takes it in several:
   prefix it resumed with, or how long a prefix it parks; the emitted keyword
   arm around the walk is checked the same way;
 - **per error offset** — a machine error's record and a callback failure's
-  record must not grow with the offset they report.
+  record must not grow with the offset they report; nor must a pause, or an
+  accumulate arm's overflow;
+- **per digit** — digits read into a 64-bit field, in base 10 and base 16, up
+  to `(greatest-fixnum)`; a value above it is a bignum, and the digit that
+  stores it allocates it, which the lane records as its live control;
+- **per body byte and per chunk** — HTTP messages with a fixed body of two
+  lengths (with the same number of Content-Length digits) and with 1 or 201
+  chunks, including a count above the fixnum range, which costs per feed and
+  never per byte;
+- **per field execution** — every field operation and predicate on a 64-bit
+  field, below `(greatest-fixnum)` asserted zero and above it recorded.
 
 Finally, the lane carries a **census of runtime ops**: it derives, from
 `compile.sls`'s emitted text, every `(byte-machine runtime)` procedure
@@ -198,6 +208,14 @@ generated code can call, runs the audited inputs on a counting copy of each
 machine, and fails, naming the op, for any derived op no audited input reaches.
 So a lowering that starts calling a new runtime op fails the lane until the
 audit gains an input that exercises it.
+
+An arm whose work is all inline calls no op, so the counting copy also counts
+the **states** each input enters, read as arms: the state's kind, with a field
+arm's operation or predicate and an accumulate arm's base. The lane fails for
+an arm an audited machine renders that no input enters in that machine, for a
+kind the emitter renders that no audited machine has, and for a field operation
+or predicate no input runs; the emitter's sets are read from `compile.sls`'s
+own `case` labels.
 
 <a id="admission-rule"></a>
 ## Admission rule for optimizations
