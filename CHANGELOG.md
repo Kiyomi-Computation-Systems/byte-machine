@@ -10,7 +10,11 @@ All notable changes to byte-machine are recorded here. The format follows
 
 - **An Akku package manifest.** `Akku.manifest` describes byte-machine for
   the [Akku](https://akkuscm.org/) package index. The package installs the
-  libraries under `src/byte-machine/` and has no dependencies.
+  libraries under `src/byte-machine/` and has no dependencies. `.akkuignore`
+  keeps the docs generator's `site/` libraries and the examples out of a
+  consumer's library path, and `make check-akku` installs the package as a
+  dependency of a throwaway project and fails unless exactly `src/`'s
+  libraries land.
 - **User documentation** in `docs/`: installing, a step-by-step walkthrough,
   every node kind, fields, callbacks and spans, running a parser, errors, the
   verifier's diagnostic codes, generated code, testing a grammar, and a page
