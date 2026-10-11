@@ -54,6 +54,15 @@ All notable changes to byte-machine are recorded here. The format follows
   `--program ./bench/runner/benchmark.sps`. The committed baseline keeps the
   string it recorded, with a note in the benchmark reference that it never
   ran as written; none of its measurements change.
+- **An output binding that `(rnrs)` exports is refused.** `render-machine`
+  and `emit-machine` accepted bindings such as `list`, `guard` or
+  `vector-ref` and rendered a library that could not be loaded ("multiple
+  definitions for list in body"): the generated library imports all of
+  `(rnrs)`, and a library may not define a name it imports. Every `(rnrs)`
+  export that a binding can spell is now refused with
+  `invalid-output-binding` before any bytes are produced. Every binding that
+  produced a loadable library before renders the same bytes as before; the
+  emitted text, the generated-runtime ABI and every golden are unchanged.
 
 ## [0.7.0] - 2026-10-01
 

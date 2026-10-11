@@ -1,7 +1,7 @@
 ;;; The emitted identifier repertoire, proved exhaustively.
 ;;; Machine names and output bindings go through ONE [a-z][a-z0-9-]* grammar,
 ;;; (byte-machine private names)' `portable-name?`, verify adding reserved
-;;; member 1 and compile all three reserved sets. Both sites are driven here,
+;;; member 1 and compile all four reserved sets. Both sites are driven here,
 ;;; because a shared body proves nothing about a site that stopped calling it.
 ;;; Diagnostics and conditions are checked by category, never by prose. The LF
 ;;; proof reads raw emitted bytes; a Windows CRLF trap cannot be exhibited on a
@@ -66,13 +66,14 @@
         (string->symbol "a.b") (string->symbol "a_b") (string->symbol "a/b")
         (string->symbol "a+b") (string->symbol "a b") 'define
         (string->symbol "") (string->symbol "a\xe9;b")))
-;; Bindings additionally reserve runtime exports (member 2) and template ids
-;; (member 3); the grammar-only rejects above still apply. 'start' is a valid
+;; Bindings additionally reserve runtime exports (member 2), template ids
+;; (member 3) and (rnrs) exports such as 'list (member 4), which the generated
+;; library imports; the grammar-only rejects above still apply. 'start' is a valid
 ;; verify-site name (see accepted-names) but not a valid binding -- it is
 ;; reserved-member-3 -- so it belongs here, not in accepted.
 (define rejected-bindings
   (list (string->symbol "9a") (string->symbol "-a") 'Ab (string->symbol "a.b")
-        'define 'make-compiled-machine 'exec 'start
+        'define 'make-compiled-machine 'exec 'start 'list
         (string->symbol "") (string->symbol "a\xe9;b")))
 
 (harness-group "machine names: the verify-site grammar"
