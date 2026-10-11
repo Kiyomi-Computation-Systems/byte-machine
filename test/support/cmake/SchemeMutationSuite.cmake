@@ -150,7 +150,7 @@ cmake_minimum_required(VERSION 3.26)
 # moving a mutation changes EXPECTED_MUTATIONS; opening or retiring a pass
 # changes EXPECTED_PASSES.
 set(EXPECTED_PASSES 78)
-set(EXPECTED_MUTATIONS 689)
+set(EXPECTED_MUTATIONS 701)
 
 # --- What an EXPECT_OUTPUT_MATCHES can and cannot say -----------------------
 #
@@ -12279,24 +12279,26 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
-  LABEL "compile: an arm no audited input reaches calls a runtime op nothing else emits"
-  # The census's reason to exist: a lowering that calls an op the allocation
-  # audit has never run. `parser-error?` of a count is #f, so no answer moves;
-  # the counted-consume arm is on the body path, which no audited message takes.
-  FIND [["         (cond ((= v 0) "]]
-  REPLACE [["         (cond ((parser-error? v) #f) ((= v 0) "]]
+  LABEL "compile: a clause no input takes calls a runtime op nothing else emits"
+  # The census's reason to exist: emitted code that calls an op the allocation
+  # audit has never run. The arm-kind census now asks a witness to enter every
+  # arm an audited machine renders, so the call sits in the one clause no
+  # construction reaches: the `%dispatch` fallback of a callback answer.
+  # `parser-error?` answers #f and the fallback runs as before.
+  FIND [[(string-append "(else (%dispatch pos " expr " off pk))")]]
+  REPLACE [[(string-append "(else (parser-error? " expr ") (%dispatch pos " expr " off pk))")]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[every derived op is reached by an audited input: census ops no witness reached -- expected .., got .parser-error..]])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
-  LABEL "compile: an unreached arm names a runtime op the derivation cannot see"
+  LABEL "compile: a clause no input takes names a runtime op the derivation cannot see"
   # The same call, its name split across two literals: the emitted text is
   # identical, the derivation misses it, and no twin calls it. Only the rendered
   # libraries, read as data, still carry the name -- the check this pins.
-  FIND [["         (cond ((= v 0) "]]
-  REPLACE [["         (cond ((parser-" "error? v) #f) ((= v 0) "]]
+  FIND [[(string-append "(else (%dispatch pos " expr " off pk))")]]
+  REPLACE [[(string-append "(else (parser-" "error? " expr ") (%dispatch pos " expr " off pk))")]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[every runtime export a rendered machine names is in the derived census: rendered runtime names absent from the census -- expected .., got .parser-error..]])
 
@@ -12388,11 +12390,12 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[the census is derived from compile.sls's emitted text: compile.sls is exactly one datum -- expected a true value]])
 
-# The u64 digit witness. Every slope above feeds messages with no body, so none
-# runs an accumulate arm, and that arm calls no runtime op the census could ask
-# a witness for. This restores the bound the arm used to compute from the
-# maximum on every digit: a bignum subtraction and division per digit into a
-# u64 field, however small the value, with every answer unchanged.
+# The u64 digit witness. The accumulate arm calls no runtime op, so the op
+# census could not ask a witness for it. This restores the bound the arm used to
+# compute from the maximum on every digit: a bignum subtraction and division per
+# digit into a u64 field, however small the value, with every answer unchanged.
+# The body witnesses' slopes hold the digit count fixed, so only the two digit
+# cases see it.
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
@@ -12402,6 +12405,144 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "base 10: digits up to the largest fixnum allocate nothing: u64 digits: extra bytes for 1000 more fixnum-range numbers -- expected 0, got 11520720[^0-9]")
+
+# The arm-kind census. An arm whose cost is inline code calls no runtime op, so
+# the op census above cannot see whether an audited input runs it. The lane's
+# counting twins also count the states each witness enters, read through the
+# normalized IR as arm kinds, and a field arm's operation or predicate. The
+# rows: every kind an audited machine renders is entered there by a witness;
+# every kind, operation and predicate the emitter renders (case labels read
+# from compile.sls) is rendered and entered; the derivations' own controls;
+# and the instrumenter's. Then one mutation per new witness, each making the
+# arm it enters allocate where the witness says it must not.
+
+byte_machine_mutation(
+  FILE test/support/harness/byte-machine/test/http-machine.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "http fixture: an arm kind no audited input enters is rendered"
+  # The defect the census exists for, in the audit's own fixture: an arm on a
+  # path no audited message takes. An invalid method's error node becomes a
+  # stop, a kind the HTTP machine renders nowhere else. No audited input sends
+  # an invalid method, so every answer and every slope stands.
+  FIND [[(make-error-node 'e-method 'invalid-method #f)]]
+  REPLACE [[(make-stop-node 'e-method #f)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[entered there by a witness: rendered .machine . kind. no witness entered -- expected .., got ..httpcensus . stop..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: render-state-arm renders a kind no audited machine has"
+  # A label no normalized state carries: the emitted text is unchanged, and
+  # only the row over the emitter's own case sees a kind no fixture renders.
+  FIND [[((stop)]]
+  REPLACE [[((stop halt)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[is in some audited machine: emitted kinds no audited machine renders -- expected .., got .halt.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: render-state-arm dispatches on the kind in a form the census cannot read"
+  # `normal-state-kind` is `(vector-ref s 1)`, so every arm renders as before;
+  # the derivation finds no case on `(normal-state-kind s)` and reads nothing.
+  FIND [[(case (normal-state-kind s)]]
+  REPLACE [[(case (vector-ref s 1)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[is one render-state-arm names: rendered kinds render-state-arm does not name -- expected .., got ..acc64dec . accumulate.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: render-operation renders an operation no witness runs"
+  # As the kind mutation above, one level down.
+  FIND [[((store) (num k))]]
+  REPLACE [[((store stash) (num k))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[is entered by a witness: emitted field arms no witness entered -- expected .., got ..field-action . stash..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: render-operation dispatches in a form the census cannot read"
+  FIND [[(case op]]
+  REPLACE [[(case (values op)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[is one the emitter names: entered field arms render-operation and render-predicate do not name -- expected .., got ..field-action . add.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a state procedure is defined in a form the counter cannot find"
+  # The stop arm as `(define %sN (lambda ...))`: the same procedure, and a
+  # header the instrumenter does not recognise, so the keyword machine's stop
+  # would read as never entered.
+  FIND [["      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f " id " off))\n"]]
+  REPLACE [["      (define %s" id " (lambda (pos st off pk) (byte-machine-make-feed-outcome/v1 (quote stopped) pos #f " id " off)))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[counts its entries: audited twins whose counters are not exactly their states .name ids states. -- expected .., got ..kwcensus .]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: counted consume allocates in proportion to the bytes it consumes"
+  # The committed count is unchanged -- the third operand of `min` is the
+  # second's own value -- and a vector and a list that long are built for it.
+  FIND [["                (let ((n (min v (- end pos))))\n"]]
+  REPLACE [["                (let ((n (min v (- end pos) (length (vector->list (make-vector (- end pos) 0))))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[its length: fixed body: alloc.10044-byte body. = alloc.50044-byte body. -- expected]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: an infallible field action allocates every time it runs"
+  # A dead store: the slot is overwritten on the next line, so no answer moves,
+  # and a store cannot be optimised away.
+  FIND [["         (vector-set! fieldv " (num slot) " " expr ")\n"]]
+  REPLACE [["         (vector-set! fieldv " (num slot) " (make-bytevector 8 0))\n         (vector-set! fieldv " (num slot) " " expr ")\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[fixnum-range executions .arm . extra bytes. -- expected .., got ..store . 320000. .clear . 320000. .set-mask . 320000. .clear-mask . 320000..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a fallible field action allocates every time it succeeds"
+  FIND [["             (begin (vector-set! fieldv " (num slot) " r) "]]
+  REPLACE [["             (begin (vector-set! fieldv " (num slot) " (make-bytevector 8 0)) (vector-set! fieldv " (num slot) " r) "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[fixnum-range executions .arm . extra bytes. -- expected .., got ..increment . 320000. .decrement . 320000. .add . 320000. .equal . 320000.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a field branch allocates every time it tests"
+  # The same dead store, then the value put back before the test reads it.
+  FIND [["       (let ((v (vector-ref fieldv " (num (car sw)) ")))\n"]]
+  REPLACE [["       (let ((v (vector-ref fieldv " (num (car sw)) "))) (vector-set! fieldv " (num (car sw)) " (make-bytevector 8 0)) (vector-set! fieldv " (num (car sw)) " v)\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[fixnum-range executions .arm . extra bytes. -- expected .., got ..equal . 320000. .zero . 320000.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a pause allocates in proportion to the offset it reports"
+  # `pos` is unchanged: a vector and a list `off` long are built and their
+  # length subtracted back out.
+  FIND [["      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos "]]
+  REPLACE [["      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) (- (+ pos (length (vector->list (make-vector off 0)))) off) "]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[pause: alloc.short prefix. = alloc.long prefix., each arm -- expected .0 0., got .38402624 38402624.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls
+  SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: an accumulate overflow allocates in proportion to the offset it reports"
+  FIND [["                       (%s" (num over) " pos " (num over) " off (quote byte))))))))\n"]]
+  REPLACE [["                       (%s" (num over) " pos " (num over) " (- (+ off (length (vector->list (make-vector off 0)))) off) (quote byte))))))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES
+    "base 10: digits up to the largest fixnum allocate nothing: u64 overflow: alloc after 10 numbers = alloc after 1010 -- expected 129536, got 9730288[^0-9]")
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 78: the span an error abandons (differential.abandoned-span) -------

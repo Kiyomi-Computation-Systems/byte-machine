@@ -26,6 +26,18 @@ All notable changes to byte-machine are recorded here. The format follows
 - **A second example**, `examples/words/`, which generates a parser with
   spans and callbacks and imports it as a library, the way an application
   does.
+- **The allocation audit runs every kind of generated state.** It counted
+  which runtime procedures generated code calls, which cannot show whether
+  an input runs a state whose work is all inline, such as reading digits.
+  It now also counts the states each of its inputs enters and fails for any
+  kind of state, field operation or field test that the generator can
+  produce and no input runs. Its inputs now include HTTP messages with a
+  fixed and a chunked body, a pause, and every field operation and test on
+  a 64-bit field. None of these allocates per byte, or per operation or
+  test, while field values fit in a fixnum. Above that range an operation
+  whose result is a bignum allocates it, as reading a digit does, and so
+  does a mask test whose masked value is one; a comparison never allocates.
+  No library code changed.
 
 ### Changed
 

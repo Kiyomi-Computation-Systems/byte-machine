@@ -27,7 +27,15 @@
         (byte-machine compile)
         (only (byte-machine graph)
               make-machine make-uint-field make-error-declaration make-edge
-              make-integer-accumulate-node make-field-action-node make-error-node))
+              make-integer-accumulate-node make-field-action-node make-error-node
+              make-byte-dispatch-node make-byte-case make-exact-byte-matcher
+              make-field-branch-node make-pause-node)
+        ;; The arm-kind census reads each audited machine's normalized states,
+        ;; which no public library exports: a rendered library names its states
+        ;; but not their kinds.
+        (only (byte-machine private normal-ir)
+              normalize-machine normal-machine-states normal-machine-fingerprint
+              normal-state-kind normal-state-id normal-field-selector))
 
 (harness-begin "unit.allocation-audit")
 
@@ -353,10 +361,11 @@
 ;;     running (BYTE_MACHINE_SOURCE_ROOT), so comments and the quoted
 ;;     reserved-member-2 list are not strings and do not count.
 ;;   REACHED -- the ops a COUNTING TWIN of each audited machine actually calls.
-;;     The twin is the same rendered text with one import changed, to a library
-;;     this lane writes that re-exports the runtime with a call counter in front
-;;     of every procedure. Allocation is measured on the real machine, calls on
-;;     the twin; the code paths are the same text.
+;;     The twin is the same rendered library with one import changed, to a
+;;     library this lane writes that re-exports the runtime with a call counter
+;;     in front of every procedure (and, for the arm-kind census, a counter at
+;;     the head of each state procedure). Allocation is measured on the real
+;;     machine, calls on the twin; the code paths are the same.
 ;;
 ;; A witness registers what it reached only from inside the case that asserts
 ;; its allocation shape, so deleting a witness group deletes its reach too. The
@@ -429,13 +438,18 @@
   (lambda (p)
     (write
      `(library (byte-machine-census counting-runtime)
-        (export census-counts census-reset! ,@runtime-exports)
+        (export census-counts census-reset! census-enter! census-entered
+                ,@runtime-exports)
         (import (rnrs) (prefix (byte-machine runtime) rt:))
         (define counts (make-eq-hashtable))
-        (define (census-reset!) (hashtable-clear! counts))
+        ;; The states a twin entered, as (machine . state-id) keys.
+        (define entries (make-hashtable equal-hash equal?))
+        (define (census-reset!) (hashtable-clear! counts) (hashtable-clear! entries))
         (define (census-counts)
           (let-values (((ks vs) (hashtable-entries counts)))
             (map cons (vector->list ks) (vector->list vs))))
+        (define (census-enter! machine id) (hashtable-set! entries (cons machine id) #t))
+        (define (census-entered) (vector->list (hashtable-keys entries)))
         ,@(map (lambda (x)
                  (let ((rt (string->symbol (string-append "rt:" (symbol->string x)))))
                    (if (procedure? (eval x runtime-env))
@@ -449,6 +463,7 @@
 (define counting-env (environment '(byte-machine-census counting-runtime)))
 (define census-counts (eval 'census-counts counting-env))
 (define census-reset! (eval 'census-reset! counting-env))
+(define census-entered (eval 'census-entered counting-env))
 
 ;; Replace the one occurrence of `old` in `s`; raise unless there is exactly one,
 ;; because a twin still importing the real runtime anywhere would undercount.
@@ -463,23 +478,105 @@
             ((string=? (substring s i (+ i m)) old) (loop (+ i 1) (cons i hits)))
             (else (loop (+ i 1) hits))))))
 
+;; --- the arm-kind half of the census ------------------------------------------
+;;
+;; An arm whose cost is all inline code calls no runtime op, so the op census
+;; cannot tell whether any audited input runs it: the HTTP fixture's two u64
+;; accumulate arms allocated on every digit while it was green, because no
+;; audited message had a body. So the twin also counts STATES. Each state of a
+;; rendered machine is one procedure `%s<id>` inside `exec`, and the twin gets
+;; a call at the head of each one, so an input's reach is read off as the set
+;; of states it entered and, through the normalized IR the library was rendered
+;; from, as their arm kinds.
+
+;; Per load-pair: (name . shapes), shapes a vector by state id of
+;; (kind . selector), the selector being a field arm's operation or predicate
+;; and #f for every other kind.
+(define audited '())
+;; Per load-pair: (name instrumented-ids state-count), for the check that every
+;; state procedure carries its counter.
+(define instrumented '())
+
+;; The id a state procedure's name carries, or #f for any other form.
+(define (state-procedure-id form)
+  (and (pair? form) (eq? (car form) 'define) (pair? (cdr form)) (pair? (cadr form))
+       (symbol? (car (cadr form)))
+       (let ((s (symbol->string (car (cadr form)))))
+         (and (> (string-length s) 2) (string=? (substring s 0 2) "%s")
+              (string->number (substring s 2 (string-length s)))))))
+
+;; The library datum with `(census-enter! 'name id)` at the head of every state
+;; procedure in `exec`, and the ids that received one.
+(define (instrument-states lib name)
+  (let ((ids '()))
+    (define (in-exec form)
+      (if (and (pair? form) (eq? (car form) 'define) (pair? (cdr form)) (pair? (cadr form))
+               (eq? (car (cadr form)) 'exec))
+          (cons* 'define (cadr form)
+                 (map (lambda (f)
+                        (let ((i (state-procedure-id f)))
+                          (if i
+                              (begin (set! ids (cons i ids))
+                                     (cons* 'define (cadr f)
+                                            (list 'census-enter! (list 'quote name) i)
+                                            (cddr f)))
+                              f)))
+                      (cddr form)))
+          form))
+    (let ((out (map in-exec lib)))
+      (values out ids))))
+
+;; The fingerprint a rendered library passes its compiled-machine constructor.
+(define (rendered-fingerprint d)
+  (cond ((and (pair? d) (eq? (car d) 'byte-machine-make-compiled-machine)) (caddr d))
+        ((pair? d) (or (rendered-fingerprint (car d)) (rendered-fingerprint (cdr d))))
+        (else #f)))
+
+;; The machine's normalized states as (kind . selector) by id, and the IR's
+;; fingerprint, so the caller can check it is the IR the library came from.
+(define (state-shapes machine)
+  (let* ((n (normalize-machine (verification-machine (verify-machine machine))))
+         (states (normal-machine-states n))
+         (shapes (make-vector (vector-length states) #f)))
+    (vector-for-each
+     (lambda (s)
+       (vector-set! shapes (normal-state-id s)
+                    (cons (normal-state-kind s)
+                          (and (memq (normal-state-kind s) '(field-action field-branch))
+                               (normal-field-selector s)))))
+     states)
+    (values (normal-machine-fingerprint n) shapes)))
+
 ;; Emit `machine` twice: the real library, loaded for allocation, and its
-;; counting twin, identical but for its name and the runtime it imports. (The
-;; HTTP witnesses measure `generated`, loaded above from the same machine and
-;; emitter; its text differs from this pair's only in the output binding.)
+;; counting twin, identical but for its name, the runtime it imports, and the
+;; entry counter at the head of each state procedure. (The HTTP witnesses
+;; measure `generated`, loaded above from the same machine and emitter; its
+;; text differs from this pair's only in the output binding.)
 ;; Returns (real twin load-calls rendered-datum).
 (define (load-pair machine name)
   (let* ((ok (compile-machine machine '()))
          (text (utf8->string (render-machine ok name)))
          (real-file (string-append tmpdir "/" (symbol->string name) "-real.sls"))
          (twin-file (string-append tmpdir "/" (symbol->string name) "-twin.sls"))
-         (lib (cadr (read (open-string-input-port text)))))
+         (rendered (read (open-string-input-port text)))
+         (lib (cadr rendered)))
     (with-text-file real-file (lambda (p) (put-string p text)))
-    (with-text-file twin-file
-      (lambda (p)
-        (put-string p (replace-once
-                       (replace-once text "(library (generated " "(library (generated-census ")
-                       "(byte-machine runtime)" "(byte-machine-census counting-runtime)"))))
+    (let-values (((twin-lib ids)
+                  (instrument-states
+                   (read (open-string-input-port
+                          (replace-once
+                           (replace-once text "(library (generated " "(library (generated-census ")
+                           "(byte-machine runtime)" "(byte-machine-census counting-runtime)")))
+                   name))
+                 ((fp shapes) (state-shapes machine)))
+      ;; Loud: kinds read from any other IR would describe a different library.
+      (unless (eqv? fp (rendered-fingerprint rendered))
+        (assertion-violation 'load-pair "the IR read for arm kinds is not the one rendered"
+                             name fp))
+      (set! audited (cons (cons name shapes) audited))
+      (set! instrumented (cons (list name (list-sort < ids) (vector-length shapes))
+                               instrumented))
+      (with-text-file twin-file (lambda (p) (write twin-lib p))))
     (load real-file)
     (load twin-file)
     (census-reset!)
@@ -510,18 +607,29 @@
                             (set! ever-called (cons (car c) ever-called))))
               calls)
     calls))
+;; The states every witness's twin entered, as (machine . state-id) keys. Read
+;; only by the witness procedures below, like `witnessed`.
+(define entered (make-hashtable equal-hash equal?))
+(define (note-entered!)
+  (for-each (lambda (k) (hashtable-set! entered k #t)) (census-entered)))
 ;; Called from inside a witness case: feed the twin what the case measured.
-(define (witness! twin bindings req) (note-reached! (calls-feeding twin bindings req)))
+(define (witness! twin bindings req)
+  (note-reached! (calls-feeding twin bindings req))
+  (note-entered!))
 ;; The same for a witness that feeds without finishing: an input the machine
 ;; refuses leaves the parser in `error`, and only the feed's result is asserted.
 (define (witness-feed! twin bindings req)
+  (witness-run! (lambda () (feed-only twin bindings req))))
+;; What one run of `thunk` against a twin reached and entered.
+(define (witness-run! thunk)
   (census-reset!)
-  (feed-only twin bindings req)
+  (thunk)
   (let ((calls (census-counts)))
     (for-each (lambda (c) (unless (memq (car c) ever-called)
                             (set! ever-called (cons (car c) ever-called))))
               calls)
-    (note-reached! calls)))
+    (note-reached! calls)
+    (note-entered!)))
 
 ;; One feed and nothing after it; the result is what an error witness reads.
 (define (feed-only cm bindings req)
@@ -645,9 +753,11 @@
 
 ;; --- the fourth dimension, per DIGIT read into a u64 field -------------------
 ;;
-;; Every slope above feeds the HTTP machine messages with no body, so none of
-;; them runs an integer-accumulate arm, and that arm calls no runtime op, so the
-;; census below cannot notice it is missing. A 64-bit field's maximum, 2^64 - 1,
+;; The slopes above feed the HTTP machine messages with no body, so none of
+;; them runs an integer-accumulate arm; that arm calls no runtime op, so the op
+;; census below could not notice, and the arm-kind census below is what asks a
+;; witness to enter it. This group is the digits' own dimension. A 64-bit
+;; field's maximum, 2^64 - 1,
 ;; is above the fixnum range on a 64-bit host: an overflow check written as
 ;; arithmetic on that maximum allocates on every digit, however small the value
 ;; being read.
@@ -721,7 +831,23 @@
     (check-equal "u64 digits: extra bytes for 1000 more fixnum-range numbers"
                  (extra many few) 0)
     (witness-feed! twin '() few)
-    (witness-feed! twin '() many)))
+    (witness-feed! twin '() many)
+    ;; The overflow arm, which the arm-kind census asks for: 2^64 after the
+    ;; same two runs of numbers, refused at its last digit. Like the error
+    ;; witnesses above, the event costs the same however much precedes it.
+    (let* ((over (append (list 59) (bytes (number->string (expt 2 64) base))))
+           (refused (lambda (req) (u8-list->bytevector (append (bytevector->u8-list req) over))))
+           (few-over (refused few)) (many-over (refused many))
+           (r (feed-only real '() many-over)))
+      (check-equal "u64 overflow: refused at the last digit of 2^64"
+                   (list (parser-result-status r) (parser-error-code (parser-result-error r))
+                         (- (bytevector-length many-over) (parser-error-offset (parser-result-error r))))
+                   '(error unexpected-byte 1))
+      (check-equal "u64 overflow: alloc after 10 numbers = alloc after 1010"
+                   (alloc-feeding-only real '() many-over digit-reps)
+                   (alloc-feeding-only real '() few-over digit-reps))
+      (witness-feed! twin '() few-over)
+      (witness-feed! twin '() many-over))))
 
 (harness-group "a digit read into a u64 field allocates nothing while its value is a fixnum"
   (lambda ()
@@ -729,6 +855,365 @@
       (lambda () (u64-digits-check 10 'acc64dec)))
     (harness-case "base 16: digits up to the largest fixnum allocate nothing"
       (lambda () (u64-digits-check 16 'acc64hex)))))
+
+;; --- the body path, per BODY byte and per CHUNK ------------------------------
+;;
+;; The arm-kind census below found the HTTP machine's whole body path outside
+;; every group above: the Content-Length digits, the framing branches and flag
+;; stores, the two counted-consume arms, and the chunked grammar. Its arms call
+;; no runtime op the slopes did not already reach, so the op census had nothing
+;; to report. These messages take that path, and the claims are the slopes'
+;; own: a body's allocation does not depend on its length, nor a chunked body's
+;; on how many chunks it has.
+;;
+;; A count above the fixnum range is asserted too. Counted consume subtracts
+;; what a feed consumed from the field, so a bignum count stores a new bignum
+;; once per FEED; what it consumes per byte is still nothing, and that is the
+;; claim gated here.
+
+(define (cl-request content-length body-len)
+  (u8-list->bytevector
+   (bytes (string-append "POST / HTTP/1.1\r\nContent-Length: " (number->string content-length)
+                         "\r\n\r\n" (make-string body-len #\b)))))
+;; `chunks` chunks of `chunk-len` bytes each, then the last chunk and the end of
+;; the (empty) trailer section.
+(define (chunked-request chunks chunk-len)
+  (u8-list->bytevector
+   (bytes (string-append "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+                         (let loop ((i 0) (acc ""))
+                           (if (= i chunks) acc
+                               (loop (+ i 1)
+                                     (string-append acc (number->string chunk-len 16) "\r\n"
+                                                    (make-string chunk-len #\b) "\r\n"))))
+                         "0\r\n\r\n"))))
+;; The same body, stopped one byte short of its last chunk's end.
+(define (chunked-prefix chunks chunk-len)
+  (let ((whole (chunked-request chunks chunk-len)))
+    (subbytevector whole 0 (- (bytevector-length whole) 8))))
+(define (subbytevector bv from to)
+  (let ((out (make-bytevector (- to from))))
+    (bytevector-copy! bv from out 0 (- to from))
+    out))
+(define few-chunks 1)
+(define many-chunks 201)
+(define chunk-difference 200)
+
+;; The feed and finish statuses of a whole message, and after a prefix of one,
+;; the feed status, the named count field and the state it waits in.
+(define (whole-answer cm req)
+  (let* ((p (make-parser cm '() #f))
+         (r (parser-feed! p req 0 (bytevector-length req))))
+    (list (parser-result-status r) (parser-result-status (parser-finish! p)))))
+(define (prefix-answer cm req field)
+  (let* ((p (make-parser cm '() #f))
+         (r (parser-feed! p req 0 (bytevector-length req))))
+    (list (parser-result-status r) (parser-field-ref p field) (parser-state-name p))))
+
+(define body-bindings
+  (let ((ev (lambda (ps ux) callback-continue))
+        (dv (lambda (ps ux bv from to) callback-continue)))
+    (list (list 'message-begin ev) (list 'message-complete ev) (list 'body-data dv)
+          (list 'chunk-header ev) (list 'chunk-complete ev))))
+
+(harness-group "a body allocates nothing per body byte or per chunk"
+  (lambda ()
+    (harness-case "a fixed body's allocation does not grow with its length"
+      (lambda ()
+        ;; Two lengths with the same number of digits, so the messages differ in
+        ;; body bytes alone and the Content-Length digits' own cost, whatever it
+        ;; is, cannot enter this slope.
+        (let ((short (cl-request 10044 10044)) (long (cl-request 50044 50044))
+              (open (cl-request 50044 50043)))
+          ;; The answers first, so a path that stopped consuming the body could
+          ;; not pass by allocating nothing.
+          (check-equal "fixed body: a whole message completes" (whole-answer generated long)
+                       '(need-input finished))
+          (check-equal "fixed body: one byte short, the count holds the byte still owed"
+                       (prefix-answer generated open 'content-length)
+                       '(need-input 1 body-consume))
+          (check "control: alloc(40044) > alloc(44)"
+                 (> (control-alloc 40044 gen-reps) (control-alloc 44 gen-reps)))
+          (check-equal "fixed body: alloc(10044-byte body) = alloc(50044-byte body)"
+                       (alloc-feeding generated '() long gen-reps)
+                       (alloc-feeding generated '() short gen-reps))
+          (check-equal "fixed body, callbacks bound: alloc(10044-byte body) = alloc(50044-byte body)"
+                       (alloc-feeding generated body-bindings long gen-reps)
+                       (alloc-feeding generated body-bindings short gen-reps))
+          (witness! (cadr http-pair) '() short)
+          (witness! (cadr http-pair) '() long)
+          (witness-feed! (cadr http-pair) '() open))))
+    (harness-case "a fixed body whose count is above the fixnum range costs nothing per byte"
+      (lambda ()
+        ;; Content-Length 2^64 - 1: the count is a bignum before and after the
+        ;; feed, which ends inside the body.
+        (let* ((top (- (expt 2 64) 1))
+               (short (cl-request top 44)) (long (cl-request top 40044)))
+          (check-equal "bignum count: the count after 40044 body bytes"
+                       (prefix-answer generated long 'content-length)
+                       (list 'need-input (- top 40044) 'body-consume))
+          (check "control: alloc(40044) > alloc(44)"
+                 (> (control-alloc 40044 gen-reps) (control-alloc 44 gen-reps)))
+          (check-equal "bignum count: alloc(44 body bytes) = alloc(40044 body bytes)"
+                       (alloc-feeding-only generated '() long gen-reps)
+                       (alloc-feeding-only generated '() short gen-reps))
+          (say (string-append "byte-machine-alloc: fixed body B/message with a count above the fixnum range="
+                              (adapter-value->string
+                               (div (- (alloc-feeding-only generated '() short gen-reps)
+                                       (alloc-feeding-only generated '() (cl-request 44 44) gen-reps))
+                                    gen-reps))
+                              " more than with a fixnum count"))
+          (witness-feed! (cadr http-pair) '() short)
+          (witness-feed! (cadr http-pair) '() long))))
+    (harness-case "a chunked body's allocation does not grow with its chunk count"
+      (lambda ()
+        (let ((few (chunked-request few-chunks 44)) (many (chunked-request many-chunks 44))
+              (open (chunked-prefix many-chunks 44)))
+          (check-equal "chunked body: a whole message completes" (whole-answer generated many)
+                       '(need-input finished))
+          (check-equal "chunked body: one byte short, the chunk size holds the byte still owed"
+                       (prefix-answer generated open 'chunk-size)
+                       '(need-input 1 chunk-data-consume))
+          (check "control: alloc(201 chunks) > alloc(1)"
+                 (> (control-alloc many-chunks gen-reps) (control-alloc few-chunks gen-reps)))
+          (let ((disabled (- (alloc-feeding generated '() many gen-reps)
+                             (alloc-feeding generated '() few gen-reps)))
+                (bound (- (alloc-feeding generated body-bindings many gen-reps)
+                          (alloc-feeding generated body-bindings few gen-reps))))
+            (say (string-append "byte-machine-alloc: generated B/chunk disabled="
+                                (adapter-value->string (/ disabled (* gen-reps chunk-difference)))
+                                " bound=" (adapter-value->string (/ bound (* gen-reps chunk-difference)))))
+            (check-equal "chunked body: extra bytes for 200 more chunks" disabled 0)
+            (check-equal "chunked body, callbacks bound: extra bytes for 200 more chunks" bound 0))
+          (witness! (cadr http-pair) '() few)
+          (witness! (cadr http-pair) '() many)
+          (witness-feed! (cadr http-pair) '() open))))
+    (harness-case "a chunk whose size is above the fixnum range costs nothing per byte"
+      (lambda ()
+        ;; Sixteen hex digits, 2^64 - 1: the size is a bignum while the data is
+        ;; consumed, and the feed ends inside it.
+        (let* ((top (- (expt 2 64) 1))
+               (head "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\nffffffffffffffff\r\n")
+               (req (lambda (n) (u8-list->bytevector (bytes (string-append head (make-string n #\b))))))
+               (short (req 44)) (long (req 40044)))
+          (check-equal "bignum chunk: the size after 40044 data bytes"
+                       (prefix-answer generated long 'chunk-size)
+                       (list 'need-input (- top 40044) 'chunk-data-consume))
+          (check "control: alloc(40044) > alloc(44)"
+                 (> (control-alloc 40044 gen-reps) (control-alloc 44 gen-reps)))
+          (check-equal "bignum chunk: alloc(44 data bytes) = alloc(40044 data bytes)"
+                       (alloc-feeding-only generated '() long gen-reps)
+                       (alloc-feeding-only generated '() short gen-reps))
+          (witness-feed! (cadr http-pair) '() short)
+          (witness-feed! (cadr http-pair) '() long))))))
+
+;; --- a pause, per byte before it ----------------------------------------------
+;;
+;; No fixture above has a pause node, so the arm-kind census asks for one. A
+;; pause ends the feed, as an error does, and owes the same shape: what the
+;; event costs does not depend on how many bytes came before it. One machine,
+;; both renderings of the arm: `;` pauses with no reason, `!` with one.
+(define pause-machine
+  (make-machine 'pausecensus 'loop '() '() '()
+                (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f)
+                      (make-error-declaration 'held 'held "held for the application" #f))
+                (list (make-byte-dispatch-node
+                       'loop
+                       (list (make-byte-case (make-exact-byte-matcher 59) (make-edge 'hold 'advance) #f)
+                             (make-byte-case (make-exact-byte-matcher 33) (make-edge 'hold-why 'advance) #f))
+                       (make-edge 'loop 'advance) #f #f)
+                      (make-pause-node 'hold 'loop #f)
+                      (make-pause-node 'hold-why 'loop 'held #f))
+                'default-eof #f))
+(define pause-pair (load-pair pause-machine 'pausecensus))
+
+(harness-group "a pause allocates the same however many bytes precede it"
+  (lambda ()
+    (harness-case "a pause's outcome does not grow with the offset it reports"
+      (lambda ()
+        (let* ((real (car pause-pair)) (twin (cadr pause-pair))
+               (req (lambda (n end) (u8-list->bytevector
+                                     (append (bytes (make-string n #\a)) (list end)))))
+               (answer (lambda (bv)
+                         (let* ((r (feed-only real '() bv)) (why (parser-result-pause r)))
+                           (list (parser-result-status r) (parser-result-stream-offset r)
+                                 (and why (parser-error-code why)))))))
+          (check-equal "pause: both arms answer, after 40044 bytes"
+                       (list (answer (req 40044 59)) (answer (req 40044 33)))
+                       '((paused 40045 #f) (paused 40045 held)))
+          (check "control: alloc(40044) > alloc(44)"
+                 (> (control-alloc 40044 gen-reps) (control-alloc 44 gen-reps)))
+          (check-equal "pause: alloc(short prefix) = alloc(long prefix), each arm"
+                       (map (lambda (end) (- (alloc-feeding-only real '() (req 40044 end) gen-reps)
+                                             (alloc-feeding-only real '() (req 44 end) gen-reps)))
+                            '(59 33))
+                       '(0 0))
+          (for-each (lambda (end)
+                      (witness-feed! twin '() (req 44 end))
+                      (witness-feed! twin '() (req 40044 end)))
+                    '(59 33)))))))
+
+;; --- every field operation and predicate, per EXECUTION, on a u64 field -------
+;;
+;; The HTTP machine renders three field arms -- `store`, `clear` and `nonzero`
+;; -- and the emitter renders fourteen, each its own inline arithmetic on the
+;; field's value and the node's constants. A 64-bit field's constants can be
+;; bignums, and arithmetic on a bignum at run time allocates: that is how the
+;; accumulate arm came to allocate on every digit. So every operation and every
+;; predicate runs here, on a u64 field, with bignum constants wherever the
+;; value stays a fixnum.
+;;
+;; The claim is the digit group's, applied to the zero-width arms: an arm
+;; executed allocates nothing while every value it computes is a fixnum. Each row runs twice from a
+;; settable initial value: once below (greatest-fixnum), gated at zero, and once
+;; above it, recorded. Above it, an arm whose result is a bignum allocates that
+;; result -- `increment` from (greatest-fixnum) + 1 is this group's live
+;; control -- and a comparison against a bignum allocates nothing.
+;;
+;; One machine: a loop that reads a byte and returns to itself, with byte a, b,
+;; ... running one operation each on its own field and A, B, ... testing one
+;; predicate each, a hit incrementing that predicate's counter. A fallible
+;; operation's failure edge goes back to the loop, so the machine has no error
+;; state for a witness to owe.
+(define u64-top (- (expt 2 64) 1))
+(define bit63 (expt 2 63))
+;; (operation constants fixnum-initial above-initial value-after-n)
+(define field-op-rows
+  (list (list 'store '(5) 0 u64-top (lambda (v n) 5))
+        (list 'clear '() 7 u64-top (lambda (v n) 0))
+        (list 'increment '() (- (greatest-fixnum) 2000) (+ (greatest-fixnum) 1)
+              (lambda (v n) (+ v n)))
+        (list 'decrement '() 5000 u64-top (lambda (v n) (- v n)))
+        (list 'add '(3) 0 (+ (greatest-fixnum) 1) (lambda (v n) (+ v (* 3 n))))
+        (list 'set-mask '(6) 1 bit63 (lambda (v n) (bitwise-ior v 6)))
+        (list 'clear-mask (list (+ bit63 6)) 7 u64-top
+              (lambda (v n) (bitwise-and v (bitwise-not (+ bit63 6)))))))
+;; (predicate constants fixnum-initial above-initial holds?). Every fixnum
+;; initial makes its predicate hold, so the counter's increment runs too.
+(define field-predicate-rows
+  (list (list 'equal '(7) 7 u64-top (lambda (v) (= v 7)))
+        (list 'zero '() 0 u64-top (lambda (v) (= v 0)))
+        (list 'nonzero '() 7 u64-top (lambda (v) (not (= v 0))))
+        (list 'range (list 1 u64-top) 7 u64-top (lambda (v) (and (<= 1 v) (<= v u64-top))))
+        (list 'mask-any (list (+ bit63 6)) 7 u64-top
+              (lambda (v) (not (= 0 (bitwise-and v (+ bit63 6))))))
+        (list 'mask-all '(6) 7 u64-top (lambda (v) (= 6 (bitwise-and v 6))))
+        (list 'mask-none (list (+ bit63 8)) 7 u64-top
+              (lambda (v) (= 0 (bitwise-and v (+ bit63 8)))))))
+(define (sym . parts) (string->symbol (apply string-append parts)))
+(define (row-field prefix row) (sym prefix (symbol->string (car row))))
+(define (row-byte base rows row)
+  (+ base (- (length rows) (length (memq row rows)))))
+(define field-machine
+  (make-machine
+   'fieldcensus 'loop
+   (append (map (lambda (r) (make-uint-field (row-field "f-" r) 64 0 #t #f)) field-op-rows)
+           (map (lambda (r) (make-uint-field (row-field "p-" r) 64 0 #t #f)) field-predicate-rows)
+           (map (lambda (r) (make-uint-field (row-field "t-" r) 64 0 #f)) field-predicate-rows))
+   '() '()
+   (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
+   (append
+    (list (make-byte-dispatch-node
+           'loop
+           (append (map (lambda (r) (make-byte-case
+                                     (make-exact-byte-matcher (row-byte 97 field-op-rows r))
+                                     (make-edge (row-field "do-" r) 'advance) #f))
+                        field-op-rows)
+                   (map (lambda (r) (make-byte-case
+                                     (make-exact-byte-matcher (row-byte 65 field-predicate-rows r))
+                                     (make-edge (row-field "test-" r) 'advance) #f))
+                        field-predicate-rows))
+           (make-edge 'loop 'advance) #f #f))
+    (map (lambda (r)
+           (make-field-action-node (row-field "do-" r) (car r) (cons (row-field "f-" r) (cadr r))
+                                   'loop (and (memq (car r) '(increment decrement add)) 'loop) #f))
+         field-op-rows)
+    (map (lambda (r)
+           (make-field-branch-node (row-field "test-" r) (car r) (cons (row-field "p-" r) (cadr r))
+                                   (row-field "hit-" r) 'loop #f))
+         field-predicate-rows)
+    (map (lambda (r)
+           (make-field-action-node (row-field "hit-" r) 'increment (list (row-field "t-" r))
+                                   'loop 'loop #f))
+         field-predicate-rows))
+   'default-eof #f))
+(define field-pair (load-pair field-machine 'fieldcensus))
+(define few-executions 10)
+(define many-executions 1010)
+
+;; One feed of `n` copies of `byte`, from a parser whose field `field` starts at
+;; `initial`. The input and the override list are built before the measured
+;; loop, so it counts what the parser allocates and nothing of the case's own.
+(define (feed-with cm initials bv)
+  (let ((p (make-parser cm '() #f initials)))
+    (cons p (parser-feed! p bv 0 (bytevector-length bv)))))
+(define (alloc-executing cm field initial byte n)
+  (let ((initials (list (cons field initial))) (bv (make-bytevector n byte)))
+    (collect)
+    (let ((before (sstats-bytes (statistics))))
+      (do ((i 0 (+ i 1))) ((= i digit-reps))
+        (feed-with cm initials bv))
+      (- (sstats-bytes (statistics)) before))))
+
+;; Per row and run: what 1000 more executions allocated, and whether the feed
+;; answered what the row says it should.
+(define (field-row-run real twin field byte initial expected read)
+  (let* ((initials (list (cons field initial)))
+         (fed (feed-with real initials (make-bytevector many-executions byte)))
+         (got (cons (parser-result-status (cdr fed)) (read (car fed)))))
+    (witness-run! (lambda () (feed-with twin initials (make-bytevector many-executions byte))))
+    (list (equal? got (cons 'need-input expected))
+          got
+          (- (alloc-executing real field initial byte many-executions)
+             (alloc-executing real field initial byte few-executions)))))
+
+(harness-group "a field arm allocates nothing per execution while its values are fixnums"
+  (lambda ()
+    (harness-case "every operation and predicate, below and above the fixnum range"
+      (lambda ()
+        (let* ((real (car field-pair)) (twin (cadr field-pair))
+               (runs
+                (append
+                 (map (lambda (r)
+                        (let ((f (row-field "f-" r)) (b (row-byte 97 field-op-rows r)))
+                          (define (run initial)
+                            (field-row-run real twin f b initial
+                                           (list ((list-ref r 4) initial many-executions))
+                                           (lambda (p) (list (parser-field-ref p f)))))
+                          (list (car r) (run (caddr r)) (run (cadddr r)))))
+                      field-op-rows)
+                 (map (lambda (r)
+                        (let ((f (row-field "p-" r)) (t (row-field "t-" r))
+                              (b (row-byte 65 field-predicate-rows r)))
+                          (define (run initial)
+                            (field-row-run real twin f b initial
+                                           (list initial (if ((list-ref r 4) initial)
+                                                             many-executions 0))
+                                           (lambda (p) (list (parser-field-ref p f)
+                                                             (parser-field-ref p t)))))
+                          (list (car r) (run (caddr r)) (run (cadddr r)))))
+                      field-predicate-rows)))
+               ;; (arm got) for each run whose answer was not the row's.
+               (wrong (apply append
+                             (map (lambda (x)
+                                    (append (if (car (cadr x)) '() (list (list (car x) (cadr (cadr x)))))
+                                            (if (car (caddr x)) '() (list (list (car x) (cadr (caddr x)))))))
+                                  runs)))
+               (extra-below (map (lambda (x) (cons (car x) (caddr (cadr x)))) runs))
+               (extra-above (map (lambda (x) (cons (car x) (caddr (caddr x)))) runs)))
+          ;; The answers first, so an arm that stopped computing could not
+          ;; pass by allocating nothing.
+          (check-equal "every row was run" (length runs)
+                       (+ (length field-op-rows) (length field-predicate-rows)))
+          (check-equal "field arms that did not answer their row (arm got)" wrong '())
+          (check "control: an increment storing a bignum allocates"
+                 (positive? (cdr (assq 'increment extra-above))))
+          (say (string-append "byte-machine-alloc: field arm B/execution above the fixnum range="
+                              (adapter-value->string
+                               (map (lambda (x) (cons (car x) (/ (cdr x) (* digit-reps 1000))))
+                                    extra-above))))
+          (check-equal "field arms that allocated for 1000 more fixnum-range executions (arm . extra bytes)"
+                       (filter (lambda (x) (not (zero? (cdr x)))) extra-below)
+                       '()))))))
 
 (define (sorted xs)
   (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) xs))
@@ -824,5 +1309,122 @@
         (check-equal "census ops no witness reached"
                      (sorted (filter (lambda (x) (not (memq x witnessed))) derived-ops))
                      '())))))
+
+;; The closed sets the emitter renders, read from compile.sls the way the op
+;; census reads its literals: the labels of the `case` on `key` inside the
+;; procedure `proc`. The recogniser is that pair; a dispatch written any other
+;; way derives nothing, and the first check below then names every kind the
+;; audited machines render.
+(define (case-labels proc key)
+  (define (find-form match? d)
+    (cond ((match? d) d)
+          ((pair? d) (or (find-form match? (car d)) (find-form match? (cdr d))))
+          (else #f)))
+  (let* ((def (find-form (lambda (d) (and (pair? d) (eq? (car d) 'define)
+                                          (pair? (cdr d)) (pair? (cadr d))
+                                          (eq? (car (cadr d)) proc)))
+                         (car compile-src)))
+         (c (and def (find-form (lambda (d) (and (pair? d) (eq? (car d) 'case)
+                                                 (pair? (cdr d)) (equal? (cadr d) key)))
+                                def))))
+    (if c
+        (fold-left (lambda (acc clause) (if (pair? (car clause)) (append acc (car clause)) acc))
+                   '() (cddr c))
+        '())))
+(define emitted-kinds (case-labels 'render-state-arm '(normal-state-kind s)))
+(define emitted-operations (case-labels 'render-operation 'op))
+(define emitted-predicates (case-labels 'render-predicate 'pred))
+
+;; The shape of every state some witness entered, and of every state an audited
+;; machine renders, each as (machine . shape).
+(define (shape-of name id) (vector-ref (cdr (assq name audited)) id))
+(define (entered-shapes)
+  (let-values (((ks vs) (hashtable-entries entered)))
+    (map (lambda (k) (cons (car k) (shape-of (car k) (cdr k)))) (vector->list ks))))
+(define (rendered-shapes)
+  (apply append (map (lambda (a) (map (lambda (s) (cons (car a) s)) (vector->list (cdr a))))
+                     audited)))
+;; Each distinct (machine . kind), or (machine . (kind . selector)) for a field
+;; arm, once.
+(define (distinct xs)
+  (fold-left (lambda (acc x) (if (member x acc) acc (cons x acc))) '() xs))
+(define (machine-kinds shapes) (distinct (map (lambda (x) (cons (car x) (cadr x))) shapes)))
+(define (iota-list n)
+  (let loop ((i (- n 1)) (acc '())) (if (< i 0) acc (loop (- i 1) (cons i acc)))))
+(define (by-name xs)
+  (list-sort (lambda (a b) (string<? (adapter-value->string a) (adapter-value->string b))) xs))
+
+(harness-group "the arm-kind census: every arm kind an audited machine renders has a witness"
+  (lambda ()
+    (harness-case "every state procedure of every audited twin counts its entries"
+      (lambda ()
+        ;; The counter's own completeness: a state whose procedure the
+        ;; instrumenter did not recognise would read as never entered.
+        (check-equal "audited twins whose counters are not exactly their states (name ids states)"
+                     (by-name (filter (lambda (x) (not (equal? (cadr x) (iota-list (caddr x)))))
+                                      instrumented))
+                     '())
+        (for-each
+         (lambda (a)
+           (let ((n (vector-length (cdr a))))
+             (say (string-append "byte-machine-alloc: arm census " (symbol->string (car a))
+                                 " states entered="
+                                 (number->string
+                                  (length (filter (lambda (x) (eq? (car x) (car a)))
+                                                  (entered-shapes))))
+                                 " of " (number->string n)))))
+         (reverse audited))))
+    (harness-case "every arm kind an audited machine renders is one render-state-arm names"
+      (lambda ()
+        ;; The recogniser's control. No floor on the derived set's size: one
+        ;; that read nothing leaves every kind the machines render outside it.
+        (say (string-append "byte-machine-alloc: arm kinds=" (adapter-value->string emitted-kinds)
+                            " operations=" (adapter-value->string emitted-operations)
+                            " predicates=" (adapter-value->string emitted-predicates)))
+        (check-equal "rendered kinds render-state-arm does not name"
+                     (by-name (filter (lambda (x) (not (memq (cdr x) emitted-kinds)))
+                                      (machine-kinds (rendered-shapes))))
+                     '())))
+    (harness-case "every arm kind render-state-arm renders is in some audited machine"
+      (lambda ()
+        ;; What makes the census total over the emitter rather than over the
+        ;; fixtures: a new kind fails here until an audited machine renders it.
+        (let ((rendered (map cdr (machine-kinds (rendered-shapes)))))
+          (check-equal "emitted kinds no audited machine renders"
+                       (by-name (filter (lambda (k) (not (memq k rendered))) emitted-kinds))
+                       '()))))
+    (harness-case "every arm kind an audited machine renders is entered there by a witness"
+      (lambda ()
+        ;; The totality row, per machine: an arm kind a machine renders and no
+        ;; witness enters in that machine is code this audit has never run.
+        (let ((entered-kinds (machine-kinds (entered-shapes))))
+          (check-equal "rendered (machine . kind) no witness entered"
+                       (by-name (filter (lambda (x) (not (member x entered-kinds)))
+                                        (machine-kinds (rendered-shapes))))
+                       '()))))
+    ;; One level down. A field arm is the operation or predicate it renders,
+    ;; and each renders its own inline arithmetic, which no census of runtime
+    ;; ops or arm kinds can tell apart.
+    (harness-case "every field operation and predicate a witness entered is one the emitter names"
+      (lambda ()
+        (check-equal "entered field arms render-operation and render-predicate do not name"
+                     (by-name (distinct
+                               (filter (lambda (s)
+                                         (case (car s)
+                                           ((field-action) (not (memq (cdr s) emitted-operations)))
+                                           ((field-branch) (not (memq (cdr s) emitted-predicates)))
+                                           (else #f)))
+                                       (map cdr (entered-shapes)))))
+                     '())))
+    (harness-case "every field operation and predicate the emitter renders is entered by a witness"
+      (lambda ()
+        (let ((shapes (map cdr (entered-shapes))))
+          (check-equal "emitted field arms no witness entered"
+                       (by-name (filter (lambda (s) (not (member s shapes)))
+                                        (append (map (lambda (o) (cons 'field-action o))
+                                                     emitted-operations)
+                                                (map (lambda (p) (cons 'field-branch p))
+                                                     emitted-predicates))))
+                       '()))))))
 
 (harness-finish)
