@@ -33,7 +33,7 @@
   ;; compile-machine : Machine (Listof Any) -> Compilation
   (define (compile-machine machine options)
     (unless (null? options)
-      (assertion-violation 'compile-machine "v0.1 accepts only the empty option list" options))
+      (assertion-violation 'compile-machine "accepts only the empty option list" options))
     (let ((v (verify-machine machine)))
       (if (verification-ok? v)
           (make-compilation #t '() (verification-machine v)

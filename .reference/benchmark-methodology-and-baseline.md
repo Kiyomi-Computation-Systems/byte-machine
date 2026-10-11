@@ -104,7 +104,7 @@ Runtime: **chez 10.4.1**, machine-type **tarm64osx**, os **darwin**, architectur
 artefact's `mode` field reads `"unknown"` because `BYTE_MACHINE_EXECUTION_MODE`
 was not set for the run), `executors both`, `compiler-options ()`,
 `deterministic-seed 0` (the workloads are fixed byte sequences; no PRNG).
-Harness version `1aea6b5aa6cd4448`.
+Harness version `cdba939871d946b`.
 
 **One-time metrics:**
 

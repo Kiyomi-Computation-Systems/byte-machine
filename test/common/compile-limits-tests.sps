@@ -1,6 +1,6 @@
 ;;; The compile-file witness for backend limits: limits that would make emission
 ;;; incorrect. The verifier enforces none, so this lane is the measurement that a
-;;; v0.1 machine at the generator's bounds does not reach one.
+;;; machine at the generator's bounds does not reach one.
 ;;;
 ;;; The witness is the largest emittable dispatch: a byte-dispatch with all 256
 ;;; exact-byte cases and a second dispatch over a complement matcher, rendered to
@@ -13,7 +13,7 @@
 ;;;
 ;;; The limits looked for: generated identifier length, emitted source size,
 ;;; `case` arity, and literal size. The lane prints what it measured for each;
-;;; none is reachable by a v0.1 machine.
+;;; none is reachable by a machine the generator can produce.
 (import (rnrs)
         (rnrs eval)
         (only (chezscheme) load compile-file generate-wpo-files with-output-to-string)
@@ -141,7 +141,7 @@
 
 ;; --- the limits data ----------------------------------------------------------
 ;; Which backend limits were looked for, and what this witness measured for each.
-;; None is reachable by a v0.1 machine: the generator's bounds produce machines far
+;; None is reachable by a machine the generator can produce: its bounds produce machines far
 ;; inside Chez's own limits, and the largest emittable dispatch here is the extreme
 ;; case. Printed so the claim rests on measured numbers, not hopes.
 (harness-group "the limits looked for are recorded"

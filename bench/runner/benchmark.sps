@@ -153,9 +153,9 @@
 
 (define artefact
   (list
-   (list 'schema "byte-machine v0.1 benchmark baseline")
+   (list 'schema "byte-machine benchmark baseline")
    (list 'harness-version (harness-fingerprint->string
-                           (harness-fingerprint-bytevector (string->utf8 "release-ledger v0.1"))))
+                           (harness-fingerprint-bytevector (string->utf8 "byte-machine benchmark harness"))))
    (list 'runtime (list (list 'name (adapter-runtime-name))
                         (list 'version (adapter-runtime-version))
                         (list 'machine-type (adapter-machine-type))
@@ -181,7 +181,7 @@
            median-ms-per-round dispersion-ms))
    (list 'unavailable-metrics
          '((cpu-info "not portably available from Chez Scheme")
-           (gc-activity "sstats-bytes gives total allocation; per-collection GC time is not recorded in v0.1")))
+           (gc-activity "sstats-bytes gives total allocation; per-collection GC time is not recorded")))
    (list 'workloads
          (map (lambda (w)
                 (let* ((name (car w)) (bv (b (cadr w))) (strategy (caddr w))
