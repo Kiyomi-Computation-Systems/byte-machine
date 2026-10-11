@@ -1,0 +1,120 @@
+# 0057: A digit compares against its bound and allocates only the value it stores
+
+Date: 2026-10-11
+Status: accepted; unreleased
+Milestone: none. Measured 2026-10-11, after 0.7.0; the user documentation (#160) shipped it as a caveat, which this record removes
+Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the audit is a slope with a live control) and [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (its scope is a census of runtime ops)
+Amends: [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (the Context's bound on "every generated per-byte path")
+
+## Context
+
+The generated integer-accumulate arm checked overflow as
+`(<= v (div (- MAX d) base))`, with the field's maximum written in as a literal.
+For a 64-bit field that maximum is 2^64 − 1. On a 64-bit Chez a fixnum has 61
+bits, so the maximum is a bignum, and every digit subtracted from it and divided
+the result: two bignums allocated per digit, whatever the value being read.
+
+Measured on Chez 10.4.1, `tarm64osx`: one uint field, an accumulate node that is
+its own digit target, and a `;` that clears the field and returns to it, fed
+`"1234567;"` 2000 times after a warm-up feed. A 32-bit field allocated 384 B
+over 13,993 digits; a 64-bit field allocated 448,224 B, about 32 B per digit.
+With this record's change both widths allocate 384 B, the feed's own constant.
+(A scratch program, re-run on `main` and on the fix; the gated form of the
+same measurement is the allocation lane's group in item 4.)
+The HTTP fixture reads two 64-bit fields this way, the content length in base
+10 and the chunk size in base 16.
+
+**The allocation audit could not see it, for two reasons.** Every message its
+slopes feed has no body, so no accumulate arm ever ran under it. And 0055's
+census counts the runtime ops emitted code calls, and the accumulate arm calls
+none: its cost is inline arithmetic. 0055's totality row reddens for a lowering
+that calls an op no witness reaches, and says nothing about one that calls no
+op at all. So `§26:1680` was recorded `met` while two arms in the audit's own
+fixture allocated on every digit.
+
+`§15:856` requires that the bound is checked before committing and that the
+check "must not rely on host fixnum width or silent wrapping". `§15:867` gives
+the check "conceptually" as `current <= floor((maximum - digit) / base)`.
+
+## Decision
+
+1. **The emitter divides the bound out; the arm only compares.** With the
+   maximum written as `q * base + r` (`0 <= r < base`),
+   `v * base + d <= maximum` holds exactly when `v < q`, or `v = q` and
+   `d <= r`. A `v` below `q` gives at most `q * base - 1`, because `d < base`;
+   a `v` above `q` gives at least `(q + 1) * base`. The arm emits
+   `(or (< v q) (and (= v q) (<= d r)))` with `q` and `r` as literals. That is
+   `§15:867`'s predicate for every digit the arm decodes, still checked before
+   the multiply-add, and the comparisons are generic, so nothing relies on
+   fixnum width. A comparison against a bignum literal allocates nothing.
+2. **The interpreter keeps `§15:867`'s form.** It still computes
+   `floor((maximum - digit) / base)` on every digit. The two lanes now reach one
+   answer by different arithmetic, which is what the differential is for. The
+   interpreter's allocation is recorded, not gated (0040 item 2).
+3. **What "allocates nothing" means for a value above the fixnum range.** On a
+   64-bit host that is 2^60 and up, which only a 64-bit field can hold. Such a
+   value is a heap object, so the digit that stores one allocates it: 32 B a
+   digit, measured, since the arm builds the product and then the sum. No
+   overflow check can avoid that; only a
+   different representation of a field's value could, and that is not this
+   record. The claim is therefore: **a digit allocates nothing while the value
+   it stores is a fixnum, in every width.** The documentation states it that
+   way.
+4. **The audit gains a fourth dimension: digits read into a 64-bit field.** A
+   one-field machine of the shape above, in base 10 and base 16, reads the
+   digits of `(greatest-fixnum)`. Every prefix of those digits is a fixnum, so
+   the numbers fed run every magnitude up to the limit, and the limit is read
+   from the host rather than written down. Feeding 1000 more numbers must
+   allocate exactly 0 more bytes. The live control is the same arm above the
+   range: 1000 more copies of 2^64 − 1 must allocate a positive amount, recorded
+   as 64 B per number in base 10 (two digits store a bignum) and 32 B in base 16
+   (one does). Each case reads its answer back first, so an arm that stopped
+   accumulating could not pass by allocating nothing.
+5. **Three goldens move and nothing else does.** The http, counted and
+   accumulate goldens each carry an accumulate arm, and each changes on that
+   check line only. No fingerprint moves, the generated-runtime ABI stays 9,
+   and the runtime is untouched. A parser generated by 0.7.0 loads and runs
+   against this runtime with its old check, and gets the fix when regenerated.
+
+## What it costs
+
+Not measured for time. The arm does less per digit (two comparisons against
+literals in place of a subtraction and a division), but no benchmark run was
+taken for this change, so this record claims nothing about speed and is not an
+admission under 0048.
+
+## What this does not fix
+
+- **An arm that calls no runtime op is still outside the census.** The
+  accumulate arm was one. The counted-consume arm (on the body path, which no
+  audited message takes) and the field-action and field-branch arms are others,
+  and which of them an audited input reaches has not been measured. A census of
+  the emitted arm kinds an audited input reaches would close this the way 0055
+  closed runtime ops. To settle it: count, on the counting twin, which state
+  arms each audited input enters, and fail for any arm kind the HTTP and
+  keyword machines render that no witness enters.
+- **A value above the fixnum range allocates** (item 3).
+
+## Witnesses
+
+- `byte-machine.unit.allocation-audit` has the group "a digit read into a u64
+  field allocates nothing while its value is a fixnum", one case per base.
+  Before the fix both cases failed: 11,520,720 extra bytes in base 10 and
+  4,800,000 in base 16, for 20 repetitions of 1000 more numbers.
+- `byte-machine.differential.field` has the case "the bound's quotient rows, at
+  u8 and at u64". Each lane's answers over a u8 row (`249` to `260`, either side
+  of `25 * 10 + 5`) and a u64 row (either side of `1844674407370955161 * 10 + 5`,
+  a bignum quotient) are one value, so each way of mis-splitting the bound
+  reports its own.
+- The mutation lane goes from 78 passes / 680 mutations to 78 / 687. The field
+  pass re-anchors two (the emitted after-the-multiply-add survivor and the
+  divides-by-ten pin, now on `q` and `r`) and gains six: five on the emitted
+  split (admitting `q` for every digit, refusing `q`, a strict remainder test, a
+  zero remainder, an `eq?` equality that holds only for fixnums) and one on the
+  interpreter's own comparison, which had none. The audit pass gains one, which
+  restores the per-digit bound and is caught by both new cases. Every pin
+  resolves exactly once in its own mutant's output and in no other mutant's in
+  its pass: a 47-mutant sweep of the field pass and a 12-mutant sweep of the
+  audit pass, with the field pass clean on `main` (41 mutants) as the control.
+  The `eq?` pin needed both rows in one value: read alone, its u64 record is
+  the refusing mutant's record too.

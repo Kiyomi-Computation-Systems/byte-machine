@@ -29,7 +29,8 @@ conformance corpus at every chunk size.
 - *No input buffering.* Spans (a header name, a body) are delivered to your
   callbacks as ranges into the bytevector you fed. The runtime keeps no
   reference to it after the feed returns, and the generated per-byte path
-  allocates nothing, except when reading digits into a 64-bit field.
+  allocates nothing, unless a 64-bit field's value reaches 2^60 and becomes
+  a bignum.
 - *The pieces protocol parsers need.* Byte dispatch, byte classes, exact
   sequences, keyword tables (prefix-tolerant, optionally case-insensitive),
   unsigned-integer fields with overflow-checked accumulation, counted consumption
