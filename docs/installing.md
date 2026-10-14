@@ -1,7 +1,7 @@
 # Installing
 
-There is nothing to compile and nothing to install. You need one folder from
-this repository on Chez's library path, and then you can import.
+There is nothing to compile. Install byte-machine with Akku, or put one folder
+from this repository on Chez's library path, and then you can import.
 
 ## What you need
 
@@ -17,17 +17,35 @@ the code is platform-specific. Linux amd64 has a CI job that runs on every
 push to `main` and on pull requests labelled `ci`; Linux arm64 and Windows
 have none.
 
-## 1. Get the source
+## 1. Get byte-machine
+
+**With [Akku](https://akkuscm.org/)**, the R6RS package manager, run this in
+your project's folder:
+
+```sh
+akku install byte-machine
+```
+
+That adds byte-machine to your project's `Akku.manifest`, creating one if
+there is none. It pins the version in `Akku.lock` and puts the libraries in
+`.akku/lib`. Run your program through `.akku/env`, which adds that folder to
+Chez's library path:
+
+```sh
+.akku/env chez --program app.sps
+```
+
+Or run `. .akku/bin/activate` once to set it for the whole shell. With Akku you
+can skip step 3.
+
+**From the source:**
 
 ```sh
 git clone https://github.com/Kiyomi-Computation-Systems/byte-machine.git
 ```
 
-The repository also carries an `Akku.manifest` for the
-[Akku](https://akkuscm.org/) package manager, describing the libraries under
-`src/byte-machine/`.
-
-To use it from another project, a git submodule keeps the version pinned:
+To use it from another project without Akku, a git submodule keeps the version
+pinned:
 
 ```sh
 git submodule add https://github.com/Kiyomi-Computation-Systems/byte-machine.git vendor/byte-machine
