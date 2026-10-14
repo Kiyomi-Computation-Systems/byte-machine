@@ -100,6 +100,9 @@ Next, read [[file:docs/usage.md][Usage]], which builds, generates and runs a sma
 - Chez Scheme 10.4.1 or newer (the full system, not Petite)
 - CMake 3.26 or newer, to build and run the tests
 
+Install it with [[https://akkuscm.org/][Akku]] (=akku install byte-machine=), or put this repository's
+=src/= on Chez's library path.
+
 Tested on macOS arm64 locally and on Linux amd64 by CI. Windows amd64 and
 Linux arm64 are supported targets with no CI; see [[file:docs/installing.md][Installing]].
 
