@@ -29,13 +29,14 @@
               make-machine make-uint-field make-error-declaration make-edge
               make-integer-accumulate-node make-field-action-node make-error-node
               make-byte-dispatch-node make-byte-case make-exact-byte-matcher
-              make-field-branch-node make-pause-node)
+              make-field-branch-node make-pause-node make-finish-node)
         ;; The arm-kind census reads each audited machine's normalized states,
         ;; which no public library exports: a rendered library names its states
         ;; but not their kinds.
         (only (byte-machine private normal-ir)
               normalize-machine normal-machine-states normal-machine-fingerprint
-              normal-state-kind normal-state-id normal-field-selector))
+              normal-state-kind normal-state-id normal-field-selector
+              normal-dispatch-transitions normal-dispatch-fallback))
 
 (harness-begin "unit.allocation-audit")
 
@@ -499,6 +500,16 @@
 ;; Per load-pair: (name instrumented-ids state-count), for the check that every
 ;; state procedure carries its counter.
 (define instrumented '())
+;; A state that advances back to itself also renders a run loop, `%r<id>`,
+;; beside it: inline code its state's arm does not run, entered only once the
+;; arm has read a byte of the class. So the twin counts loops too, keyed
+;; (run-loop . id), and a loop's arm is (run-loop . test): how it tests a byte
+;; for the class -- no test, a range, or a table -- each its own inline code.
+;; Per load-pair: (name (id . (run-loop . test)) ...).
+(define audited-loops '())
+;; Per load-pair: (name instrumented-loop-ids looping-state-ids), for the check
+;; that every looping state's loop carries its counter.
+(define instrumented-loops '())
 
 ;; The id a state procedure's name carries, or #f for any other form.
 (define (state-procedure-id form)
@@ -508,26 +519,57 @@
          (and (> (string-length s) 2) (string=? (substring s 0 2) "%s")
               (string->number (substring s 2 (string-length s)))))))
 
+;; The id a run loop's name carries, or #f for any other form.
+(define (run-loop-id form)
+  (and (pair? form) (eq? (car form) 'define) (pair? (cdr form)) (pair? (cadr form))
+       (symbol? (car (cadr form)))
+       (let ((s (symbol->string (car (cadr form)))))
+         (and (> (string-length s) 2) (string=? (substring s 0 2) "%r")
+              (string->number (substring s 2 (string-length s)))))))
+
+;; How a rendered loop tests a byte, read off its form,
+;;   (define (%r<id> n pos off) (if (fx<? n end) BODY LEAVE)),
+;; BODY being the step itself when every byte is in the class, or else
+;;   (let ((b (bytevector-u8-ref bv n))) (if TEST STEP EXIT)),
+;; TEST a table lookup, one comparison, or two.
+(define (run-loop-test form)
+  (let ((body (caddr (caddr form))))
+    (if (not (and (pair? body) (eq? (car body) 'let)))
+        'every
+        (let ((test (cadr (caddr body))))
+          (cond ((and (pair? test) (eq? (car test) 'fx=?) (pair? (caddr test))
+                      (eq? (car (caddr test)) 'bytevector-u8-ref))
+                 'table)
+                ((and (pair? test) (eq? (car test) 'fx=?)) 'byte)
+                (else 'range))))))
+
 ;; The library datum with `(census-enter! 'name id)` at the head of every state
-;; procedure in `exec`, and the ids that received one.
+;; procedure in `exec`, and `(census-enter! 'name '(run-loop . id))` at the head
+;; of every run loop; the state ids that received one, and the loops as
+;; (id . (run-loop . test)).
 (define (instrument-states lib name)
-  (let ((ids '()))
+  (let ((ids '()) (loops '()))
     (define (in-exec form)
       (if (and (pair? form) (eq? (car form) 'define) (pair? (cdr form)) (pair? (cadr form))
                (eq? (car (cadr form)) 'exec))
           (cons* 'define (cadr form)
                  (map (lambda (f)
-                        (let ((i (state-procedure-id f)))
-                          (if i
-                              (begin (set! ids (cons i ids))
-                                     (cons* 'define (cadr f)
-                                            (list 'census-enter! (list 'quote name) i)
-                                            (cddr f)))
-                              f)))
+                        (let ((i (state-procedure-id f)) (l (run-loop-id f)))
+                          (cond
+                           (i (set! ids (cons i ids))
+                              (cons* 'define (cadr f)
+                                     (list 'census-enter! (list 'quote name) i)
+                                     (cddr f)))
+                           (l (set! loops (cons (cons l (cons 'run-loop (run-loop-test f))) loops))
+                              (cons* 'define (cadr f)
+                                     (list 'census-enter! (list 'quote name)
+                                           (list 'quote (cons 'run-loop l)))
+                                     (cddr f)))
+                           (else f))))
                       (cddr form)))
           form))
     (let ((out (map in-exec lib)))
-      (values out ids))))
+      (values out ids loops))))
 
 ;; The fingerprint a rendered library passes its compiled-machine constructor.
 (define (rendered-fingerprint d)
@@ -536,20 +578,37 @@
         (else #f)))
 
 ;; The machine's normalized states as (kind . selector) by id, and the IR's
-;; fingerprint, so the caller can check it is the IR the library came from.
+;; fingerprint, so the caller can check it is the IR the library came from;
+;; and the ids of the states that loop, from the IR rather than from the
+;; rendered text: a dispatch state that some byte brings back to itself by
+;; advance, through a transition that names it or, when the fallback does,
+;; as a byte no transition names. An edge back is not enough: a looping
+;; fallback on a state whose cases name every byte is never taken.
 (define (state-shapes machine)
   (let* ((n (normalize-machine (verification-machine (verify-machine machine))))
          (states (normal-machine-states n))
-         (shapes (make-vector (vector-length states) #f)))
+         (shapes (make-vector (vector-length states) #f))
+         (looping '()))
     (vector-for-each
      (lambda (s)
        (vector-set! shapes (normal-state-id s)
                     (cons (normal-state-kind s)
                           (and (memq (normal-state-kind s)
                                      '(field-action field-branch accumulate))
-                               (normal-field-selector s)))))
+                               (normal-field-selector s))))
+       (let ((id (normal-state-id s)))
+         (when (and (eq? (normal-state-kind s) 'dispatch)
+                    (let* ((fb (normal-dispatch-fallback s))
+                           (fb-self? (and (= (car fb) id) (eq? (cdr fb) 'advance)))
+                           (trs (normal-dispatch-transitions s)))
+                      (let byte ((b 0))
+                        (and (< b 256)
+                             (or (let ((t (assv b trs)))
+                                   (if t (and (= (cadr t) id) (eq? (caddr t) 'advance)) fb-self?))
+                                 (byte (+ b 1)))))))
+           (set! looping (cons id looping)))))
      states)
-    (values (normal-machine-fingerprint n) shapes)))
+    (values (normal-machine-fingerprint n) shapes (list-sort < looping))))
 
 ;; Emit `machine` twice: the real library, loaded for allocation, and its
 ;; counting twin, identical but for its name, the runtime it imports, and the
@@ -565,14 +624,14 @@
          (rendered (read (open-string-input-port text)))
          (lib (cadr rendered)))
     (with-text-file real-file (lambda (p) (put-string p text)))
-    (let-values (((twin-lib ids)
+    (let-values (((twin-lib ids loops)
                   (instrument-states
                    (read (open-string-input-port
                           (replace-once
                            (replace-once text "(library (generated " "(library (generated-census ")
                            "(byte-machine runtime)" "(byte-machine-census counting-runtime)")))
                    name))
-                 ((fp shapes) (state-shapes machine)))
+                 ((fp shapes looping) (state-shapes machine)))
       ;; Loud: kinds read from any other IR would describe a different library.
       (unless (eqv? fp (rendered-fingerprint rendered))
         (assertion-violation 'load-pair "the IR read for arm kinds is not the one rendered"
@@ -580,6 +639,9 @@
       (set! audited (cons (cons name shapes) audited))
       (set! instrumented (cons (list name (list-sort < ids) (vector-length shapes))
                                instrumented))
+      (set! audited-loops (cons (cons name loops) audited-loops))
+      (set! instrumented-loops (cons (list name (list-sort < (map car loops)) looping)
+                                     instrumented-loops))
       (with-text-file twin-file (lambda (p) (write twin-lib p))))
     (load real-file)
     (load twin-file)
@@ -1221,6 +1283,126 @@
 (define (sorted xs)
   (list-sort (lambda (a b) (string<? (symbol->string a) (symbol->string b))) xs))
 
+;; --- a run loop, per byte it reads ---------------------------------------------
+;;
+;; A state that advances back to itself reads its run in a loop beside it, and
+;; that loop, not the state's arm, is the per-byte path for every byte of a run
+;; after the first. So each way a loop tests a byte gets a slope over the bytes
+;; it reads. A header value is the HTTP machine's table loop, which the per-byte
+;; slope above measures; a request target is its range loop; and a loop of one
+;; byte, tested by one comparison, and a loop with no test, every byte in its
+;; class, need a machine of their own, since no other audited machine has
+;; either: `nl` loops on newlines, and any other byte goes to `rest`, which
+;; loops on every byte to the end.
+(define (target-request target-len)
+  (u8-list->bytevector
+   (bytes (string-append "GET /" (make-string target-len #\a) " HTTP/1.1\r\nHost: x\r\n\r\n"))))
+(define rest-machine
+  (make-machine 'restm 'nl '() '() '()
+                (list (make-error-declaration 'default-eof 'eof "unexpected end of input" #f))
+                (list (make-byte-dispatch-node 'nl
+                        (list (make-byte-case (make-exact-byte-matcher 10) (make-edge 'nl 'advance) #f))
+                        (make-edge 'rest 'reexecute) 'fin #f)
+                      (make-byte-dispatch-node 'rest '() (make-edge 'rest 'advance) 'fin #f)
+                      (make-finish-node 'fin #f))
+                'default-eof #f))
+(define rest-pair (load-pair rest-machine 'restcensus))
+
+(harness-group "a run loop allocates nothing per byte it reads"
+  (lambda ()
+    ;; One case, one value: the extra bytes 40000 more bytes of a run cost, for
+    ;; each way a loop tests a byte. An allocation in one test's code shows in
+    ;; its own entry only, and one in the code every loop shares in all three,
+    ;; so each is named by the value it gives. Each machine's answers are read
+    ;; back first, so a loop that stopped reading could not pass by allocating
+    ;; nothing.
+    ;;
+    ;; byte: newlines through the `nl` machine's first state. range: the HTTP
+    ;; request target. table: the field machine's `loop`, which advances back
+    ;; to itself on its fallback, so it loops over every byte no row names; its
+    ;; own rows feed only named bytes, which leave by a clause. every: the `nl`
+    ;; machine's `rest`, reached on any other byte.
+    (harness-case "every run-loop test: a run's allocation does not grow with its length"
+      (lambda ()
+        (let* ((field-real (car field-pair)) (field-twin (cadr field-pair))
+               (rest-real (car rest-pair)) (rest-twin (cadr rest-pair))
+               (short-target (target-request 44)) (long-target (target-request 40044))
+               (short-run (make-bytevector 44 48)) (long-run (make-bytevector 40044 48))
+               (short-nl (make-bytevector 44 10)) (long-nl (make-bytevector 40044 10))
+               (short-rest (make-bytevector 44 97)) (long-rest (make-bytevector 40044 97))
+               (target-answer
+                (lambda (bv) (let ((r (feed-only generated '() bv)))
+                               (list (parser-result-status r) (parser-result-consumed r)))))
+               (field-answer
+                (lambda (bv) (let* ((p (make-parser field-real '() #f))
+                                    (r (parser-feed! p bv 0 (bytevector-length bv))))
+                               (list (parser-result-status r) (parser-result-consumed r)
+                                     (parser-state-name p)))))
+               (rest-answer
+                (lambda (bv) (let ((r (feed-once! rest-real '() bv)))
+                               (list (parser-result-status r) (parser-result-stream-offset r))))))
+          (check-equal "each loop's machine reads both lengths to the end"
+                       (list (target-answer short-target) (target-answer long-target)
+                             (field-answer short-run) (field-answer long-run)
+                             (rest-answer short-nl) (rest-answer long-nl)
+                             (rest-answer short-rest) (rest-answer long-rest))
+                       (list (list 'need-input (bytevector-length short-target))
+                             (list 'need-input (bytevector-length long-target))
+                             '(need-input 44 loop) '(need-input 40044 loop)
+                             '(finished 44) '(finished 40044)
+                             '(finished 44) '(finished 40044)))
+          (check "control: alloc(40044) > alloc(44)"
+                 (> (control-alloc 40044 gen-reps) (control-alloc 44 gen-reps)))
+          (check-equal "extra bytes for 40000 more bytes of a run, by loop test"
+                       (list (cons 'byte (- (alloc-feeding rest-real '() long-nl gen-reps)
+                                            (alloc-feeding rest-real '() short-nl gen-reps)))
+                             (cons 'range (- (alloc-feeding generated '() long-target gen-reps)
+                                             (alloc-feeding generated '() short-target gen-reps)))
+                             (cons 'table (- (alloc-feeding-only field-real '() long-run gen-reps)
+                                             (alloc-feeding-only field-real '() short-run gen-reps)))
+                             (cons 'every (- (alloc-feeding rest-real '() long-rest gen-reps)
+                                             (alloc-feeding rest-real '() short-rest gen-reps))))
+                       '((byte . 0) (range . 0) (table . 0) (every . 0)))
+          (witness! (cadr http-pair) '() short-target)
+          (witness! (cadr http-pair) '() long-target)
+          (witness-feed! field-twin '() short-run)
+          (witness-feed! field-twin '() long-run)
+          (witness! rest-twin '() short-nl)
+          (witness! rest-twin '() long-nl)
+          (witness! rest-twin '() short-rest)
+          (witness! rest-twin '() long-rest))))
+    ;; The way out at the end of a feed: a loop still in its run calls its
+    ;; state back, once per feed. No slope over a run's length can see what
+    ;; that costs, since it holds the feed count fixed; this holds the bytes
+    ;; read each feed to two newlines and compares against feeds that read
+    ;; nothing, which allocate the feed's own result and nothing else.
+    (harness-case "a run loop that ends a feed in its run allocates nothing for it"
+      (lambda ()
+        (let* ((real (car rest-pair)) (twin (cadr rest-pair))
+               (two (make-bytevector 2 10)) (feeds 1000)
+               (feeding (lambda (len)
+                          (let ((p (make-parser real '() #f)))
+                            (collect)
+                            (let ((before (sstats-bytes (statistics))))
+                              (do ((i 0 (+ i 1))) ((= i feeds)) (parser-feed! p two 0 len))
+                              (- (sstats-bytes (statistics)) before))))))
+          (check-equal "three feeds of two newlines each end inside the run"
+                       (let ((p (make-parser real '() #f)))
+                         (let loop ((i 0) (r #f))
+                           (if (= i 3)
+                               (list (parser-result-status r) (parser-result-stream-offset r)
+                                     (parser-state-name p))
+                               (loop (+ i 1) (parser-feed! p two 0 2)))))
+                       '(need-input 6 nl))
+          (check "control: alloc(1000) > alloc(10)"
+                 (> (control-alloc 1000 gen-reps) (control-alloc 10 gen-reps)))
+          (check-equal "extra bytes for 1000 feeds that end inside a run, over 1000 that read nothing"
+                       (- (feeding 2) (feeding 0)) 0)
+          (witness-run! (lambda ()
+                          (let ((p (make-parser twin '() #f)))
+                            (parser-feed! p two 0 2)
+                            (parser-feed! p two 0 2)))))))))
+
 (harness-group "the per-byte and per-header slopes reach the ops they claim"
   (lambda ()
     (harness-case "the HTTP slopes' messages drive the counting twin"
@@ -1281,6 +1463,11 @@
                (long (calls-feeding twin '() long-req))
                (few (calls-feeding twin '() few-headers-req))
                (many (calls-feeding twin '() many-headers-req))
+               ;; A state that does not loop reads every byte through its arm:
+               ;; the field machine's rows are named bytes, each read by
+               ;; `loop`'s arm, run, and back.
+               (arm10 (calls-feeding (cadr field-pair) '() (make-bytevector 10 97)))
+               (arm1010 (calls-feeding (cadr field-pair) '() (make-bytevector 1010 97)))
                (k0 (begin (census-reset!) (feed-only kw-twin '() (kw-field 0)) (census-counts)))
                (k16 (begin (census-reset!) (feed-only kw-twin '() (kw-field 16)) (census-counts)))
                (per-byte (filter (lambda (op) (not (= (count-of short op) (count-of long op))))
@@ -1288,6 +1475,21 @@
                (per-matched (filter (lambda (op) (not (= (count-of k0 op) (count-of k16 op))))
                                     derived-ops)))
           (check-equal "ops whose calls grow with a header value's length" per-byte '())
+          ;; The arm's count means something only if both feeds were read to
+          ;; the end through it: a field machine that stopped after a byte
+          ;; would make the same calls for 10 bytes as for 1010.
+          (check-equal "the field machine's arm reads every named byte of 10 and of 1010"
+                       (map (lambda (n)
+                              (let* ((p (make-parser (cadr field-pair) '() #f))
+                                     (r (parser-feed! p (make-bytevector n 97) 0 n)))
+                                (list (parser-result-status r) (parser-result-consumed r)
+                                      (parser-state-name p))))
+                            '(10 1010))
+                       '((need-input 10 loop) (need-input 1010 loop)))
+          (check-equal "ops whose calls grow with the bytes a dispatch arm reads"
+                       (filter (lambda (op) (not (= (count-of arm10 op) (count-of arm1010 op))))
+                               derived-ops)
+                       '())
           (check-equal "ops whose calls grow with bytes matched in a keyword" per-matched '())
           ;; Recorded, not asserted: which ops the per-header slope enters, and
           ;; how often. Its zero is a claim about these ops only because they
@@ -1334,19 +1536,30 @@
         (fold-left (lambda (acc clause) (if (pair? (car clause)) (append acc (car clause)) acc))
                    '() (cddr c))
         '())))
-(define emitted-kinds (case-labels 'render-state-arm '(normal-state-kind s)))
+;; A run loop is rendered beside its state by `render-run-loop`, and its
+;; tests are the labels of that procedure's `case` on `kind`. The loop is an
+;; arm kind of its own, `run-loop`, exactly when that case is there to read.
+(define emitted-loop-tests (case-labels 'render-run-loop 'kind))
+(define emitted-kinds
+  (append (case-labels 'render-state-arm '(normal-state-kind s))
+          (if (pair? emitted-loop-tests) '(run-loop) '())))
 (define emitted-operations (case-labels 'render-operation 'op))
 (define emitted-predicates (case-labels 'render-predicate 'pred))
 
 ;; The shape of every state some witness entered, and of every state an audited
 ;; machine renders, each as (machine . shape).
-(define (shape-of name id) (vector-ref (cdr (assq name audited)) id))
+(define (shape-of name id)
+  (if (pair? id)
+      (cdr (assv (cdr id) (cdr (assq name audited-loops))))
+      (vector-ref (cdr (assq name audited)) id)))
 (define (entered-shapes)
   (let-values (((ks vs) (hashtable-entries entered)))
     (map (lambda (k) (cons (car k) (shape-of (car k) (cdr k)))) (vector->list ks))))
 (define (rendered-shapes)
-  (apply append (map (lambda (a) (map (lambda (s) (cons (car a) s)) (vector->list (cdr a))))
-                     audited)))
+  (append (apply append (map (lambda (a) (map (lambda (s) (cons (car a) s)) (vector->list (cdr a))))
+                             audited))
+          (apply append (map (lambda (a) (map (lambda (l) (cons (car a) (cdr l))) (cdr a)))
+                             audited-loops))))
 ;; Each distinct (machine . kind) once, and each distinct (machine . arm), an
 ;; arm being its kind or, where the kind has a selector, (kind . selector).
 (define (distinct xs)
@@ -1375,10 +1588,29 @@
              (say (string-append "byte-machine-alloc: arm census " (symbol->string (car a))
                                  " states entered="
                                  (number->string
-                                  (length (filter (lambda (x) (eq? (car x) (car a)))
+                                  (length (filter (lambda (x) (and (eq? (car x) (car a))
+                                                                   (not (eq? (cadr x) 'run-loop))))
                                                   (entered-shapes))))
-                                 " of " (number->string n)))))
+                                 " of " (number->string n)
+                                 " loops entered="
+                                 (number->string
+                                  (length (filter (lambda (x) (and (eq? (car x) (car a))
+                                                                   (eq? (cadr x) 'run-loop)))
+                                                  (entered-shapes))))
+                                 " of " (number->string (length (cdr (assq (car a) audited-loops))))))))
          (reverse audited))))
+    (harness-case "every looping state's run loop counts its entries"
+      (lambda ()
+        ;; The loops' counters, against the states the IR says loop: a loop
+        ;; the instrumenter did not recognise would read as never entered, and
+        ;; a looping state rendered with no loop would leave its class to the
+        ;; arm, where no loop witness could see it.
+        (check-equal "audited twins whose loop counters are not their looping states (name loops looping)"
+                     (by-name (filter (lambda (x) (not (equal? (cadr x) (caddr x))))
+                                      instrumented-loops))
+                     '())
+        (check "an audited machine renders a run loop"
+               (exists (lambda (x) (pair? (cadr x))) instrumented-loops))))
     (harness-case "every arm kind an audited machine renders is one render-state-arm names"
       (lambda ()
         ;; The recogniser's control. No floor on the derived set's size: one
@@ -1435,6 +1667,24 @@
                                                      emitted-operations)
                                                 (map (lambda (p) (cons 'field-branch p))
                                                      emitted-predicates))))
+                       '()))))
+    ;; The same, for the ways a run loop tests a byte: each is its own inline
+    ;; code on the per-byte path, so each must be entered somewhere, and the
+    ;; recogniser has its control in the other direction.
+    (harness-case "every run-loop test a witness entered is one render-run-loop names"
+      (lambda ()
+        (check-equal "entered run-loop tests render-run-loop does not name"
+                     (by-name (distinct
+                               (filter (lambda (s) (and (eq? (car s) 'run-loop)
+                                                        (not (memq (cdr s) emitted-loop-tests))))
+                                       (map cdr (entered-shapes)))))
+                     '())))
+    (harness-case "every run-loop test render-run-loop renders is entered by a witness"
+      (lambda ()
+        (let ((shapes (map cdr (entered-shapes))))
+          (check-equal "emitted run-loop tests no witness entered"
+                       (by-name (filter (lambda (k) (not (member (cons 'run-loop k) shapes)))
+                                        emitted-loop-tests))
                        '()))))))
 
 (harness-finish)

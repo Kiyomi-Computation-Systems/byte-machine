@@ -6,6 +6,28 @@ All notable changes to byte-machine are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A state that loops back to itself reads its run in a tight loop.
+  Regenerate a parser to get it.** A byte dispatch whose class of bytes
+  advances back to the same node, such as one reading a token, a header
+  value or a string's body, now compiles to a loop beside its state. The loop
+  reads bytes until one leaves the class, then sends that byte where the node
+  would have. A class of several ranges is tested through a 256-byte table;
+  a class of one range keeps its one or two comparisons. Nothing a parser
+  reports changes: statuses, offsets, errors, spans and their fragments,
+  resuming across feeds, and pauses are the same, and it still allocates
+  nothing per byte. The generated-runtime ABI stays 9, so a parser generated
+  by 0.8.0 still loads and runs on this runtime, without the loop. Generated
+  code grows a little: the benchmark's HTTP grammar from 129,438 to 135,473
+  bytes.
+
+  On this project's benchmark (generated lane, seven rounds of 80,000 on one
+  amd64 Linux machine), header names and values take 16.5% less time, and no
+  workload takes more than 2.5% more. The loop pays on long runs: a JSON
+  parser built on byte-machine reads its file of long strings in 41% less
+  time per byte with it.
+
 ## [0.8.0] - 2026-10-11
 
 A minor, and the first public release. **Regenerate any parser with an

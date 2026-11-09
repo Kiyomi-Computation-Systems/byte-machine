@@ -6,6 +6,13 @@ Milestone: 14, Gate 0
 Builds on: [0048](0048-what-material-improvement-means.md) (the thresholds this is judged against), [0049](0049-a-state-is-a-procedure-not-a-case-arm.md) (the same defect, one level up)
 Amends: [0014](0014-byte-classes-expand-per-byte.md) (what the expansion costs, not that it happens)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-11-09 (decision 0059)** — **annotates** the Context's membership
+>   table and the Consequences' limits-witness bullet:
+>   [decision 0059](./0059-a-state-that-loops-back-reads-its-run-in-a-loop.md).
+
 ## Context
 
 [0049](0049-a-state-is-a-procedure-not-a-case-arm.md) removed the linear scan
@@ -105,3 +112,17 @@ from **104x to 44x** on a 703-byte request and **67x to 21x** on a url.
   five minutes, almost all of it interpreted. Measuring the two lanes at
   different iteration counts would fix it; that is not done here.
 - `§23.3` criterion 3 remains undischarged: one platform cell, as in 0049.
+
+## 2026-11-09 (decision 0059)
+
+Two things above describe the tree as it was; neither became false.
+
+- **The membership table.** The Context measured a 256-entry bytevector at
+  1.75 ns against range tests at 1.25 ns for one dispatch, and set it aside
+  because it answers only "is `b` in this class". A state's run loop needs
+  exactly that answer, on every byte of a run, and there decision 0059
+  measured range tests for a class of several runs taking 8.9% more time
+  than the table. The dispatch arms are unchanged and still render ranges.
+- **The limits witness** was rebuilt again, as the run loop's worst case:
+  bytes 0 and 2 of its 256 now loop back, so the state renders its arm's 256
+  clauses, a loop whose exit renders 254 of them again, and a class table.

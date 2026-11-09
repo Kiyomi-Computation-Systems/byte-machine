@@ -608,7 +608,9 @@ if(BYTE_MACHINE_CHEZ_EXECUTABLE)
                 # The keyword-table determinism pass reads
                 # its committed golden the same way, so the ABI-literal mutation's
                 # baseline is green rather than a missing-env failure.
-                "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls")
+                "BYTE_MACHINE_KEYWORD_TABLE_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-keyword-table.golden.sls"
+                # The loop determinism pass reads its golden the same way.
+                "BYTE_MACHINE_LOOP_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-loop.golden.sls")
 endif()
 
 # --- Provenance ------------------------------------------------------------
@@ -948,10 +950,11 @@ byte_machine_add_scheme_lane(
 # emitter AND the interpreter and runtime -- ${BYTE_MACHINE_CORE_EMIT}), which
 # is exactly why it is its own lane pair and not a group in the rejections
 # program, which must import no executor. It compile-files the largest emittable
-# machine (a 256-exact-case dispatch plus a complement-matcher dispatch) at run
+# machine (a 256-exact-case dispatch, two of whose bytes loop back so it renders
+# a run loop and a class table too, plus a complement-matcher dispatch) at run
 # time, loads the object, and asserts one feed agrees with the interpreter.
 # TIMEOUT from the measured wall-clock (0.29 s source) plus a wide margin --
-# compile-file of a ~36 KB library is fast.
+# compile-file of a ~42 KB library is fast.
 byte_machine_add_scheme_lane(
   NAME byte-machine.unit.compile-limits.chez.source
   BACKEND chez
@@ -1387,6 +1390,35 @@ byte_machine_add_scheme_lane(
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
           "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/class-machine.sls"
           "${CMAKE_SOURCE_DIR}/test/common/differential-byte-class-tests.sps"
+  TIMEOUT 180)
+
+# --- The run loop, interpreter against generated ---------------------------
+# A dispatch state that advances back to itself renders a tight loop beside
+# it. The loop machine has one of each shape the lowering makes; this lane
+# reads the emitted loops back as data and compares the two executors over
+# every feed split, a byte at a time, interleaved, at finish and at every
+# class edge. It imports (byte-machine private normal-ir) to derive which
+# states qualify, which BYTE_MACHINE_CORE_EMIT already lists.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.loop.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-loop-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/loop-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-loop-tests.sps"
+  TIMEOUT 180)
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.differential.loop.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/differential-loop-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/error-projection.sls"
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/loop-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/differential-loop-tests.sps"
   TIMEOUT 180)
 
 # --- Sequence dispatch through the interpreter -----------------------------
@@ -1980,6 +2012,34 @@ byte_machine_add_scheme_lane(
           "${CMAKE_SOURCE_DIR}/test/common/determinism-counted-tests.sps"
   TIMEOUT 120
   ENVIRONMENT "BYTE_MACHINE_COUNTED_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-counted.golden.sls")
+
+# --- Determinism against a committed golden (loop) ------------------------
+# For the accumulate golden's reason: a state that advances back to itself
+# renders a run loop and a class table no other golden has in every shape --
+# the HTTP golden has no fallback that loops and no class of every byte -- so a
+# determinism claim that excluded them would be a claim about the other
+# machines only. Both lanes list loop-machine.sls in SOURCES.
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.loop.chez.source
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-loop-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/loop-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-loop-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_LOOP_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-loop.golden.sls")
+
+byte_machine_add_scheme_lane(
+  NAME byte-machine.determinism.loop.chez.aot
+  BACKEND chez
+  PROGRAM "${CMAKE_SOURCE_DIR}/test/common/determinism-loop-tests.sps"
+  SOURCES ${BYTE_MACHINE_HARNESS_MANIFEST}
+          ${BYTE_MACHINE_CORE_EMIT}
+          "${BYTE_MACHINE_HARNESS_CHEZ_LIBRARY_ROOT}/byte-machine/test/loop-machine.sls"
+          "${CMAKE_SOURCE_DIR}/test/common/determinism-loop-tests.sps"
+  TIMEOUT 120
+  ENVIRONMENT "BYTE_MACHINE_LOOP_GOLDEN_FILE=${CMAKE_SOURCE_DIR}/test/fixtures/generated-loop.golden.sls")
 
 # --- Determinism against a committed golden (sequence) ---------------------
 # Unlike the one-byte and pause goldens, this machine has a BRANCHING prefix

@@ -515,7 +515,9 @@
 ;;
 ;; NO declared name becomes a generated identifier. Over an every-construct
 ;; machine (all fourteen node kinds, a span with a complete callback so the
-;; span-completion arm fires) hand-built in this file's style, because the
+;; span-completion arm fires, and a dispatch that advances back to itself on a
+;; class of two runs, so a run loop and its class table are rendered too)
+;; hand-built in this file's style, because the
 ;; compile lane has neither the generator nor the printer. Its totality is a
 ;; DERIVED row against the emitter's arms.
 (define w910-source-root
@@ -535,7 +537,7 @@
       (make-field-branch-node 'n-fb 'zero '(fld) 'n-ss 'n-ss #f)
       (make-span-start-node 'n-ss 'sp 'n-bd #f)
       (make-byte-dispatch-node 'n-bd
-        (list (make-byte-case (make-exact-byte-matcher 65) (make-edge 'n-se 'advance) #f))
+        (list (make-byte-case (make-byte-set-matcher '(65 67)) (make-edge 'n-bd 'advance) #f))
         (make-edge 'n-se 'advance) #f #f)
       (make-span-end-node 'n-se 'sp 'n-sd #f)
       (make-sequence-dispatch-node 'n-sd
@@ -632,7 +634,8 @@
 ;; THE STATE PROCEDURES AND THEIR DISPATCHER CARRY AN UNFORGEABLE PREFIX.
 ;; The emitted body binds `%s<id>` for every state and one `%dispatch`, and
 ;; they are deliberately NOT in reserved-member-3: a machine's state count has
-;; no bound, so the list could not enumerate them. What keeps them safe is the
+;; no bound, so the list could not enumerate them. The same holds for a state's
+;; run loop, `%r<id>`, and the library-level class tables, `%c<k>`. What keeps them safe is the
 ;; prefix. `portable-name?` admits `[a-z][a-z0-9-]*` and nothing else, so no
 ;; output binding and no declared name can begin with `%`, and the collision
 ;; reserved-member-3 exists to prevent is impossible by construction rather
@@ -647,15 +650,18 @@
 (define (emitter-private? sym)
   (let ((s (symbol->string sym)))
     (and (> (string-length s) 0) (char=? (string-ref s 0) #\%))))
-(define (state-procedure-name? sym)
+(define (numbered-name? sym c)
   (let ((s (symbol->string sym)))
     (and (> (string-length s) 2)
          (char=? (string-ref s 0) #\%)
-         (char=? (string-ref s 1) #\s)
+         (char=? (string-ref s 1) c)
          (let loop ((i 2))
            (or (>= i (string-length s))
                (and (char<=? #\0 (string-ref s i)) (char<=? (string-ref s i) #\9)
                     (loop (+ i 1))))))))
+(define (state-procedure-name? sym) (numbered-name? sym #\s))
+(define (run-loop-name? sym) (numbered-name? sym #\r))
+(define (class-table-name? sym) (numbered-name? sym #\c))
 
 (define w910-private (filter emitter-private? w910-identifiers))
 (define w910-leftover
@@ -686,14 +692,17 @@
 
 (harness-group "no declared name reaches identifier position"
   (lambda ()
-    (harness-case "the subtracted emitter-private names are unforgeable, and only the two known shapes"
+    (harness-case "the subtracted emitter-private names are unforgeable, and only the four known shapes"
       (lambda ()
         ;; A found-it guard first: with no private names the two checks below
         ;; would pass over an empty list and say nothing at all.
         (check "the emitted body binds emitter-private names" (pair? w910-private))
-        (check "every one of them is a state procedure or the dispatcher"
+        (check "the witness renders a run loop and a class table"
+               (and (exists run-loop-name? w910-private) (exists class-table-name? w910-private)))
+        (check "every one of them is a state procedure, a run loop, a class table or the dispatcher"
                (for-all (lambda (sym)
-                          (or (state-procedure-name? sym) (eq? sym (quote %dispatch))))
+                          (or (state-procedure-name? sym) (run-loop-name? sym)
+                              (class-table-name? sym) (eq? sym (quote %dispatch))))
                         w910-private))
         ;; The safety property itself, not a restatement of the spelling: none
         ;; of these can be written as a declared name or an output binding.

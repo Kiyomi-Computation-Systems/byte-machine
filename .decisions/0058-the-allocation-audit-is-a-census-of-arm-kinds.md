@@ -6,6 +6,13 @@ Milestone: none. Settles [0057](0057-a-digit-compares-against-its-bound.md)'s "W
 Builds on: [0040](0040-allocation-audit-is-a-slope-with-a-control.md) (the slope and its live control), [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) (the counting twin and the op census), [0057](0057-a-digit-compares-against-its-bound.md) (the digit witness, and the fixnum limit on "allocates nothing")
 Amends: [0057](0057-a-digit-compares-against-its-bound.md) ("What this does not fix", first bullet)
 
+> **Amendments** — later notes at the foot of this file reach back into the text
+> above them. Nothing above a note is rewritten.
+>
+> - **2026-11-09 (decision 0059)** — **annotates** items 1 to 3:
+>   [decision 0059](./0059-a-state-that-loops-back-reads-its-run-in-a-loop.md)
+>   adds run loops to what the twin counts.
+
 ## Context
 
 0055 bounded the allocation audit's scope by a census of the runtime ops
@@ -169,3 +176,15 @@ mutation lane gains thirteen mutations.
   field-branch mutants. Every pin was measured against a staged copy: each
   resolves exactly once in its own mutant's output and in none of the other
   24 mutants' outputs in the pass, whose baseline exits 0.
+
+## 2026-11-09 (decision 0059)
+
+A state that advances back to itself now renders a run loop, `%r<id>`, beside
+its procedure, and a loop is inline code its state's arm does not run. So the
+twin counts loop entries as well as state entries (item 1), a loop's arm is
+`(run-loop . test)` with its test read from its form (item 2), and the tests
+are derived as the labels of `render-run-loop`'s `case`, beside
+`render-state-arm`'s kinds (item 3). A further row checks each audited
+machine's instrumented loops against the states its IR says loop. Measured at
+the change: the HTTP machine still enters 136 of its 217 states, and 7 of its
+14 loops, which between them are both of the loop arms it renders.
