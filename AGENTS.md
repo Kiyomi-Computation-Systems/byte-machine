@@ -53,6 +53,10 @@
 * Build fixtures that can see the defect: put the subject somewhere other than
   first or index 0, make two coordinate systems differ, and hold a slope's
   other dimensions fixed.
+* A set a lowering derives from the IR can be empty for a machine the
+  verifier accepts. Give that degenerate shape a fixture that must render.
+* When a change moves a per-byte path, the old path keeps its witness
+  wherever it still runs.
 * A census ("every X gets Y") is checked over every X mechanically, with a
   sentinel counting what the code returned. Derive the set from the artifact,
   and derive the recogniser too. A table keyed by K asserts its rows are K. A
@@ -86,6 +90,8 @@
   construct, search every pin's `FIND` and `REPLACE` for it. `SITES` also
   fails when new code duplicates a pinned line: rename the new code's
   bindings. Anchor on code, never on comments.
+* A re-anchored `REPLACE` can name a different decision. Re-judge whether it
+  is equivalent, and what its pin now measures.
 * A new exit path, witness, check or mutation can disarm or widen existing
   pins. Re-run the whole suite and re-judge the lane.
 * Before retiring a mutation, stage the deletion and measure what still

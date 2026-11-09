@@ -96,7 +96,7 @@
 ;; ---- the disposition partition --------------------------------------------
 (define (refs-with-state st)
   (sort-strings (map criterion-ref (filter (lambda (r) (eq? (criterion-state r) st)) release-criteria))))
-(harness-group "the disposition partition (the release criteria, met through v0.8.0: 13 met, 2 amended, 0 open)"
+(harness-group "the disposition partition (the release criteria, met through v0.9.0: 13 met, 2 amended, 0 open)"
   (lambda ()
     (harness-case "met rows are exactly the thirteen (Slice ⑤ added §26:1682, §26:1684)"
       (lambda ()
@@ -179,7 +179,7 @@
                (file-exists? (string-append repo "/examples/generate-simple-machine/generate.sps")))
         (check "example README present"
                (file-exists? (string-append repo "/examples/generate-simple-machine/README.md")))))
-    (harness-case "§26:1684 CHANGELOG.md carries every release entry, 0.1.0 through 0.8.0"
+    (harness-case "§26:1684 CHANGELOG.md carries every release entry, 0.1.0 through 0.9.0"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1684"))
         (let ((cl (string-append repo "/CHANGELOG.md")))
@@ -201,9 +201,11 @@
                  (harness-string-contains? (file-string cl) "[0.6.1]"))
           (check "has the [0.7.0] entry"
                  (harness-string-contains? (file-string cl) "[0.7.0]"))
-          ;; The current release's own entry (release-version 0.8.0).
           (check "has the [0.8.0] entry"
-                 (harness-string-contains? (file-string cl) "[0.8.0]")))))
+                 (harness-string-contains? (file-string cl) "[0.8.0]"))
+          ;; The current release's own entry (release-version 0.9.0).
+          (check "has the [0.9.0] entry"
+                 (harness-string-contains? (file-string cl) "[0.9.0]")))))
     (harness-case "§26:1685 no native artifact is tracked; the leak lane guards HTTP re-export"
       (lambda ()
         (check "kind mechanical" (mechanical? "§26:1685"))
@@ -263,7 +265,7 @@
 (define public-src-libs
   (map (lambda (n) (string-append source-root "/byte-machine/" n ".sls"))
        '("graph" "verify" "compile" "interpret" "runtime")))
-;; "0.8.0" -> "0.8.x": the series SECURITY.md lists as supported.
+;; "0.9.0" -> "0.9.x": the series SECURITY.md lists as supported.
 (define (release-minor-series v)
   (let loop ((i (- (string-length v) 1)))
     (if (char=? (string-ref v i) #\.)
@@ -271,10 +273,10 @@
         (loop (- i 1)))))
 (harness-group "§4.5: the version surface and the declined export"
   (lambda ()
-    (harness-case "0.8.0 is the single owner and the export is declined"
+    (harness-case "0.9.0 is the single owner and the export is declined"
       (lambda ()
-        (check-equal "release-version" release-version "0.8.0")
-        (check "export still declined at v0.8" (not release-version-export?))
+        (check-equal "release-version" release-version "0.9.0")
+        (check "export still declined at v0.9" (not release-version-export?))
         (check "seven mirror surfaces named" (= (length release-version-surfaces) 7))))
     ;; The four surfaces that are files in the tree, each read for the string
     ;; `release-version` puts there, so a release that moves the owner and

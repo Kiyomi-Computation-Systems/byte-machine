@@ -1512,3 +1512,40 @@ One smaller lesson from the same fix:
   widens a refusal, run each sibling check's witness against it. Move any that
   falls in the overlap into its own check's exclusive region: `library`, which
   only member 1 refuses.
+
+## The degenerate shape, the moved witness and the re-anchored mutation
+
+Milestone 15's run loop passed `make test-all` and every mutation its builder
+wrote. Two adversarial reviews then found these, each one reproduced before it
+was fixed (decision 0059, PR #180):
+
+- **A derived set was empty for a machine the verifier accepts.** A state
+  qualified for a loop when its fallback advanced back to it. A dispatch whose
+  cases name all 256 bytes, none looping, has such a fallback and can never
+  take it, so its class was empty, and `render-machine` raised `cdr` on `()`
+  where 0.8.0 rendered 1,332 bytes. The two qualifying sets the tests derive
+  copied the same rule, so no lane could disagree. **So: when a lowering
+  derives a set from the IR, ask what the verifier admits that makes it empty,
+  and give that shape a fixture that must render.**
+- **A witness moved with the path it watched, and the old path still ran.**
+  The mutation "the dispatch arm enters a runtime op per byte" went UNCAUGHT
+  once runs were read in the loop, so it was re-anchored onto the loop's read.
+  A state that does not loop still reads every byte through its arm, and that
+  read had no witness left: the review's mutant gave `status=0`. **So: when a
+  change moves a per-byte path, keep a witness wherever the old path still
+  runs, and add one for the new path.**
+- **A re-anchored REPLACE named a different decision.** "A fallback that
+  loops does not by itself give its state a loop" was equivalent in outcome.
+  Re-anchored as "a fallback that loops adds no byte to the class", it
+  changed two decisions, and one of them made bytes fall off an exit `cond`:
+  it was recorded as equivalent, and failed 11 of 51 loop cases. **So: after
+  re-anchoring, run the mutant and read what fails before keeping its
+  verdict.**
+
+One smaller lesson, 0058 item 2 again:
+
+- **A selector that renders its own inline code is its own census arm.** A
+  one-byte class renders `(fx=? b k)` where a range renders two comparisons,
+  and the census counted both as `range`. No audited machine had a one-byte
+  loop, so an allocating one-byte test passed the lane that owns "allocates
+  nothing per byte".

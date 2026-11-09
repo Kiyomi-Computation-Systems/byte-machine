@@ -1,12 +1,12 @@
 # Milestone 15 Design — A state that loops back to itself reads its run in a loop
 
-**Status: Milestone 15 OPEN, 2026-11-09.** Gate 0 is decision
+**Status: Milestone 15 CLOSED 2026-11-09 — v0.9.0 released.** Delivered as
+this design plus Gate 0 = decision
 [0059](../.decisions/0059-a-state-that-loops-back-reads-its-run-in-a-loop.md)
 (the M8–M13 pattern: the gate is folded into one decision, no separate gate-0
-plan). Slice ① — the lowering in `compile.sls`, its fixture, lanes, golden,
-census rows and mutations — is implemented in the working tree on
-`milestone-15/run-loop`, uncommitted. Slice ② (the release and the close) has
-not begun.
+plan) plus two slices — Slice ① (the lowering in `compile.sls`, its fixture,
+lanes, golden, census rows and mutations; PR #180 = `4268a84`) and Slice ②
+(this v0.9.0 release and close). The ask is dispositioned in §5.
 
 Written against **`3c56875`** (`main`, v0.8.0). Every anchor below was measured
 against that commit or the working tree on top of it, in this checkout, on
@@ -181,10 +181,24 @@ gives.
 
 ## 5. Slice ② — the release and the close
 
-Not begun. When the owner schedules the release: the version surface, the
-`CHANGELOG.md` section, the release ledger, the tag, this design's status
-header and a Close section, and the parent plan's dated disposition. Then the
-consumer moves its pin and regenerates (the brief, "After the release").
+**v0.9.0, 2026-11-09.** Every version surface moves to 0.9.0: the release
+ledger's `release-version` and its test literals, a `[0.9.0]` `CHANGELOG.md`
+entry with an empty `[Unreleased]` kept above it, `Akku.manifest`,
+`CMakeLists.txt`'s project `VERSION`, `SECURITY.md`'s supported-versions row,
+0059's status block, and the parent plan's Status line and dated disposition.
+The annotated `v0.9.0` tag is applied to the merge commit.
+
+**The ask, dispositioned.** The brief asked that a state looping back to
+itself compile to a tight loop with nothing a caller can see changing, and
+nothing but the emitted text: met, by 0059 and Slice ①, with no IR,
+fingerprint, runtime, interpreter or verifier change and the ABI at 9. The
+brief's five candidate defects (a class one byte off, `off` wrong by the bytes
+read, a loop past `end`, an exit byte sent to the wrong clause, `pk` left as
+`byte`) each have a mutation the suite catches or records. Its question of
+whether every qualifying state should loop is answered yes, measured on this
+benchmark and the consumer's. 0048's rule 2 is not met; the owner admitted
+the change, as §3 records. The consumer moves its pin and regenerates next
+(the brief, "After the release").
 
 ## Explicitly out of Milestone 15
 

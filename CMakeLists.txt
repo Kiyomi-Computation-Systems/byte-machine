@@ -15,7 +15,7 @@
 cmake_minimum_required(VERSION 3.26)
 
 project(byte-machine
-  VERSION 0.8.0
+  VERSION 0.9.0
   DESCRIPTION "Byte-oriented deterministic state-machine generator for Chez Scheme"
   HOMEPAGE_URL "https://github.com/Kiyomi-Computation-Systems/byte-machine"
   LANGUAGES NONE)

@@ -1,7 +1,7 @@
 # 0059: A state that loops back to itself reads its run in a loop beside it
 
 Date: 2026-11-09
-Status: accepted; not yet released
+Status: accepted; released in 0.9.0 (2026-11-09)
 Milestone: 15, Gate 0 ([milestone-15-design.md](../.plans/milestone-15-design.md))
 Builds on: [0048](0048-what-material-improvement-means.md) (the method this is measured by), [0049](0049-a-state-is-a-procedure-not-a-case-arm.md) (a state is a procedure), [0050](0050-a-byte-class-is-a-range.md) (a class is a range), [0055](0055-the-allocation-audit-is-a-census-of-runtime-ops.md) and [0058](0058-the-allocation-audit-is-a-census-of-arm-kinds.md) (the census the loop joins)
 Annotates: [0050](0050-a-byte-class-is-a-range.md) (its limits witness, rebuilt again), [0058](0058-the-allocation-audit-is-a-census-of-arm-kinds.md) (what the arm census counts)
