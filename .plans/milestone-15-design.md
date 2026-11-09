@@ -219,6 +219,21 @@ the change, as §3 records. The consumer moves its pin and regenerates next
 - **`§23.3` criterion 2:** run the benchmark through the AOT launcher.
 - **`§23.3` criterion 3:** a second cell; on `tarm64osx`, repeat the dispersion
   table and derive its thresholds again (0048 item 4).
+  - *2026-11-09:* the owner retook `bench/fixtures/baseline-tarm64osx.sls` at
+    v0.9.0 on the M1: nine rounds of 16,000, both executors, the same
+    harness version.
+  - Against the baseline it replaces, taken at #136, the generated lane's
+    medians are:
+    - header names and values (`many-small-headers`, and
+      `dense-byte-dispatch`, the same input): 7.8% less time, 51 ms to 47;
+    - the 2,000-byte target: 7.5% less, 67 to 62;
+    - `byte-at-a-time-fragmentation`: 6.2% more, 32 to 34;
+    - the bodies: 25% to 29% less, which matches 0057, as their allocation
+      per message fell to 1,168 bytes.
+  - These mix every change since #136, 0054 to 0059, so they don't isolate
+    the loop, and they are no A/B in turns. Criterion 3 stays open. What
+    would settle it is this milestone's A/B, `main` against the branch in
+    turns, repeated on the M1.
 
 ## References
 
