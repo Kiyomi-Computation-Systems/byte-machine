@@ -1549,3 +1549,25 @@ One smaller lesson, 0058 item 2 again:
   and the census counted both as `range`. No audited machine had a one-byte
   loop, so an allocating one-byte test passed the lane that owns "allocates
   nothing per byte".
+
+## A pin on an allocation's exact bytes, and a merge with no Apple-silicon run
+
+Milestone 15 was built and measured on an amd64 Linux host, and #180 and #181
+merged on its runs and Linux CI alone. The CI workflow's header says every
+change runs on Apple silicon with the release selection and the mutation lane
+before it merges; nobody did. When the owner ran `make test-all` on the M1 at
+v0.9.0, one mutation failed for "the wrong reason": "a pause allocates in
+proportion to the offset it reports", a pin from #171, before Milestone 15.
+
+The pin spelled out the mutant's allocation, `got .38402624 38402624.`. Run
+alone on the M1, the lane printed exactly that. Under the mutation suite's
+staged run, one arm printed 38402816, 192 bytes more, so the pin missed while
+the check still caught the mutant. A runner patched to print the mutant's
+output showed it; nothing else could, since the runner records only its
+verdict.
+
+**So: pin a large allocation by its size, not its bytes, and sweep the new
+pin against the pass.** Eight digits starting `38` in both arms still tell
+this mutant from the three others the check catches. A sweep the same day
+measured those at `(51203936 51203936)`, twice, and `(0 1600000)`. **And a
+change built off Apple silicon runs `make test-all` there before it merges.**

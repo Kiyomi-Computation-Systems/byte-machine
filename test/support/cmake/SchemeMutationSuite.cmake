@@ -12600,10 +12600,21 @@ byte_machine_mutation(
   LABEL "compile: a pause allocates in proportion to the offset it reports"
   # `pos` is unchanged: a vector and a list `off` long are built and their
   # length subtracted back out.
+  #
+  # The pin names the size of what the mutant allocates, about 38.4 MB in each
+  # arm, not its exact bytes, which can differ between runs, most likely with
+  # where the heap stands when the vector and list are built. On darwin-arm64,
+  # under this suite one arm
+  # measured 38402816 where a plain run of the lane measured 38402624, 192 more
+  # (2026-11-09). Eight digits starting 38, in both arms, still tell this
+  # mutant from the three others this check catches, measured by a sweep of
+  # this pass the same day: the run loop's allocating step and its allocating
+  # table test read (51203936 51203936), and a machine error's growing record
+  # (0 1600000).
   FIND [["      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) pos "]]
   REPLACE [["      (define (%s" id " pos st off pk) (byte-machine-make-feed-outcome/v1 (quote paused) (- (+ pos (length (vector->list (make-vector off 0)))) off) "]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[the offset it reports: pause: alloc.short prefix. = alloc.long prefix., each arm -- expected .0 0., got .38402624 38402624.]])
+  EXPECT_OUTPUT_MATCHES [[the offset it reports: pause: alloc.short prefix. = alloc.long prefix., each arm -- expected .0 0., got .38[0-9][0-9][0-9][0-9][0-9][0-9] 38[0-9][0-9][0-9][0-9][0-9][0-9].]])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls

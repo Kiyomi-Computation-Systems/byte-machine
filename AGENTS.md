@@ -83,6 +83,9 @@
   newline, `$` is the end of the output). Pin `<case>: <check label>` and the
   measured `got`; end a number with `[^0-9]`. Never match text that every
   failing run prints. A pin matches exactly once in its own mutant's output.
+* A measured `got` that counts a large allocation is pinned by its size,
+  not its exact bytes: the bytes can move from run to run and between
+  platforms.
 * Judge a pin against every other mutant in its lane, in both directions.
   "Subsumed" is a measured whole-set relation. Before recording one, try a
   pair check, a value spanning two inputs, and a trace carrying both cases.
@@ -132,7 +135,9 @@ We run this when we're done and ready to merge the PR.
    label once final and merges after that run is green; a docs-only PR needs
    no run. A run with `steps: 0` never started
    (`gh api repos/<owner>/<repo>/check-runs/<id>`): say so on the PR, name the
-   local run that stands in for it, and merge.
+   local run that stands in for it, and merge. A change built anywhere but
+   Apple silicon also runs `make test-all` there before it merges: CI is
+   Linux only.
 2. Catch up local `main`.
 3. Clean up branches. Delete the merged branch locally and on the remote.
    Retarget a stacked PR to `main` before deleting its base.
