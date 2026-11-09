@@ -3,7 +3,9 @@
 ;;; machine at the generator's bounds does not reach one.
 ;;;
 ;;; The witness is the largest emittable dispatch: a byte-dispatch with all 256
-;;; exact-byte cases and a second dispatch over a complement matcher, rendered to
+;;; exact-byte cases, two of which advance back to it so it also renders a run
+;;; loop and a class table, and a second dispatch over a complement matcher,
+;;; rendered to
 ;;; a real generated library, `compile-file`d to an object, loaded, and one feed
 ;;; asserted to agree with the interpreter on the full parser-result. This is the
 ;;; ONE lane that both compiles a machine (it imports (byte-machine compile)) and
@@ -45,12 +47,22 @@
 ;; bytes share a destination, so every byte is its own run and the dispatch
 ;; cannot collapse at all. That is the arity a backend limit would have to
 ;; survive.
+;;
+;; And the worst case of the run loop on top of it. Bytes 0 and 2 advance back
+;; to d256, so it renders a loop whose exit dispatch is every other run again,
+;; 254 clauses after the arm's 256, and a 256-entry class table, since {0, 2}
+;; is two runs. A loop on more bytes would leave fewer to dispatch twice; on
+;; one byte, it would need no table.
 (define (bytes-0-255)
   (let loop ((i 255) (a '())) (if (< i 0) a (loop (- i 1) (cons i a)))))
+(define looping-bytes '(0 2))
 (define cases256
   (map (lambda (i)
          (make-byte-case (make-exact-byte-matcher i)
-                         (make-edge (if (even? i) 'd-comp 'd-comp-odd) 'advance) #f))
+                         (make-edge (cond ((memv i looping-bytes) 'd256)
+                                          ((even? i) 'd-comp)
+                                          (else 'd-comp-odd))
+                                    'advance) #f))
        (bytes-0-255)))
 
 ;; the largest emittable machine: a 256-exact-case dispatch, and a dispatch over a
@@ -111,8 +123,10 @@
   (and obj-ok (guard (e (#t #f)) (load objfile) (eval 'lim-parser (environment '(generated lim))))))
 (define im (make-interpreted-machine v))
 
-(define input (u8-list->bytevector '(65 66)))
-(define (feed-once m) (parser-feed! (make-parser m '() #f) input 0 2))
+;; Into the loop on 0, round it on 2 and 0, out of it on 65 through its exit
+;; dispatch, and to the stop on 66.
+(define input (u8-list->bytevector '(0 2 0 65 66)))
+(define (feed-once m) (parser-feed! (make-parser m '() #f) input 0 5))
 (define ri (feed-once im))
 (define rc (and cm (feed-once cm)))
 (define (triple r) (list (parser-result-status r) (parser-result-next r)
@@ -127,7 +141,17 @@
         ;; non-collapsing range lowering renders one clause per byte, bounded by
         ;; 256; the floor is a fixed size, not re-tuned to whatever this happens
         ;; to measure.
-        (check "the emitted source is large" (> emitted-size 10000))))
+        (check "the emitted source is large" (> emitted-size 10000))
+        ;; The loop and its table are what make this the run loop's worst
+        ;; case; a witness that rendered neither would measure the old one.
+        (check "it renders d256's run loop and its class table"
+               (let ((text (utf8->string emitted)))
+                 (define (has? s)
+                   (let loop ((i 0))
+                     (and (<= (+ i (string-length s)) (string-length text))
+                          (or (string=? (substring text i (+ i (string-length s))) s)
+                              (loop (+ i 1))))))
+                 (and (has? "(define (%r0 n pos off)") (has? "(define %c0 (quote #vu8("))))))
     (harness-case "compile-file wrote an object, and it is what was loaded"
       (lambda ()
         (check "the object file exists and is non-empty" obj-ok)
@@ -137,6 +161,7 @@
       (lambda ()
         (check "the compiled machine produced a result" (and rc #t))
         (check-equal "compiled result status is stopped" (and rc (parser-result-status rc)) 'stopped)
+        (check-equal "compiled result consumed the five bytes" (and rc (parser-result-consumed rc)) 5)
         (check-equal "the two lanes agree on the full triple" (and rc (triple rc)) (triple ri))))))
 
 ;; --- the limits data ----------------------------------------------------------
@@ -150,9 +175,10 @@
       (lambda ()
         (display "compile-limits: emitted source size = ") (display emitted-size)
         (display " bytes; 256 exact cases, alternating so none collapse, ")
-        (display "+ 1 complement case; ")
+        (display "2 of them looping back, so 254 rendered again in the loop's exit, ")
+        (display "+ a 256-entry class table + 1 complement case; ")
         (display "generated identifier length <= the length of the binding 'lim-parser; ")
-        (display "largest literal = a 256-byte complement census.") (newline)
+        (display "largest literal = the 256-entry class table.") (newline)
         ;; the assertion is that the artifact ran -- the reachability of any limit
         ;; is judged against the printed numbers.
         (check "the witness exercised the case-arity and source-size probes"

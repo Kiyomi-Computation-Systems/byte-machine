@@ -52,7 +52,11 @@ reach a file. `emit-machine` returns a metadata value describing what it wrote.
 - **The imports** are `(rnrs)` and `(byte-machine runtime)`, nothing else.
 - **The body** has one procedure per state. Each reads a byte, tests it, and
   calls the next state's procedure directly. A byte class compiles to one
-  range comparison per run of bytes, not a test per byte. Nothing is
+  range comparison per run of bytes, not a test per byte. A state that
+  advances back to itself, such as one reading a word or a header value, also
+  gets a tight loop: it reads bytes until one leaves the class, then sends
+  that byte where the state would have. A class of several runs is tested
+  through a 256-byte table, defined beside `errs`. Nothing is
   allocated per byte while field values fit in a fixnum, including when
   reading digits into a field: the overflow check compares against a bound
   worked out when the code is generated. A 64-bit field can hold more than a

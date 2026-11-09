@@ -653,8 +653,9 @@
       ;; fragments) -> covx5 pauses (node kind pause) -> covx6 a decision callback
       ;; whose script the driver cycles (cb-continue / -pause / -declared-branch-key
       ;; / -explicit-failure) -> covx7/covx8 an EMPTY span covy (delivers one empty
-      ;; fragment, witnessing empty-fragment) -> covx9 consumes and
-      ;; routes to the error terminal. The free
+      ;; fragment, witnessing empty-fragment) -> covx9 reads a run of every
+      ;; byte but 0-15 and 128, advancing back to itself, and leaves on one of
+      ;; those to the error terminal. The free
       ;; draw reaches spans/pauses/branches too rarely to satisfy the coverage
       ;; counters at the committed seed, so this segment exercises them
       ;; deterministically. It is coverage steering of the same class as the span
@@ -670,7 +671,18 @@
       (when (steering-coverage? st)
               (use-term! 'terr)
               (record-kind! 'covx9 'byte-dispatch)
-              (set! built (cons (make-byte-dispatch-node 'covx9 (list (make-byte-case (make-byte-range-matcher 0 255) (make-edge 'terr 'advance) #f)) (make-edge 'terr 'advance) 'terr #f) built))
+              ;; covx9 LOOPS: a dispatch whose fallback advances back to it
+              ;; renders a run loop (compile.sls, render-run-loop), here over a
+              ;; class of two runs, so a table. Its class is most of the byte
+              ;; space, so a drawn input that reaches it is likely to enter the
+              ;; loop, step it and, now and then, leave it by a clause. The
+              ;; free draw renders a loop in a few machines per seed, measured
+              ;; 3 of 41 accepted at the committed seed, and no trial entered
+              ;; one: with the loop's entry made to raise, the lane stayed green.
+              (set! built (cons (make-byte-dispatch-node 'covx9
+                                  (list (make-byte-case (make-byte-range-matcher 0 15) (make-edge 'terr 'advance) #f)
+                                        (make-byte-case (make-exact-byte-matcher 128) (make-edge 'terr 'advance) #f))
+                                  (make-edge 'covx9 'advance) 'terr #f) built))
               (let* ((nxt 'covx9)
                      (nxt (if cov-span?      ; empty span covy -> empty-fragment
                               (begin (record-kind! 'covx7 'span-start) (record-kind! 'covx8 'span-end)

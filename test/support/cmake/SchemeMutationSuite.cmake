@@ -149,8 +149,8 @@ cmake_minimum_required(VERSION 3.26)
 # reader checks by eye is the number the suite enforces. Adding, retiring or
 # moving a mutation changes EXPECTED_MUTATIONS; opening or retiring a pass
 # changes EXPECTED_PASSES.
-set(EXPECTED_PASSES 79)
-set(EXPECTED_MUTATIONS 711)
+set(EXPECTED_PASSES 81)
+set(EXPECTED_MUTATIONS 752)
 
 # --- What an EXPECT_OUTPUT_MATCHES can and cannot say -----------------------
 #
@@ -6805,6 +6805,19 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "at least one agreed trial observes span event empty-fragment -- expected a true value")
 
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.property.differential.chez.source
+  LABEL "compile: a run loop's exit works out off one byte too many, under drawn machines"
+  # Proves the drawn machines' trials reach a run loop's exit: machine-gen's
+  # coverage segment ends in covx9, which loops. Measured: 12 of the 41 accepted
+  # machines disagree. Before covx9 looped, no trial entered any loop (the
+  # loop's entry made to raise left this lane green). Both records together:
+  # each alone is a disagreement another mutant of this pass could report.
+  FIND [["                 (let ((pos n) (off (+ off (fx- n pos))))\n"]]
+  REPLACE [["                 (let ((pos n) (off (+ off (fx- n pos) 1)))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[machine 1 .seed 20260823. byte agreement -- expected none, got .schedule 1 .feed 2...*machine 7 .seed 20260823. byte agreement -- expected none, got .schedule 0 .feed 2..]])
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 40: member-2 and member-4 drift guards --------------------------------
@@ -8251,8 +8264,8 @@ byte_machine_mutation(
   # exactly: (reexecute 7 49) is prefix position 7 -- the branch -- and byte 49,
   # `HTTP/1.1`'s distinguishing byte, the one this truncation drops. The
   # sibling's is the mirror, (reexecute 7 48).
-  FIND [[(render-byte-clauses (normal-dispatch-transitions s))]]
-  REPLACE [[(render-byte-clauses (list (car (normal-dispatch-transitions s))))]]
+  FIND [[(render-byte-clauses (normal-dispatch-transitions s) tail)]]
+  REPLACE [[(render-byte-clauses (list (car (normal-dispatch-transitions s))) tail)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "256 x 8 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 7 49\\)")
 
@@ -8286,8 +8299,8 @@ byte_machine_mutation(
   # output contains exactly one of the two.
   # Control: the neighbouring-lane measurement recorded in this pass's header
   # shows both mutants surviving the two lanes they are NOT declared under.
-  FIND [[(render-byte-clauses (normal-dispatch-transitions s))]]
-  REPLACE [[(render-byte-clauses (list (car (reverse (normal-dispatch-transitions s)))))]]
+  FIND [[(render-byte-clauses (normal-dispatch-transitions s) tail)]]
+  REPLACE [[(render-byte-clauses (list (car (reverse (normal-dispatch-transitions s)))) tail)]]
   EXPECT_STATUS 1 EXPECT_OUTPUT_MATCHES
     "256 x 8 positions match, in both mismatch modes: no \\(mode position byte\\) disagreed -- expected none, got \\(reexecute 7 48\\)")
 
@@ -8490,6 +8503,16 @@ byte_machine_mutation(
   REPLACE [[      v r d o psr cbv kpath))]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES "no undeclared emitted local -- expected \\(\\), got \\(n\\)")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.member3-drift.chez.source
+  LABEL "compile: a run loop's name loses the unforgeable prefix"
+  # The drift fixture's `sread` loops on its fallback; its loop, renamed
+  # `r6`, is a local no reserved set holds.
+  FIND [["      (define (%r" id " n pos off)\n]]
+  REPLACE [["      (define (r" id " n pos off)\n]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every symbol left after the subtractions is a declared member: no undeclared emitted local -- expected .., got .r6.]])
 
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
@@ -11099,6 +11122,16 @@ byte_machine_mutation(
   REPLACE [[(define (rule-duplicates m) '())]]
   EXPECT_OUTPUT_MATCHES "name-duplicates fired at least once -- expected a true value")
 
+# FOUND 2026-11-09, NOT FIXED: in this pass, eight "oracle rule X always fires
+# (every node)" pins -- name-duplicates, missing-target, overlapping-cases,
+# ambiguous-sequence-prefix, unreachable-node, non-eof-into-finish,
+# zero-progress-cycle and eof-stop-or-cycle -- also match the output of the
+# matching "oracle rule X never fires (returns empty)" mutant, so each of those
+# pins does not name its own mutant alone. Measured by staging every mutant of
+# this pass and judging every pin against every output, on this tree and on
+# `3c56875`, with the same eight both times: inherited, not introduced. To
+# settle it, find a record each "always fires" mutant prints that its "never
+# fires" twin does not, and re-pin on it.
 byte_machine_mutation(
   FILE test/support/harness/byte-machine/test/verify-oracle.sls
   SPEC byte-machine.property.rejections.chez.source
@@ -12330,11 +12363,18 @@ byte_machine_mutation(
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
   SPEC byte-machine.unit.allocation-audit.chez.source
-  LABEL "compile: the dispatch arm enters a runtime op for every byte it reads"
+  LABEL "compile: a run loop enters a runtime op for every byte it reads"
   # A pure predicate per byte: nothing allocates, so every slope stays zero,
   # and only the per-op call census sees an op move onto the per-byte path.
-  FIND [["           (let ((b (bytevector-u8-ref bv pos)))\n"]]
-  REPLACE [["           (let ((b (begin (callback-failure? pos) (bytevector-u8-ref bv pos))))\n"]]
+  #
+  # Re-anchored from the dispatch arm's read when a state that advances back
+  # to itself began reading its run in a loop beside it: a header value's bytes
+  # after its first go through the loop, so the arm's mutant no longer moved
+  # the header-value count (measured, exit 0). The arm still reads every byte
+  # of a state that does not loop, and has its own mutation below, witnessed by
+  # the field machine's named bytes.
+  FIND [["           (let ((b (bytevector-u8-ref bv n)))\n"]]
+  REPLACE [["           (let ((b (begin (callback-failure? n) (bytevector-u8-ref bv n))))\n"]]
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES [[never per byte of a header value: ops whose calls grow with a header value's length -- expected .., got .callback-failure..]])
 
@@ -12376,7 +12416,7 @@ byte_machine_mutation(
   REPLACE [[(vector-ref entry 1) #f
             node-name state-id offset position-kind #f #f (make-bytevector offset 0)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[a machine error's record does not grow with the offset it reports: machine error: alloc.short prefix. = alloc.long prefix. -- expected]])
+  EXPECT_OUTPUT_MATCHES [=[a machine error's record does not grow with the offset it reports: machine error: alloc.short prefix. = alloc.long prefix. -- expected [0-9]+, got 16[0-9][0-9][0-9][0-9][0-9][^0-9]]=])
 
 byte_machine_mutation(
   FILE src/byte-machine/runtime.sls
@@ -12388,7 +12428,7 @@ byte_machine_mutation(
   REPLACE [[callback-error-reason detail
             node-name state-id offset position-kind #f #f (make-bytevector offset 0)))]]
   EXPECT_STATUS 1
-  EXPECT_OUTPUT_MATCHES [[a callback failure's record does not grow with the offset it reports: callback failure: alloc.short. = alloc.long. -- expected]])
+  EXPECT_OUTPUT_MATCHES [=[a callback failure's record does not grow with the offset it reports: callback failure: alloc.short. = alloc.long. -- expected [0-9]+, got 16[0-9][0-9][0-9][0-9][0-9][^0-9]]=])
 
 byte_machine_mutation(
   FILE src/byte-machine/compile.sls
@@ -12574,6 +12614,159 @@ byte_machine_mutation(
   EXPECT_STATUS 1
   EXPECT_OUTPUT_MATCHES
     "base 16: digits up to the largest fixnum allocate nothing: u64 overflow: extra bytes when 1000 more numbers precede it -- expected 0, got 7680000[^0-9]")
+# The run loop. A state that advances back to itself renders a loop beside
+# it, `%rN`, inline code no state arm's census covers, so the twin counts loop
+# entries too and a loop's arm is (run-loop . test): every, byte, range or
+# table, derived from render-run-loop's `case`. The census asks for each loop
+# arm an audited machine renders to be entered there, for each test
+# render-run-loop renders to be entered somewhere, and for each looping state's
+# loop to carry its counter. One witness reports the extra bytes 40000 more
+# run bytes cost, per test, as one value, so an allocation in one test's code
+# and one in the step every loop shares each give their own value; another
+# compares feeds that end inside a run with feeds that read nothing, for the
+# leave at the end of a feed, which no slope over a run's length can see.
+# Thirteen mutations; with them, the two error-record pins above gained their
+# measured `got`, since an allocating loop also makes the bytes before an error
+# cost more. The shipped "dispatch arm enters a runtime op" mutation has a twin
+# on the loop's read, where a header value's bytes now go, and keeps its own
+# on the arm's read with a new witness. Measured against a staged copy: every
+# pin in this pass resolves exactly once in its own mutant's output and in
+# none of the other mutants' outputs in this pass.
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: no clause enters its state's run loop"
+  # Every loop rendered and none run: each arm calls its state again per
+  # byte, which no outcome can tell from the loop (the loop lane passes), so the
+  # per-arm row is the witness.
+  FIND [[                            (if (and (= target (normal-state-id s)) (eq? mode 'advance))]]
+  REPLACE [[                            (if #f]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[is entered there by a witness: rendered .machine . arm. no witness entered -- expected .., got ..fieldcensus run-loop . table. .httpcensus run-loop . range.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a fallback that loops never enters the run loop"
+  # Equivalent in outcome, as above. The loops reached only by a fallback --
+  # the field, pause and every-byte machines' -- go unentered.
+  FIND [[            "               (else " (tail (car fb) (cdr fb)) ")))))\n"]]
+  REPLACE [[            "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[is entered there by a witness: rendered .machine . arm. no witness entered -- expected .., got ..fieldcensus run-loop . table. .pausecensus run-loop . table. .restcensus run-loop . every..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a run loop allocates on every step"
+  # The step every loop shares allocates, so all three tests' entries move.
+  FIND [[(step (string-append "(%r" id " (fx+ n 1) pos off)"))]]
+  REPLACE [[(step (string-append "(%r" id " (fx+ n (length (vector->list (make-vector 1 0)))) pos off)"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every run-loop test: a run's allocation does not grow with its length: extra bytes for 40000 more bytes of a run, by loop test -- expected ..byte . 0. .range . 0. .table . 0. .every . 0.., got ..byte . [1-9][0-9]*. .range . [1-9][0-9]*. .table . [1-9][0-9]*. .every . [1-9][0-9]*..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a run loop's range test allocates"
+  # Only the range loop's entry moves: no other slope runs a range loop.
+  FIND [[(string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))")))]]
+  REPLACE [[(string-append "(and (fx>=? b " (num lo) ") (fx<=? b (+ " (num hi) " -1 (length (vector->list (make-vector 1 0))))))")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every run-loop test: a run's allocation does not grow with its length: extra bytes for 40000 more bytes of a run, by loop test -- expected ..byte . 0. .range . 0. .table . 0. .every . 0.., got ..byte . 0. .range . [1-9][0-9]*. .table . 0. .every . 0..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a run loop's table test allocates"
+  # The table entry moves; so do the header-value slopes, which read a table
+  # loop too.
+  FIND [[(string-append "(fx=? 1 (bytevector-u8-ref %c" (num (table-of class)) " b))")]]
+  REPLACE [[(string-append "(fx=? (length (vector->list (make-vector 1 0))) (bytevector-u8-ref %c" (num (table-of class)) " b))")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every run-loop test: a run's allocation does not grow with its length: extra bytes for 40000 more bytes of a run, by loop test -- expected ..byte . 0. .range . 0. .table . 0. .every . 0.., got ..byte . 0. .range . 0. .table . [1-9][0-9]*. .every . 0..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a run loop with no test allocates on every step"
+  # Only the every-byte machine's entry moves.
+  FIND [[               (string-append "           " step "\n"))]]
+  REPLACE [[               (string-append "           (%r" id " (fx+ n (length (vector->list (make-vector 1 0)))) pos off)\n"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every run-loop test: a run's allocation does not grow with its length: extra bytes for 40000 more bytes of a run, by loop test -- expected ..byte . 0. .range . 0. .table . 0. .every . 0.., got ..byte . 0. .range . 0. .table . 0. .every . [1-9][0-9]*..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a run loop is defined in a form the counter cannot find"
+  # `(define %rN (lambda ...))`: the same procedure, a header the instrumenter
+  # does not recognise, so no loop would read as entered.
+  FIND [[(string-append "      (define (%r" id " n pos off)\n       (if (fx<? n end)\n" body "           " leave "))\n")]]
+  REPLACE [[(string-append "      (define %r" id " (lambda (n pos off)\n       (if (fx<? n end)\n" body "           " leave ")))\n")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[loop counters are not their looping states .name loops looping. -- expected .., got ..fieldcensus .. .0.. .httpcensus .. .3 8 18 21 23 40 45 62 67 69 82 86 96 98..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: render-run-loop dispatches on the test in a form the census cannot read"
+  # The recogniser derives nothing, and its control names every test entered.
+  FIND [[            (case kind
+              ((every)]]
+  REPLACE [[            (case (values kind)
+              ((every)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[entered run-loop tests render-run-loop does not name -- expected .., got ..run-loop . byte. .run-loop . every. .run-loop . range. .run-loop . table..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: render-run-loop renders a test no witness enters"
+  # A test the emitter can render must be entered by some witness.
+  FIND [[              ((every)
+               (string-append]]
+  REPLACE [[              ((every always)
+               (string-append]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[emitted run-loop tests no witness entered -- expected .., got .always.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: the dispatch arm enters a runtime op for every byte it reads"
+  # The shipped mutation, restored on the arm: a state that does not loop reads
+  # every byte through its arm. Its witness is the field machine, whose named
+  # row bytes each go through `loop`'s arm, run their row and come back: 1010 of
+  # them must make no op's count move from what 10 make.
+  FIND [["           (let ((b (bytevector-u8-ref bv pos)))\n"]]
+  REPLACE [["           (let ((b (begin (callback-failure? pos) (bytevector-u8-ref bv pos))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[ops whose calls grow with the bytes a dispatch arm reads -- expected .., got .callback-failure..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a run loop's one-byte test allocates"
+  # Only the newline loop's entry moves; it is the one loop of one byte.
+  FIND [[(string-append "(fx=? b " (num lo) ")"))]]
+  REPLACE [[(string-append "(fx=? b (+ " (num lo) " -1 (length (vector->list (make-vector 1 0)))))"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every run-loop test: a run's allocation does not grow with its length: extra bytes for 40000 more bytes of a run, by loop test -- expected ..byte . 0. .range . 0. .table . 0. .every . 0.., got ..byte . [1-9][0-9]*. .range . 0. .table . 0. .every . 0..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a run loop allocates each time a feed ends in its run"
+  # The leave at the end of a feed runs once per feed, so no slope over a run's
+  # length sees it. The feed-count witness does: 64 B a feed, measured. The
+  # one-byte test's allocation reddens the same check at 32000, so the pin ends
+  # at the measured got.
+  FIND [[(leave (string-append "(%s" id " n " id " (+ off (fx- n pos)) (quote boundary))"))]]
+  REPLACE [[(leave (string-append "(%s" id " n " id " (+ off (fx- n pos) -1 (length (vector->list (make-vector 1 0)))) (quote boundary))"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [=[extra bytes for 1000 feeds that end inside a run, over 1000 that read nothing -- expected 0, got 64000[^0-9]]=])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.unit.allocation-audit.chez.source
+  LABEL "compile: a one-byte class is tested by two comparisons"
+  # Equivalent in outcome: `(and (fx>=? b k) (fx<=? b k))` tests what `(fx=? b k)`
+  # does. No machine then renders the one-byte test, which the emitter-wide row
+  # names.
+  FIND [[            ((= (car (car runs)) (cdr (car runs))) 'byte)]]
+  REPLACE [[            ((= (car (car runs)) (cdr (car runs))) 'range)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [=[emitted run-loop tests no witness entered -- expected .., got .byte[)]]=])
+
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # --- Pass 78: the span an error abandons (differential.abandoned-span) -------
@@ -12987,6 +13180,386 @@ byte_machine_mutation(
 byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 set(BYTE_MACHINE_MUTATION_STAGE_DIRS ${BYTE_MACHINE_MUTATION_STAGE_DIRS_BEFORE_BENCH})
+
+# --- Pass 80: the run loop, interpreter against generated (differential.loop) --
+#
+# A dispatch state that advances back to itself renders a run loop beside it
+# (compile.sls, render-run-loop). differential-loop-tests.sps runs the loop
+# machine, which has one of every shape the lowering makes, through both
+# executors: every two-way feed split with each feed behind its own padding, a
+# byte at a time, two parsers interleaved, finish inside each loop, the bytes
+# either side of every class edge, and each input's whole trace asserted by
+# value. It also reads the emitted loops back: one per qualifying state, each
+# testing the class the fixture declares by hand, one table per distinct class.
+#
+# One mutation per decision of the lowering: the class (each test, each edge,
+# the fallback's fill, the bytes it names), where the loop starts and steps,
+# `off` on each way out, the end of the feed, the exit dispatch, and the
+# tables. Every mutant here is caught by a failed comparison. Two are
+# equivalent in outcome and caught only by the census of loops and tables, on
+# which they are pinned: a class's table duplicated, and a one-run class
+# tested through a table. Two different classes sharing one table is pinned on
+# the same census, since each of its behavioural records is shared with
+# another mutant of this pass.
+#
+# A fallback that loops adding no byte to the class is NOT equivalent, though
+# half of it is. comment, with no transition, then has an empty class and no
+# loop, and its arm calls itself per byte, which no outcome can tell from the
+# loop. text keeps a loop through its named `x`, with a class of that one
+# byte, while its arm still sends the fallback into it; that loop's exit has
+# no `else`, its fallback being the loop, so every unnamed byte after the
+# first falls off the exit's `cond`, exec returns an unspecified value, and
+# the runtime raises on it. The lane's exit case runs the generated side in a
+# guard, which turns that raise into a value it compares, and that is the pin.
+#
+# The same guard pins the exit's non-looping `else`: dropped where other
+# clauses remain, a byte no clause names falls off the `cond` the same way.
+# The qualifying rule itself -- a state loops when its class holds a byte, not
+# when an edge advances back to it -- is pinned by reverting it: the
+# unreachable-fallback machine then renders a raise, which its case compares.
+# Three candidates were not added, each a raise in the emitter or at load
+# rather than a defect a lane could compare:
+#   - the exit omitting its fallback everywhere: for a state whose only other
+#     clause is its fallback (ws) the exit is empty, and render-run-loop raises
+#     in `substring` before any library exists;
+#   - a class of every byte rendered with a test: its exit is empty too, the
+#     same raise;
+#   - a state that loops rendered with no loop while its arm still enters one:
+#     the generated library calls an unbound %rN and does not load.
+#
+# Measured against a staged copy, through the real launcher: every pin
+# resolves exactly once in its own mutant's output and in none of the other
+# mutants' outputs in this pass (a sweep of all 21, both directions).
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/differential-loop-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's two-comparison class reaches one byte past its upper edge"
+  # num's class is 48-57, so 58 loops where the interpreter refuses it. Caught
+  # by comparison in 3 records: the edge byte's placement, the lanes, the census.
+  FIND [[(string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))")))]]
+  REPLACE [[(string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num (+ hi 1)) "))")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[class edges: num: no edge byte the class misplaces -- expected none, got ."1" 58 .need-input 2 2 #f ready num #f]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's two-comparison class starts one byte past its lower edge"
+  # 48 leaves the loop, and with no clause for it the fallback refuses it. 5
+  # records, all comparisons.
+  FIND [[(string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))")))]]
+  REPLACE [[(string-append "(and (fx>=? b " (num (+ lo 1)) ") (fx<=? b " (num hi) "))")))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: "4096": outcome -- expected .finished 4 #f fin., got .error 1 unexpected-byte bad.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's one-byte class tests the next byte"
+  # start's class is the newline alone; 11 loops and 10 leaves, to the
+  # fallback. 11 records, all comparisons.
+  FIND [[(string-append "(fx=? b " (num lo) ")"))]]
+  REPLACE [[(string-append "(fx=? b " (num (+ lo 1)) ")"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: ".n.n": outcome -- expected .finished 2 #f fin., got .error 1 unexpected-byte bad.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a class table is rendered one byte out of step"
+  # Every run of every table moves up one byte: too wide at its top, too
+  # narrow at its bottom. 20 records.
+  FIND [[(num (bytevector-u8-ref (car cs) b))]]
+  REPLACE [[(num (bytevector-u8-ref (car cs) (if (= b 0) 0 (- b 1))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[class edges: ws: no edge byte the class misplaces -- expected none, got ." .t" 9 .error 2 2]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a byte a looping state names and does not loop on keeps the fallback's fill"
+  # text's fallback loops, so the class starts full; its control bytes, `"` and
+  # `\` must then be taken out of it. Here they stay: the class is every byte.
+  FIND [[                                           (if (and (= (cadr t) id) (eq? (caddr t) 'advance))
+                                               1 0)))]]
+  REPLACE [[                                           (if (and (= (cadr t) id) (eq? (caddr t) 'advance))
+                                               1 (bytevector-u8-ref c (car t)))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[class edges: text: no edge byte the class misplaces -- expected none, got ."..y" 31 .need-input 3 3 #f ready text text ..text 121 31...]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a class takes every byte no clause names when the fallback does not loop"
+  # Every state's unnamed bytes loop, though only text's and comment's fallbacks
+  # do. 25 records.
+  FIND [[(c (make-bytevector 256 (if fb-self? 1 0))))]]
+  REPLACE [[(c (make-bytevector 256 1)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[class edges: ws: no edge byte the class misplaces -- expected none, got ." .t" 8 .need-input 3 3 #f ready ws #f]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a fallback that loops adds no byte to the class"
+  # A fallback that loops brings back every byte no transition names. Without
+  # that fill, two things happen. comment, with no transition, has an empty
+  # class, so no loop, and its arm calls itself per byte: equivalent in
+  # outcome, seen only by the census of loops (`states with a loop`). text
+  # keeps a loop through its named `x`, with a class of that one byte, while its
+  # arm still sends the fallback into the loop; the loop's exit has no `else`,
+  # since the fallback loops, so every unnamed byte after the first falls off
+  # the exit's `cond` and exec returns an unspecified value, which the runtime
+  # raises on. Measured: 15 records, 8 of them such raises. The pin is the exit
+  # case, which runs the generated side in a guard and so compares that raise.
+  # Re-anchored from the edge rule `(or fb-self? ...)`, which the class's own
+  # non-emptiness replaced.
+  FIND [[(c (make-bytevector 256 (if fb-self? 1 0))))]]
+  REPLACE [[(c (make-bytevector 256 0)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[each loop's exit on a byte its clauses do not name: inputs whose generated run is not the interpreter's -- expected .., got .."."hi."" . raised..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's exit works out off one byte too many"
+  # off wrong by one on leaving through a clause. 26 records.
+  FIND [["                 (let ((pos n) (off (+ off (fx- n pos))))\n"]]
+  REPLACE [["                 (let ((pos n) (off (+ off (fx- n pos) 1)))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every split: "  9x": no split that moves the outcome -- expected none, got .0 .error 5 .unexpected-byte bad 5 byte #f. bad ..key. .val. .text....]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's exit rebinds pos before it works out off"
+  # `let*` sees the new `pos`, so `off` loses the bytes the loop read: off
+  # wrong by the bytes read. 24 records.
+  FIND [["                 (let ((pos n) (off (+ off (fx- n pos))))\n"]]
+  REPLACE [["                 (let* ((pos n) (off (+ off (fx- n pos))))\n"]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: "a=bc": outcome -- expected .error 4 eof vtrunc., got .error 3 eof vtrunc.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop forgets the bytes it read when its feed ends"
+  # off wrong by the bytes read, at the end of a feed. 57 records.
+  FIND [[(leave (string-append "(%s" id " n " id " (+ off (fx- n pos)) (quote boundary))"))]]
+  REPLACE [[(leave (string-append "(%s" id " n " id " off (quote boundary))"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: "4096": outcome -- expected .finished 4 #f fin., got .finished 0 #f fin.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop reads past the end of its feed"
+  # The lane copies each feed in front of bytes of every class, so the loop
+  # reads one of them where the interpreter stops. 62 records.
+  FIND [[       (if (fx<? n end)\n" body]]
+  REPLACE [[       (if (fx<=? n end)\n" body]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: "a=bc": outcome -- expected .error 4 eof vtrunc., got .finished 4 #f fin.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's exit drops the state's first other clause"
+  # The exit byte through a dropped clause: key's `=` falls to its fallback.
+  # 10 records.
+  FIND [[                                 (filter (lambda (t) (not (and (= (cadr t) sid) (eq? (caddr t) 'advance))))
+                                         (normal-dispatch-transitions s))]]
+  REPLACE [[                                 (let ((l (filter (lambda (t) (not (and (= (cadr t) sid) (eq? (caddr t) 'advance))))
+                                         (normal-dispatch-transitions s)))) (if (null? l) l (cdr l)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: "a=bc": outcome -- expected .error 4 eof vtrunc., got .error 1 unexpected-byte kbad.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's exit consumes the byte its fallback reexecutes"
+  # The exit byte sent to the wrong clause: the fallback's advance where the
+  # state reexecutes. 12 records.
+  FIND [[(string-append "               (else " (loop-tail (car fb) (cdr fb)) ")\n")]]
+  REPLACE [[(string-append "               (else " (loop-tail (car fb) 'advance) ")\n")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[every split: "ab;": no split that moves the outcome -- expected none, got .0 .error 3 .unexpected-byte kbad 3 boundary key. kbad ..key 97 98 59. .val. .text....]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: two different classes share one table"
+  # Every table loop reads table 0, ws's class. 30 records; the behavioural
+  # ones are each shared with another mutant of this pass, so the pin is the
+  # census of the class each loop tests.
+  FIND [[((bytevector=? (car cs) c) k)]]
+  REPLACE [[(#t k)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[class of text -- expected ..32 . 33. .35 . 91. .93 . 255.., got ..9 . 9. .32 . 32..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: two states with one class get a table each"
+  # Equivalent: val's copy of key's table holds the same bytes. The census
+  # of tables is the witness (3 records).
+  FIND [[                                           (not (member c acc)))]]
+  REPLACE [[                                           #t)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[tables a loop reads, by state -- expected ..key 1. .text 2. .val 1. .ws 0.., got ..key 1. .text 3. .val 1. .ws 0..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a class of several runs is tested as its first run"
+  # key's class narrows to its digits. 32 records.
+  FIND [[            ((pair? (cdr runs)) 'table)]]
+  REPLACE [[            ((pair? (cdr runs)) 'range)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[class edges: key: no edge byte the class misplaces -- expected none, got ."a" 65 .error 1 1]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a class of one run is tested through a table"
+  # Equivalent: a table holding one run tests the same bytes. The census of
+  # tables is the witness. Since a one-byte class has a test of its own, this
+  # reaches num alone; start's newline keeps its one comparison.
+  FIND [[            (else 'range))))]]
+  REPLACE [[            (else 'table))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[tables a loop reads, by state -- expected ..key 1. .text 2. .val 1. .ws 0.., got ..key 2. .num 1. .text 3. .val 2. .ws 0..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a state's arm enters its run loop with the run starting after its first byte"
+  # The first byte of every run is left out of off. 61 records.
+  FIND [[(string-append "(%r" id " (fx+ pos 1) pos off)")]]
+  REPLACE [[(string-append "(%r" id " (fx+ pos 1) (fx+ pos 1) off)")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: "4096": outcome -- expected .finished 4 #f fin., got .finished 3 #f fin.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop steps two bytes at a time"
+  # 40 records.
+  FIND [[(step (string-append "(%r" id " (fx+ n 1) pos off)"))]]
+  REPLACE [[(step (string-append "(%r" id " (fx+ n 2) pos off)"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[finish inside a loop: " .t ": outcome -- expected .finished 3 #f fin., got .finished 4 #f fin.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a state qualifies when an edge advances back to it, whether or not a byte does"
+  # The rule the class's non-emptiness replaced. A fallback that advances back
+  # on a state whose cases name all 256 bytes is never taken; under this rule the
+  # state qualifies with an empty class, and render-run-loop raises taking the
+  # first run of none. The lane renders that machine inside a guard, so the
+  # raise is a value the check compares.
+  FIND [[           (let holds ((b 0))
+             (cond ((= b 256) #f)
+                   ((= 1 (bytevector-u8-ref c b)) c)
+                   (else (holds (+ b 1))))))))]]
+  REPLACE [[           (and (or fb-self?
+                    (exists (lambda (t) (and (= (cadr t) id) (eq? (caddr t) 'advance)))
+                            (normal-dispatch-transitions s)))
+                c))))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[it verifies, renders, and loops only where a byte comes back: the machine renders -- expected rendered, got raised]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.differential.loop.chez.source
+  LABEL "compile: a run loop's exit drops its fallback where other clauses remain"
+  # Where a state's exit has other clauses, its non-looping fallback is gone: a
+  # byte no clause names falls off the end of the `cond`, exec returns an
+  # unspecified value, and the runtime raises reading it as an outcome. The
+  # lane's exit case runs the generated side in a guard, so the raise is a
+  # value it compares: start's, num's, key's and val's exits each fail; ws, whose
+  # fallback is its exit's only clause, and text, whose fallback loops, do not.
+  FIND [[                                (if (and (= (car fb) sid) (eq? (cdr fb) 'advance))]]
+  REPLACE [[                                (if (or (and (= (car fb) sid) (eq? (cdr fb) 'advance)) (exists (lambda (t) (not (= (cadr t) sid))) (normal-dispatch-transitions s)))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[each loop's exit on a byte its clauses do not name: inputs whose generated run is not the interpreter's -- expected .., got ..".n.n!" . raised. ."12x" . raised. ."ab;" . raised. ."a=b;" . raised..]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
+
+# --- Pass 81: what of a run loop no outcome can see (determinism.loop) --------
+#
+# What of a run loop no outcome can see. Four shapes of the lowering are
+# EQUIVALENT: entering the loop at the byte the arm just read (the loop reads
+# it again, finds it in the class, and steps: one more turn), the position kind
+# a loop passes on at the end of a feed (a dispatch state never reads `pk`),
+# an exit that keeps the clauses that loop back (no byte in the class reaches
+# the exit), and an exit that renders a fallback that loops (the class holds
+# every byte no other clause names). A fifth, a loop with no test leaving
+# through its state on every byte, costs a call per byte and changes nothing
+# else. Measured: differential-loop-tests.sps passes under each.
+#
+# The golden pins all five as bytes, and every one of them would then report
+# the same record. So determinism-loop-tests.sps also reads each loop's shape
+# back as one value -- how its state enters it, the position kind it leaves
+# with, its exit's clause count and `else` -- and each mutant changes a
+# different part of it. Every pin resolves exactly once in its own mutant's
+# output and in none of the other four's.
+
+byte_machine_mutation_reset()
+
+set(BYTE_MACHINE_MUTATION_VERIFY_COMMAND
+  "${BYTE_MACHINE_CHEZ_EXECUTABLE}"
+  "--script" "${STAGE_DIR}/test/support/launchers/chez-source.ss"
+  "--library-root" "${STAGE_DIR}/test/support/harness"
+  "--library-root" "${STAGE_DIR}/src"
+  "--object-guard" "${GUARD_DIR}"
+  "--program" "${STAGE_DIR}/test/common/determinism-loop-tests.sps")
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.loop.chez.source
+  LABEL "compile: a state's arm enters its run loop at the byte it just read"
+  # EQUIVALENT: the loop reads the byte the arm just read, finds it in the
+  # class and steps; one more turn, the same outcome (measured: the loop lane
+  # passes). The golden and the shape census see it.
+  FIND [[(string-append "(%r" id " (fx+ pos 1) pos off)")]]
+  REPLACE [[(string-append "(%r" id " pos pos off)")]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[exits by the state's other clauses: loop shapes .id entries leave exits. -- expected [^,]*, got ..0 ..pos pos off.. boundary]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.loop.chez.source
+  LABEL "compile: a run loop leaves at the end of its feed with the position kind byte"
+  # EQUIVALENT: a dispatch state never reads `pk`; its arms pass literals.
+  # The loop lane passes.
+  FIND [[(leave (string-append "(%s" id " n " id " (+ off (fx- n pos)) (quote boundary))"))]]
+  REPLACE [[(leave (string-append "(%s" id " n " id " (+ off (fx- n pos)) (quote byte))"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[exits by the state's other clauses: loop shapes .id entries leave exits. -- expected [^,]*, got ..0 ...fx. pos 1. pos off.. byte]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.loop.chez.source
+  LABEL "compile: a run loop's exit keeps the clauses that loop back"
+  # EQUIVALENT: no byte in the class reaches the exit. The loop lane passes.
+  FIND [[                                 (filter (lambda (t) (not (and (= (cadr t) sid) (eq? (caddr t) 'advance))))
+                                         (normal-dispatch-transitions s))]]
+  REPLACE [[                                 (normal-dispatch-transitions s)]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[exits by the state's other clauses: loop shapes .id entries leave exits. -- expected [^,]*, got ..0 ...fx. pos 1. pos off.. boundary .8 #t.]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.loop.chez.source
+  LABEL "compile: a run loop's exit renders a fallback that loops"
+  # EQUIVALENT: with the fallback looping, every byte no other clause names is
+  # in the class, so the `else` is never taken. The loop lane passes.
+  FIND [[                                (if (and (= (car fb) sid) (eq? (cdr fb) 'advance))
+                                    ""]]
+  REPLACE [[                                (if #f
+                                    ""]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[exits by the state's other clauses: loop shapes .id entries leave exits. -- expected [^,]*, got [^,]*.12 ...fx. pos 1. pos off.. boundary .3 #t..]])
+
+byte_machine_mutation(
+  FILE src/byte-machine/compile.sls SPEC byte-machine.determinism.loop.chez.source
+  LABEL "compile: a run loop with no test leaves through its state on every byte"
+  # EQUIVALENT: the state's arm reads the byte again and enters the loop
+  # again. The loop lane passes.
+  FIND [[               (string-append "           " step "\n"))]]
+  REPLACE [[               (string-append "           " leave "\n"))]]
+  EXPECT_STATUS 1
+  EXPECT_OUTPUT_MATCHES [[exits by the state's other clauses: loop shapes .id entries leave exits. -- expected [^,]*, got [^,]*boundary leave..]])
+
+byte_machine_mutation_run("${SOURCE_ROOT}" "${STAGE_DIR}")
 
 # Every pass above has run exactly once, so the accumulated total is
 # final. Compared against the numbers declared at the top of this file --

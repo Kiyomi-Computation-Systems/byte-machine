@@ -90,9 +90,11 @@
   ;; span arms index `cbv` with a literal slot and hand `psr` to the invocation.
   ;; THE STATE PROCEDURES AND THEIR DISPATCHER ARE NOT IN THIS LIST, AND CANNOT
   ;; BE. The emitted body also binds one procedure per state and one dispatcher,
-  ;; and there is no bound on how many states a machine has -- so enumerating
-  ;; them here is not possible and a growing list would be the wrong shape
-  ;; anyway. They are spelled `%s<id>` and `%dispatch` instead: `portable-name?`
+  ;; a run loop for each state that advances back to itself and a class table
+  ;; for each distinct class, and there is no bound on how many states a
+  ;; machine has -- so enumerating them here is not possible and a growing list
+  ;; would be the wrong shape anyway. They are spelled `%s<id>`, `%dispatch`,
+  ;; `%r<id>` and `%c<k>` instead: `portable-name?`
   ;; admits `[a-z][a-z0-9-]*` and nothing else, so no output binding and no
   ;; declared name can begin with `%`, and the collision this list exists to
   ;; prevent is impossible by construction rather than by enumeration. The
@@ -274,15 +276,19 @@
   ;; and a fixnum by construction, `(rnrs)` exports them, and the pair measured
   ;; 1.25ns against 1.40ns.
   ;;
-  ;; render-byte-clauses : (Listof (byte target mode)) -> String
-  (define (render-byte-clauses trs)
+  ;; `tail` renders what a clause does with its run's (target mode): `loop-tail`
+  ;; for an ordinary clause, or the dispatch arm's own, which sends a run that
+  ;; advances back to the state into its run loop instead.
+  ;;
+  ;; render-byte-clauses : (Listof (byte target mode)) (ExactInteger Symbol -> String) -> String
+  (define (render-byte-clauses trs tail)
     (define (clause lo hi target mode)
       (string-append
        "               ("
        (if (= lo hi)
            (string-append "(fx=? b " (num lo) ")")
            (string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))"))
-       " " (loop-tail target mode) ")\n"))
+       " " (tail target mode) ")\n"))
     ;; One pass, carrying the open run. A new transition extends it when it is
     ;; the next byte with the same destination; otherwise the open run is
     ;; flushed and it starts a new one. Clauses stay in ascending byte order,
@@ -491,6 +497,157 @@
                  es))
      ")"))
 
+  ;; A STATE'S LOOP BACK TO ITSELF IS A TIGHT LOOP, NOT A CALL PER BYTE.
+  ;;
+  ;; A dispatch state that advances to itself on a class of bytes -- a token,
+  ;; a header value, the body of a string -- otherwise spends each byte of a
+  ;; run on a tail call back into itself: the end-of-input test, the read,
+  ;; then its clauses in byte order (an HTTP header name's lowercase letter
+  ;; matches the seventh, after eleven comparisons), and a generic `+` on both
+  ;; `pos` and `off`. So the state renders a loop beside it. Each clause that
+  ;; advanced back to the state enters the loop instead, at the byte after the
+  ;; one it just read; the loop reads, tests the byte against the class, and
+  ;; steps on with a fixnum add, until a byte leaves the class or the feed
+  ;; ends.
+  ;;
+  ;; Measured with bench/runner/benchmark.sps, generated lane, seven rounds of
+  ;; 80000 iterations, five turns of each tree taking turns, pinned to one
+  ;; performance core of an amd64 Linux host (ta6le), Chez 10.4.1, every
+  ;; figure here as time taken: header names and values (`many-small-headers`)
+  ;; take 16.5% less time, and no workload takes more than 2.5% more. A
+  ;; 2000-byte request target's change is within its own turns' noise.
+  ;; Downstream, a JSON parser reads its file of long strings in 41% less time
+  ;; per byte.
+  ;;
+  ;; Three other shapes were measured and rejected:
+  ;;
+  ;; TESTING THE CLASS ON ENTRY TO THE STATE puts a test on every byte that
+  ;; reaches it, in the class or not; downstream, text that was mostly
+  ;; multibyte, re-entering the state every few bytes, took 8-9% more time. So
+  ;; the loop starts only after a byte in the class, and a byte outside it
+  ;; pays nothing new.
+  ;;
+  ;; LEAVING THROUGH THE STATE -- at a byte outside the class, call the state
+  ;; and let its arm dispatch -- reads and tests that byte twice. Measured as
+  ;; above, it took 9.4% more time than dispatching in the loop on header names
+  ;; and values, and 7.0% more on the sequence workload, whose runs are short.
+  ;; So the loop dispatches the byte itself.
+  ;;
+  ;; RANGE TESTS FOR A CLASS OF SEVERAL RUNS took 8.9% more time than a table
+  ;; on header names and values. That reverses what one dispatch measured, where
+  ;; two comparisons beat a 256-entry bytevector (1.25ns to 1.75ns,
+  ;; `render-byte-clauses` above): the loop runs its test on every byte, and
+  ;; one load costs less than up to nine pairs of comparisons. A class of one
+  ;; run keeps its two comparisons, and a class of one byte its one;
+  ;; downstream, a table was no better for the digits.
+  ;;
+  ;; The class is the set of bytes on which a dispatch state advances to
+  ;; itself: every byte a transition names and sends back here, and, when the
+  ;; fallback advances back here, every byte no transition names. A reexecute
+  ;; back to the state is a zero-progress cycle the verifier refuses, so only
+  ;; an advance counts.
+  ;;
+  ;; A state QUALIFIES when its class holds a byte, not when an edge advances
+  ;; back to it. The two differ: a fallback that advances back on a dispatch
+  ;; whose cases name all 256 bytes can never be taken, the class is empty,
+  ;; and a loop for it would have no byte to test.
+  ;;
+  ;; run-loop-class : NormalState -> (U Bytevector #f)
+  ;; A 256-entry bytevector, 1 for a byte in the class, or #f for a state with
+  ;; no class: any other kind, or a dispatch no byte brings back to itself.
+  (define (run-loop-class s)
+    (and (eq? (normal-state-kind s) 'dispatch)
+         (let* ((id (normal-state-id s))
+                (fb (normal-dispatch-fallback s))
+                (fb-self? (and (= (car fb) id) (eq? (cdr fb) 'advance)))
+                (c (make-bytevector 256 (if fb-self? 1 0))))
+           (for-each (lambda (t)
+                       (bytevector-u8-set! c (car t)
+                                           (if (and (= (cadr t) id) (eq? (caddr t) 'advance))
+                                               1 0)))
+                     (normal-dispatch-transitions s))
+           (let holds ((b 0))
+             (cond ((= b 256) #f)
+                   ((= 1 (bytevector-u8-ref c b)) c)
+                   (else (holds (+ b 1))))))))
+  ;; The class as its maximal runs of consecutive bytes, ascending.
+  ;; class-runs : Bytevector -> (Listof (Pair Byte Byte))
+  (define (class-runs c)
+    (let walk ((b 0) (lo #f) (acc '()))
+      (cond ((= b 256) (reverse (if lo (cons (cons lo 255) acc) acc)))
+            ((= 1 (bytevector-u8-ref c b)) (walk (+ b 1) (or lo b) acc))
+            (else (walk (+ b 1) #f (if lo (cons (cons lo (- b 1)) acc) acc))))))
+  ;; How the loop tests a byte for the class: no test when every byte is in
+  ;; it, one comparison when it is one byte, two when it is one run, a table
+  ;; otherwise. Each is its own inline code on the per-byte path.
+  ;; run-loop-test-kind : Bytevector -> (U 'every 'byte 'range 'table)
+  (define (run-loop-test-kind c)
+    (let ((runs (class-runs c)))
+      (cond ((equal? runs '((0 . 255))) 'every)
+            ((pair? (cdr runs)) 'table)
+            ((= (car (car runs)) (cdr (car runs))) 'byte)
+            (else 'range))))
+  ;; The loop, rendered beside its state. `n` is the cursor; `pos` and `off`
+  ;; are where the run began, so the stream offset is worked out once, when the
+  ;; run ends, from the bytes read. Positions within one feed index `bv` and
+  ;; are fixnums; `off` keeps generic `+`, since a stream offset may outgrow a
+  ;; fixnum. The three names are ones reserved-member-3 already holds:
+  ;; spelling them `p`, `pos0` and `off0` would have reserved three more, and
+  ;; refused three output bindings 0.8.0 accepts.
+  ;;
+  ;; A byte outside the class goes where the state would have sent it: over
+  ;; the state's own clauses but those that loop back, then its fallback,
+  ;; unless that fallback is the loop. With the fallback looping, the class is
+  ;; every byte no remaining clause names, so one of them matches. At the end
+  ;; of the feed the loop enters the state itself, whose code handles
+  ;; need-input and finish?.
+  ;;
+  ;; `table-of` gives the index of a class's table, `%c<k>` at library level:
+  ;; one per distinct class, shared by every state with that class.
+  ;;
+  ;; render-run-loop : NormalState Bytevector (Bytevector -> ExactInteger) -> String
+  (define (render-run-loop s class table-of)
+    (let* ((sid (normal-state-id s))
+           (id (num sid))
+           (fb (normal-dispatch-fallback s))
+           (step (string-append "(%r" id " (fx+ n 1) pos off)"))
+           (leave (string-append "(%s" id " n " id " (+ off (fx- n pos)) (quote boundary))"))
+           (kind (run-loop-test-kind class))
+           (body
+            (case kind
+              ((every)
+               (string-append "           " step "\n"))
+              ((byte range table)
+               (let ((lo (car (car (class-runs class)))) (hi (cdr (car (class-runs class)))))
+                 (string-append
+                  "           (let ((b (bytevector-u8-ref bv n)))\n"
+                  "             (if "
+                  (cond ((eq? kind 'table)
+                         (string-append "(fx=? 1 (bytevector-u8-ref %c" (num (table-of class)) " b))"))
+                        ((eq? kind 'byte)
+                         (string-append "(fx=? b " (num lo) ")"))
+                        (else
+                         (string-append "(and (fx>=? b " (num lo) ") (fx<=? b " (num hi) "))")))
+                  "\n"
+                  "                 " step "\n"
+                  "                 (let ((pos n) (off (+ off (fx- n pos))))\n"
+                  "                   (cond\n"
+                  ;; Never empty: with the fallback looping, some clause leaves, or
+                  ;; the class would be every byte. Its last newline gives way to
+                  ;; the closing parens.
+                  (let ((exits (string-append
+                                (render-byte-clauses
+                                 (filter (lambda (t) (not (and (= (cadr t) sid) (eq? (caddr t) 'advance))))
+                                         (normal-dispatch-transitions s))
+                                 loop-tail)
+                                (if (and (= (car fb) sid) (eq? (cdr fb) 'advance))
+                                    ""
+                                    (string-append "               (else " (loop-tail (car fb) (cdr fb)) ")\n")))))
+                    (substring exits 0 (- (string-length exits) 1)))
+                  "))))\n")))
+              (else (assertion-violation 'render-machine "unknown run-loop test" kind)))))
+      (string-append "      (define (%r" id " n pos off)\n       (if (fx<? n end)\n" body "           " leave "))\n")))
+
   ;; EVERY RUNTIME NAME AN ARM WRITES IS A CENSUS ENTRY. The allocation audit
   ;; (test/common/allocation-audit-tests.sps) derives the set of
   ;; `(byte-machine runtime)` procedures emitted code can call from this file's
@@ -498,7 +655,7 @@
   ;; each one. An arm that calls a runtime op no arm called before therefore
   ;; owes that lane a witness in the same change. Write the op's name as one
   ;; literal: a name assembled from pieces is invisible to the derivation.
-  (define (render-state-arm s names index-of fields spans)
+  (define (render-state-arm s names index-of fields spans table-of)
     (let ((id (number->string (normal-state-id s)))
           ;; Total by construction: the debug map and the internal state list
           ;; are built from the same prefix-block id alists, so every id in
@@ -792,14 +949,25 @@
             "                  (if (= n v)\n"
             "                      (%s" (num next-id) " (+ pos n) " (num next-id) " (+ off n) (quote boundary))\n"
             "                      (byte-machine-make-feed-outcome/v1 (quote need-input) (+ pos n) #f " id " (+ off n))))))))\n")))
+        ;; A state with a class of bytes that advance back to it renders its
+        ;; run loop beside it, and each of those clauses enters the loop rather
+        ;; than calling the state again (`render-run-loop`, above).
         ((dispatch)
-         (let ((fb (normal-dispatch-fallback s)))
+         (let* ((fb (normal-dispatch-fallback s))
+                (class (run-loop-class s))
+                (tail (if class
+                          (lambda (target mode)
+                            (if (and (= target (normal-state-id s)) (eq? mode 'advance))
+                                (string-append "(%r" id " (fx+ pos 1) pos off)")
+                                (loop-tail target mode)))
+                          loop-tail)))
            (string-append
             (render-exhausted-preamble s id names index-of nm)
             "           (let ((b (bytevector-u8-ref bv pos)))\n"
             "             (cond\n"
-            (render-byte-clauses (normal-dispatch-transitions s))
-            "               (else " (loop-tail (car fb) (cdr fb)) ")))))\n")))
+            (render-byte-clauses (normal-dispatch-transitions s) tail)
+            "               (else " (tail (car fb) (cdr fb)) ")))))\n"
+            (if class (render-run-loop s class table-of) ""))))
         ;; Keyword table. ONE arm: it reads the parked prefix from a compound
         ;; `st` (empty on fresh entry), calls the runtime walk over its embedded
         ;; entries, and either jumps to the walk's chosen target, parks the
@@ -1066,6 +1234,24 @@
                      (cond ((>= i (vector-length states)) #f)
                            ((eq? (normal-state-kind (vector-ref states i)) 'keyword-table) #t)
                            (else (hk (+ i 1))))))
+           ;; The run loops' class tables: one per DISTINCT class that needs one,
+           ;; numbered in the order the states first need them, so two states
+           ;; with one class share a table and the numbering is deterministic.
+           (classes (let walk ((i 0) (acc '()))
+                      (if (>= i (vector-length states)) (reverse acc)
+                          (let ((c (run-loop-class (vector-ref states i))))
+                            (walk (+ i 1)
+                                  (if (and c (eq? (run-loop-test-kind c) 'table)
+                                           (not (member c acc)))
+                                      (cons c acc) acc))))))
+           (table-of (lambda (c)
+                       (let walk ((cs classes) (k 0))
+                         (cond ((null? cs)
+                                ;; Unreachable: `classes` was collected from these
+                                ;; same states. Loud rather than a silent table 0.
+                                (assertion-violation 'render-machine "no table for class" c))
+                               ((bytevector=? (car cs) c) k)
+                               (else (walk (cdr cs) (+ k 1)))))))
            (bstr (symbol->string binding)))
       (string->utf8
        (string-append
@@ -1073,6 +1259,17 @@
         "  (export " bstr ")\n"
         "  (import (rnrs) (byte-machine runtime))\n"
         "  (define errs (quote #(" errs ")))\n"
+        (let tloop ((cs classes) (k 0) (acc ""))
+          (if (null? cs) acc
+              (tloop (cdr cs) (+ k 1)
+                     (string-append
+                      acc "  (define %c" (num k) " (quote #vu8("
+                      (let bloop ((b 0) (bs ""))
+                        (if (= b 256) bs
+                            (bloop (+ b 1)
+                                   (string-append bs (if (= b 0) "" " ")
+                                                  (num (bytevector-u8-ref (car cs) b))))))
+                      ")))\n"))))
         "  (define (exec state offset bv start end finish? fieldv psr cbv)\n"
         ;; The kind is initialized `boundary` UNCONDITIONALLY, with no finish?
         ;; key: nothing has been consumed since either kind of call began, so an
@@ -1099,7 +1296,8 @@
               (loop (+ i 1) (string-append acc (render-state-arm (vector-ref states i)
                                                                  names index-of
                                                                  (normal-machine-fields normal)
-                                                                 (normal-machine-span-decls normal))))))
+                                                                 (normal-machine-span-decls normal)
+                                                                 table-of)))))
         ;; The one search over state ids, and the two places that enter it: the
         ;; entry into a feed, and a keyword table's jump. A callback answering
         ;; `goto` does not: `render-goto-clauses` above tests the literals that
